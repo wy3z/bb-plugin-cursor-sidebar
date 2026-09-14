@@ -3,19 +3,22 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
 /**
- * This plugin's status glyphs, matching bb's own sidebar shape for shape: the
- * red circle-x for a failure, the circle-question for a raised hand, the
- * spinner for live work, and a dot for a finished thread you have not read.
+ * This plugin's status glyphs, matching bb's own sidebar: the red circle-x
+ * for a failure, the circle-question for a raised hand, the stock `Loading`
+ * spinner (16px, native tone) for live work, and a dot for a finished thread
+ * you have not read. The desktop row always draws its leading slot with one
+ * of these while the thread has something to say, else the read dot.
  *
  * Derived from bb-plugin-thread-inbox (MIT, Copyright (c) 2026 Michael Yong);
  * see THIRD-PARTY-NOTICES.md at the repository root.
  */
 
 /**
- * Whether this indicator draws a glyph that speaks for the row. The row gives
- * the glyph and the age ONE slot, so this decides which of the two the user
- * sees. An indicator bb ships tomorrow falls through to the age label rather
- * than blanking the slot.
+ * Whether this indicator draws a status glyph in the row's leading slot. The
+ * desktop row always draws that slot (this glyph when true, else the read
+ * dot) and always trails the age; the compact mobile status shows this glyph
+ * when true and the age otherwise. An indicator bb ships tomorrow falls
+ * through to the age label rather than blanking the slot.
  */
 export function hasStatusGlyph(
   indicator: PluginSidebarThreadIndicator,
@@ -72,7 +75,7 @@ export function StatusGlyph({
         <Icon
           name="Loading"
           aria-label={aria}
-          className={cn(shared, "animate-spin text-muted-foreground/70")}
+          className={cn("size-4 shrink-0", className, "animate-spin text-muted-foreground/50")}
         />
       );
     case "workflow":
@@ -99,6 +102,7 @@ export function StatusGlyph({
       // bb centers its own trailing indicators.
       return (
         <span
+          role="img"
           aria-label={aria}
           className={cn("flex items-center justify-center", shared)}
         >

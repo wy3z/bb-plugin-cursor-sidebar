@@ -69,19 +69,6 @@ function compareThreads(
 }
 
 /**
- * The user's pins lead their sibling list. Applied as a stable partition after
- * the stored order, so a drag inside a partition keeps working and pin state
- * is never changed by reordering.
- */
-function pinnedFirst(
-  threads: readonly PluginSidebarThread[],
-): PluginSidebarThread[] {
-  return [...threads].sort(
-    (left, right) => Number(right.isPinned) - Number(left.isPinned),
-  );
-}
-
-/**
  * Build the acyclic display forest for one project's members.
  *
  * Roots are members with no parent in this project (a missing, archived, or
@@ -136,6 +123,17 @@ export function buildDisplayForest(
 }
 
 /**
+ * How a section orders siblings. `manual` keeps the stored scope order (with
+ * the recency fallback); an automatic ordering replaces it with `compare`.
+ * Either way the display parent and the shelf partition are untouched, so
+ * ordering never changes ancestry or membership.
+ */
+export interface SiblingOrdering {
+  compare: (left: PluginSidebarThread, right: PluginSidebarThread) => number;
+  manual: boolean;
+}
+
+/**
  * Order each sibling group by its stored order, then hand the flat shelf
  * partitions back in that total order. Ordering is applied before the shelf
  * split so a settled child keeps its place relative to its settled siblings.
@@ -145,6 +143,7 @@ function orderedMembers(
   members: readonly PluginSidebarThread[],
   forest: DisplayForest,
   orderForScope: (scope: string) => readonly string[] | null,
+  ordering?: SiblingOrdering | undefined,
 ): {
   forest: DisplayForest;
   scopeIds: Map<string, readonly string[]>;
@@ -158,13 +157,24 @@ function orderedMembers(
       parentId === null
         ? members.filter((thread) => forest.parent.get(thread.id) === null)
         : (forest.children.get(parentId) ?? [])
-    ).sort(compareThreads);
+    ).sort(ordering?.compare ?? compareThreads);
     if (base.length === 0) return base;
     const scope = siblingScope(projectId, parentId);
     scopeIds.set(scope, base.map((thread) => thread.id));
-    const ordered = pinnedFirst(orderByStoredIds(base, orderForScope(scope)));
-    if (parentId !== null) orderedChildren.set(parentId, ordered);
-    return ordered;
+    // An automatic ordering ignores the stored manual order; manual keeps it.
+    const ordered = ordering && !ordering.manual
+      ? base
+      : orderByStoredIds(base, orderForScope(scope));
+    // A native pin sorts a sibling ahead of its unpinned siblings at the same
+    // level, stably, with the stored manual order kept as the tiebreak inside
+    // each partition. Only sibling order changes: the display parent is
+    // untouched, so a nested pinned grandchild keeps its parent.
+    const pinnedFirst = [
+      ...ordered.filter((thread) => thread.isPinned),
+      ...ordered.filter((thread) => !thread.isPinned),
+    ];
+    if (parentId !== null) orderedChildren.set(parentId, pinnedFirst);
+    return pinnedFirst;
   };
 
   const emitted = new Set<string>();
@@ -200,12 +210,16 @@ function orderedMembers(
  * known project gets a section in BB's own order, including empty ones. A
  * thread whose project is unknown gets its own section keyed by that id, so
  * two unrelated unknown projects never share a heading.
+ *
+ * `orderingFor` resolves the sibling ordering per section, so an ordinary view
+ * ordering never reaches a Core home and Core keeps its native sibling order.
  */
 export function buildSections(
   visible: readonly PluginSidebarThread[],
   projects: readonly { id: string; name: string; isPersonal?: boolean }[],
   shelfOf: (thread: PluginSidebarThread) => ThreadShelf,
   orderForScope: (scope: string) => readonly string[] | null,
+  orderingFor?: ((sectionId: string) => SiblingOrdering | undefined) | undefined,
 ): ProjectSectionData[] {
   const memberGroups = new Map<string, PluginSidebarThread[]>();
   const firstSeen: string[] = [];
@@ -231,7 +245,7 @@ export function buildSections(
   return orderedIds.map((id) => {
     const members = memberGroups.get(id) ?? [];
     const base = buildDisplayForest(members);
-    const { forest, scopeIds, rank } = orderedMembers(id, members, base, orderForScope);
+    const { forest, scopeIds, rank } = orderedMembers(id, members, base, orderForScope, orderingFor?.(id));
     const shelfById = new Map<string, ThreadShelf>();
     const byShelf: Record<ThreadShelf, PluginSidebarThread[]> = {
       active: [],
@@ -267,11 +281,23 @@ export function buildSections(
  * same one that orders the rows, so the rails can never point at the wrong
  * row, and `inShelf` is what keeps a parked child from hanging off an active
  * parent. A collapsed parent contributes its own row but not its descendants.
+ *
+ * `includes` bounds both the emitted rows and the walked children to a
+ * presentation subset (the conversation preview or a single revealed path): an
+ * excluded grouping row such as a Project Manager is still walked as a parent,
+ * so its kept children keep their real depth and rails instead of collapsing to
+ * roots, while excluded subtrees contribute nothing (no dangling rails).
+ *
+ * `hasTrailingSibling` marks a grouping row as having one more sibling that the
+ * renderer draws itself (the bounded preview's "Show more" row). Its last child
+ * then keeps its rail open so the final branch reaches that row.
  */
 export function flattenShelf(
   section: ProjectSectionData,
   shelf: ThreadShelf,
   isExpanded: (threadId: string) => boolean = () => true,
+  includes: (threadId: string) => boolean = () => true,
+  hasTrailingSibling: (threadId: string) => boolean = () => false,
 ): DisplayRow[] {
   const inShelf = new Set(section.byShelf[shelf].map((thread) => thread.id));
   const roots = section.byShelf[shelf].filter((thread) => {
@@ -286,16 +312,22 @@ export function flattenShelf(
     seen.add(thread.id);
     const children = isExpanded(thread.id)
       ? (section.forest.children.get(thread.id) ?? []).filter(
-          (child) => inShelf.has(child.id) && !seen.has(child.id),
+          (child) => inShelf.has(child.id) && includes(child.id) && !seen.has(child.id),
         )
       : [];
-    const row: DisplayRow = { thread, depth, guides, opens: false };
-    rows.push(row);
+    const row: DisplayRow | null = includes(thread.id)
+      ? { thread, depth, guides, opens: false }
+      : null;
+    if (row !== null) rows.push(row);
     const before = rows.length;
+    const trailing = hasTrailingSibling(thread.id) ? 1 : 0;
     children.forEach((child, index) =>
-      walk(child, depth + 1, [...guides, index < children.length - 1]),
+      walk(child, depth + 1, [
+        ...guides,
+        index < children.length - 1 + trailing,
+      ]),
     );
-    row.opens = rows.length > before;
+    if (row !== null) row.opens = rows.length > before;
   };
 
   for (const root of roots) walk(root, 0, []);
@@ -308,4 +340,30 @@ export function scopeOf(
   threadId: string,
 ): string {
   return siblingScope(section.id, section.forest.parent.get(threadId) ?? null);
+}
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * The visible ancestor chain from a section root down to `activeThreadId`, in
+ * root-first order and excluding the Project Manager grouping rows (they are
+ * represented by the heading). Empty when the active thread is not a member of
+ * this section. Used to reveal and highlight the selected path.
+ */
+export function activePathIds(
+  section: ProjectSectionData,
+  activeThreadId: string | null,
+  excluded: ReadonlySet<string> = EMPTY_IDS,
+): string[] {
+  if (activeThreadId === null) return [];
+  if (!section.members.some((thread) => thread.id === activeThreadId)) return [];
+  const chain: string[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = activeThreadId;
+  while (cursor !== null && !seen.has(cursor)) {
+    seen.add(cursor);
+    if (!excluded.has(cursor)) chain.push(cursor);
+    cursor = section.forest.parent.get(cursor) ?? null;
+  }
+  return chain.reverse();
 }

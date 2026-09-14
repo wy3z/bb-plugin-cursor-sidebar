@@ -1,0 +1,100 @@
+/* Scoped phone/touch affordances; fine-pointer desktop density is unchanged. */
+@media (max-width: 767px), (pointer: coarse) {
+  [data-project-sidebar-root] { min-width: 0; overflow-x: clip; }
+  [data-project-sidebar-root] button,
+  [data-project-sidebar-root] select,
+  .ps-move-dialog button,
+  .ps-move-dialog select { min-height: 44px; touch-action: manipulation; }
+  [data-project-sidebar-root] button:has(> svg:only-child) { min-width: 44px; }
+  [data-project-sidebar-root] button[aria-expanded] { opacity: 1; }
+  [data-project-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
+  [data-project-sidebar-root] .ps-project-glyph { width: 16px; height: 16px; }
+  [data-project-sidebar-root] .ps-project-name {
+    white-space: normal; overflow-wrap: anywhere; font-size: 13px;
+  }
+  [data-project-sidebar-root] [data-thread-row] { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+  [data-project-sidebar-root] .ps-child-toggle,
+  [data-project-sidebar-root] .ps-project-new { display: none; }
+  [data-project-sidebar-root] .ps-thread-title {
+    white-space: normal; overflow-wrap: anywhere; display: -webkit-box;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  }
+  [data-project-sidebar-root] .ps-thread-info { font-size: 11px; line-height: 1.4; white-space: normal; opacity: 1; }
+  [data-project-sidebar-root] .ps-secondary-desktop { display: none; }
+  [data-project-sidebar-root] .ps-secondary-mobile {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
+    overflow: hidden; overflow-wrap: anywhere;
+  }
+  [data-project-sidebar-root] .ps-thread-location { display: none; }
+  [data-project-sidebar-root] .ps-mobile-status { display: none; }
+  [data-project-sidebar-root] .ps-thread-time { display: flex; }
+  [data-project-sidebar-root] .ps-gesture-row { touch-action: pan-y; -webkit-touch-callout: none; }
+  [data-project-sidebar-root] .ps-gesture-row a,
+  [data-project-sidebar-root] .ps-gesture-row button,
+  [data-project-sidebar-root] .ps-thread-title { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+  [data-project-sidebar-root] .ps-gesture-row input { user-select: text; -webkit-user-select: text; }
+  .ps-context-actions { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+  .ps-context-actions button { min-height: 44px; touch-action: manipulation; }
+  .ps-move-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+  .ps-move-dialog select { min-width: 0; max-width: 100%; font-size: 16px; }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .ps-project-checklist label { min-height: 44px; touch-action: manipulation; }
+  .ps-project-checklist label span { white-space: normal; overflow-wrap: anywhere; }
+  .ps-project-checklist select { min-height: 44px; width: 100%; max-width: 100%; font-size: 16px; }
+  .ps-project-checklist input { width: 20px; height: 20px; }
+  .ps-create-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+  .ps-create-dialog h2 { overflow-wrap: anywhere; }
+}
+
+/* The project heading's glyph in the reserved leading status slot: a fixed
+   16px box left of the project name. It reuses existing BB Icon primitives
+   and native styling: the stock `Loading` spinner while working, the native
+   `AlertTriangle` warning glyph for needs-attention, and a quiet `Circle`
+   outline when idle (a completed project rests here too). No custom
+   geometry, grids or morphs. */
+.ps-project-glyph {
+  display: inline-flex;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.ps-project-glyph svg {
+  display: block;
+}
+
+/* One reserved status slot, left of every project heading and thread title.
+   It always draws exactly one glyph in a fixed 16px box, so titles never
+   shift when status changes. Glyphs reuse existing BB Icon primitives: the
+   stock `Loading` spinner for live work, the native warning/error/question
+   glyphs for attention states, and a filled dot for unread else a hollow dot
+   from the truthful native read flag. */
+.ps-status-slot {
+  display: inline-flex;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.ps-status-slot svg {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-project-glyph svg {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ps-status-slot svg {
+    animation: none !important;
+    transition: none !important;
+  }
+}

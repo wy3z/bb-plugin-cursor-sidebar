@@ -60,6 +60,7 @@ export function InlineThreadTitle({
         onDoubleClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (matchMedia("(pointer: coarse)").matches) return;
           onDoubleClick?.(event);
           onEditingChange(true);
         }}

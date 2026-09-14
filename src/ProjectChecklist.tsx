@@ -1,5 +1,4 @@
 import * as Popover from "@radix-ui/react-popover";
-import { Icon } from "@/components/ui/icon";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 
 export function ProjectChecklist({ projects, hiddenIds, onVisibilityChange }: {
@@ -14,23 +13,23 @@ export function ProjectChecklist({ projects, hiddenIds, onVisibilityChange }: {
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={`Projects shown in sidebar: ${visibleCount} of ${projects.length}`}
-          title="Choose visible projects"
-          className="flex h-7 min-w-0 flex-1 items-center justify-between rounded px-1.5 text-xs font-normal text-muted-foreground/60 hover:text-muted-foreground data-[state=open]:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+          aria-label={`Project options: ${visibleCount} of ${projects.length} shown`}
+          title="Project options"
+          className="flex min-h-7 min-w-0 flex-1 items-center rounded py-0.5 pl-3 pr-1.5 text-xs font-medium text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
         >
-          <span>Projects</span>
-          <Icon name="SlidersHorizontal" className="size-3" aria-hidden />
+          Projects
         </button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           {...scopeProps}
-          aria-label="Visible projects"
+          aria-label="Project options"
           align="start"
           sideOffset={4}
-          className="z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
+          className="ps-project-checklist z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
         >
           <p className="px-2 pb-1 pt-1 text-xs text-muted-foreground">Show in sidebar</p>
+          <p className="px-2 py-2 text-xs text-muted-foreground">Tap to open. Hold a project or parent to show children; hold a chat or swipe left for actions. Keyboard: Actions or Shift+F10.</p>
           <div className="max-h-72 overflow-y-auto">
             {projects.map((project) => (
               <label key={project.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-accent focus-within:bg-accent">

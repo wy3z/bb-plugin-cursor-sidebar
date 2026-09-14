@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
- * Per-client UI state, kept in localStorage rather than the plugin database:
- * which projects the user folded, whether the global settled section is open,
- * and project visibility. It is view preference, not thread data, so it never
- * travels to the server and never touches a thread's lifecycle.
+ * Per-client layout state, kept in localStorage rather than the plugin
+ * database: which projects the user folded and whether the global settled
+ * section is open. Device layout stays separate from the shared, per-user
+ * project visibility store (see useProjectVisibility), and neither touches a
+ * thread's lifecycle.
  */
 const PROJECT_COLLAPSED_KEY = "bb-plugin-project-sidebar:collapsed-projects:v2";
 const SETTLED_OPEN_KEY = "bb-plugin-project-sidebar:open-settled:v3";
+/** Legacy per-browser visibility list, migrated once into the shared store. */
 export const HIDDEN_PROJECTS_KEY = "bb-plugin-project-sidebar:hidden-projects:v1";
 export const EXPANDED_AGES_KEY = "bb-plugin-project-sidebar:expanded-ages:v1";
+/** Pinned and folder groups default open; this set holds the collapsed ones. */
+export const COLLAPSED_GROUPS_KEY = "bb-plugin-project-sidebar:collapsed-groups:v1";
 
 function loadIds(key: string): string[] {
   try {
@@ -36,6 +40,11 @@ export interface PersistentIds {
   toggle: (id: string) => void;
   add: (id: string) => void;
   remove: (id: string) => void;
+  /** Add and remove in one update, for a scoped bulk Expand/Collapse. */
+  addMany: (ids: Iterable<string>) => void;
+  removeMany: (ids: Iterable<string>) => void;
+  /** Replace the whole set. */
+  replace: (ids: Iterable<string>) => void;
 }
 
 /** A persisted set of ids with add/remove/toggle. */
@@ -66,8 +75,37 @@ export function usePersistentIds(storageKey = PROJECT_COLLAPSED_KEY): Persistent
       return next;
     });
   }, []);
+  const replace = useCallback((values: Iterable<string>) => {
+    setIds(new Set(values));
+  }, []);
+  const addMany = useCallback((values: Iterable<string>) => {
+    setIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const value of values) {
+        if (!next.has(value)) {
+          next.add(value);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, []);
+  const removeMany = useCallback((values: Iterable<string>) => {
+    setIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const value of values) {
+        if (next.delete(value)) changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, []);
 
-  return useMemo(() => ({ ids, toggle, add, remove }), [add, ids, remove, toggle]);
+  return useMemo(
+    () => ({ ids, toggle, add, remove, addMany, removeMany, replace }),
+    [add, addMany, ids, remove, removeMany, replace, toggle],
+  );
 }
 
 /** Projects default to open, so a project is open unless it is in the set. */

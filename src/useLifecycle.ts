@@ -20,22 +20,13 @@ import {
  * Derived from bb-plugin-thread-inbox (MIT, Copyright (c) 2026 Michael Yong);
  * see THIRD-PARTY-NOTICES.md at the repository root.
  */
-export function isWorking(thread: PluginSidebarThread): boolean {
-  const { activity } = thread;
-  return (
-    activity.workflows > 0 ||
-    activity.backgroundAgents > 0 ||
-    activity.backgroundCommands > 0 ||
-    activity.planMode > 0 ||
-    activity.goals > 0 ||
-    thread.indicator === "runtime" ||
-    thread.indicator === "working-draft"
-  );
-}
+export { isWorking } from "./activity";
+import { isWorking } from "./activity";
 
 export type LifecycleAction = "settle" | "unsettle";
 
 export interface LifecycleApi {
+  isManaged(thread: PluginSidebarThread): boolean;
   shelfFor(
     thread: PluginSidebarThread,
     descendants?: readonly PluginSidebarThread[],
@@ -73,7 +64,7 @@ function messageOf(cause: unknown): string {
  * realtime echo, and it reports failure through a toast so the caller never
  * has to swallow a rejected promise.
  */
-export function useLifecycle(): LifecycleState {
+export function useLifecycle(managed: ReadonlyMap<string, { settledAt: number | null; acceptedUpdatedAt: number | null }>): LifecycleState {
   const rpc = useRpc<typeof projectSidebarRpcContract>();
   const realtimeState = useRealtimeConnectionState();
   const [rows, setRows] = useState<ReadonlyMap<string, ThreadLifecycleRow>>(
@@ -160,11 +151,22 @@ export function useLifecycle(): LifecycleState {
         ),
       };
     };
+    const isManaged = (thread: PluginSidebarThread) => managed.has(thread.id) ||
+      (thread.originPluginId === "project-manager" && thread.originKind !== "fork");
     return {
-      shelfFor: (thread, descendants = []) =>
-        resolveShelf(rows.get(thread.id), signalsFor(thread, descendants)),
+      isManaged,
+      shelfFor: (thread, descendants = []) => {
+        const signals = signalsFor(thread, descendants);
+        if (!isManaged(thread)) return resolveShelf(rows.get(thread.id), signals);
+        const accepted = managed.get(thread.id);
+        // Compare with the reviewed native revision, not the later acceptance
+        // wall clock: a turn can start while the acceptance RPC is in flight.
+        if (!accepted || accepted.acceptedUpdatedAt === null ||
+            thread.updatedAt > accepted.acceptedUpdatedAt) return "active";
+        return resolveShelf({ threadId: thread.id, settledAt: accepted.settledAt }, signals);
+      },
       canPark: (thread, descendants = []) =>
-        canPark(signalsFor(thread, descendants)),
+        !isManaged(thread) && canPark(signalsFor(thread, descendants)),
       settle: (threadId) =>
         runMutation(threadId, "settle", () =>
           rpc.call("settle", { threadId }),
@@ -174,7 +176,7 @@ export function useLifecycle(): LifecycleState {
           rpc.call("unsettle", { threadId }),
         ),
     };
-  }, [rows, rpc, runMutation]);
+  }, [managed, rows, rpc, runMutation]);
 
   const isPending = useCallback(
     (threadId: string, action: LifecycleAction) =>

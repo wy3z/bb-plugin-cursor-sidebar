@@ -13,7 +13,7 @@
   },
   "bb": {
     "name": "Project Sidebar",
-    "description": "Project-grouped threads with nested children and per-project settled and snoozed shelves.",
+    "description": "Project trees and standalone chats with aggregate activity and safe membership moves.",
     "branding": {
       "icon": "PanelLeft"
     },

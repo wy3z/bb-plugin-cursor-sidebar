@@ -3,6 +3,7 @@
 // Compiled by `bb plugin build` into dist/app.js + dist/app.css. React and
 // @get-bb/plugin-sdk/app are provided by the BB app at load time (never
 // bundled), so this file must be loaded by BB, not imported directly.
+import "./app.css";
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { ProjectSidebar } from "./src/ProjectSidebar";
 
@@ -13,7 +14,7 @@ export default definePluginApp((app) => {
     id: "project-sidebar",
     title: "Project Sidebar",
     description:
-      "Project-grouped threads with nested children and a global settled section.",
+      "Collapsed project trees, standalone chats and aggregate project activity.",
     component: ProjectSidebar,
   });
 });

@@ -7,9 +7,19 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { moveId, type DropPlacement } from "./thread-order";
+import { UNFILED_GROUP_KEY } from "./standalone-groups";
 
 export interface ReorderDragState {
   kind: "project" | "thread";
+  moveToProject?: string | null;
+  /**
+   * Standalone folder drop: a native section id to file the dragged family,
+   * null to unfile it back to the dated chats. Undefined means no folder
+   * change. Never reassigns project membership.
+   */
+  moveToSection?: string | null;
+  /** Pin change for the dragged family. Undefined means no pin change. */
+  pin?: boolean;
   /** Owning section for a thread drag; empty for projects. */
   sectionId: string;
   /** The scope a thread drag is constrained to; empty for projects. */
@@ -19,6 +29,8 @@ export interface ReorderDragState {
   /** The row the pointer is over, for a visible placement indicator. */
   overId: string | null;
   placement: DropPlacement | null;
+  /** The folder or pin header under the pointer, for its highlight. */
+  overTarget: string | null;
 }
 
 export interface ReorderDrag {
@@ -36,7 +48,6 @@ export interface ReorderDrag {
     scope: string,
     ids: readonly string[],
     movingId: string,
-    pinKey: string,
   ) => void;
 }
 
@@ -53,7 +64,10 @@ export interface ReorderDrag {
  */
 export function useReorderDrag(
   onCommit: (state: ReorderDragState) => void,
+  canMove: (threadId: string) => boolean = () => false,
 ): ReorderDrag {
+  const canMoveRef = useRef(canMove);
+  canMoveRef.current = canMove;
   const [state, setState] = useState<ReorderDragState | null>(null);
   const stateRef = useRef<ReorderDragState | null>(null);
   stateRef.current = state;
@@ -90,7 +104,7 @@ export function useReorderDrag(
   const begin = useCallback(
     (
       event: ReactPointerEvent<HTMLElement>,
-      initial: Omit<ReorderDragState, "overId" | "placement">,
+      initial: Omit<ReorderDragState, "overId" | "placement" | "overTarget">,
       matches: (element: HTMLElement) => boolean,
     ) => {
       if (event.button !== 0 || event.pointerType === "touch") return;
@@ -103,6 +117,7 @@ export function useReorderDrag(
         ids: [...initial.ids],
         overId: null,
         placement: null,
+        overTarget: null,
       };
       let engaged = false;
       let finished = false;
@@ -144,6 +159,53 @@ export function useReorderDrag(
       const reorderAt = (x: number, y: number) => {
         const hit = document.elementFromPoint(x, y);
         if (!(hit instanceof Element)) return;
+        if (current.kind === "thread") {
+          // Standalone folder and pin headers take precedence over row
+          // reorder: dropping files or (un)pins the whole family instead of
+          // moving it within its cluster. A folder drop also unpins, so the
+          // move is visible instead of hiding behind the Pinned precedence; a
+          // pin drop keeps any folder filing underneath.
+          const folderTarget = hit.closest<HTMLElement>("[data-folder-target]");
+          if (folderTarget?.dataset.folderTarget !== undefined) {
+            const key = folderTarget.dataset.folderTarget;
+            const sectionId = key === UNFILED_GROUP_KEY ? null : key;
+            current = {
+              ...current,
+              moveToSection: sectionId,
+              pin: false,
+              moveToProject: undefined,
+              overId: null,
+              placement: null,
+              overTarget: `folder:${key}`,
+            };
+            stateRef.current = current; setState(current); return;
+          }
+          const pinTarget = hit.closest<HTMLElement>("[data-pin-target]");
+          if (pinTarget?.dataset.pinTarget !== undefined) {
+            const key = pinTarget.dataset.pinTarget;
+            current = {
+              ...current,
+              pin: key === "pin",
+              moveToSection: undefined,
+              moveToProject: undefined,
+              overId: null,
+              placement: null,
+              overTarget: `pin:${key}`,
+            };
+            stateRef.current = current; setState(current); return;
+          }
+        }
+        const destination = hit.closest<HTMLElement>("[data-membership-target]");
+        if (current.kind === "thread" && destination && canMoveRef.current(current.movingId)) {
+          const targetId = destination.dataset.membershipTarget;
+          if (targetId && current.sectionId !== (targetId === "standalone" ? "standalone-chats" : `managed:${targetId}`)) {
+            current = { ...current, moveToProject: targetId === "standalone" ? null : targetId, moveToSection: undefined, pin: undefined, overId: null, placement: null, overTarget: null };
+            stateRef.current = current; setState(current); return;
+          }
+        }
+        if (current.moveToProject !== undefined) {
+          current = { ...current, moveToProject: undefined }; stateRef.current = current; setState(current);
+        }
         const target = hit.closest<HTMLElement>("[data-reorder-id]");
         if (target === null || !matches(target)) return;
         const targetId = target.dataset.reorderId;
@@ -158,7 +220,9 @@ export function useReorderDrag(
         const placement: DropPlacement =
           y < rect.top + rect.height / 2 ? "before" : "after";
         const ids = moveId(current.ids, current.movingId, targetId, placement);
-        current = { ...current, ids, overId: targetId, placement };
+        // A same-cluster row owns the drop: folder and pin intent clear so a
+        // reorder never also files or (un)pins.
+        current = { ...current, ids, overId: targetId, placement, moveToSection: undefined, pin: undefined, overTarget: null };
         stateRef.current = current;
         setState(current);
       };
@@ -188,7 +252,7 @@ export function useReorderDrag(
         if (!wasEngaged || committed === null) return;
         setState(null);
         suppressNextClick(committed.movingId);
-        if (committed.ids.join("\0") !== initial.ids.join("\0")) {
+        if (committed.moveToProject !== undefined || committed.moveToSection !== undefined || committed.pin !== undefined || committed.ids.join("\0") !== initial.ids.join("\0")) {
           onCommitRef.current(committed);
         }
       }
@@ -225,15 +289,13 @@ export function useReorderDrag(
       scope: string,
       ids: readonly string[],
       movingId: string,
-      pinKey: string,
-    ) => {
+      ) => {
       begin(
         event,
         { kind: "thread", sectionId, scope, movingId, ids: [...ids] },
         (element) =>
           element.dataset.reorderKind === "thread" &&
-          element.dataset.reorderScope === scope &&
-          element.dataset.reorderPin === pinKey,
+          element.dataset.reorderScope === scope,
       );
     },
     [begin],
