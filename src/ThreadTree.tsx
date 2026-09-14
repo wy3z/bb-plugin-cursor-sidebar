@@ -339,10 +339,11 @@ export function ShelfList({
   const pinnedKey = `pinned:${section.id}`;
   const pinnedOpen = !ctx.collapsedGroups.has(pinnedKey);
   const folderKey = (folderId: string) => `folder:${section.id}:${folderId}`;
-  // Rows by folder in native registry order. Chats owns the global registry, so
-  // an empty folder still renders once there; a native Project home renders
-  // only the folders that actually hold one of its families, so a folder never
-  // repeats across every home.
+  // Rows by folder in native registry order. Chats owns the user-folder
+  // registry, so an empty folder still renders once there; Core-claimed native
+  // sections are omitted from that registry so they cannot copy a Core family.
+  // A native Project home renders only the folders that actually hold one of
+  // its families, so a folder never repeats across every home.
   const folderRowsById = useMemo(
     () => new Map((partition?.folders ?? []).map((folder) => [folder.sectionId, folder.rows] as const)),
     [partition],

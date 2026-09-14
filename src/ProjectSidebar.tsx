@@ -36,6 +36,8 @@ import type { projectSidebarRpcContract } from "./server";
 import { ShelfList, TREE_CHILD_INDENT, type TreeContext } from "./ThreadTree";
 import { descendantsOf, resolveThreadDisplayTitles, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import {
+  chatsFolderRegistry,
+  coreNativeFolderIds,
   homeKindOf,
   nativeProjectSectionId,
   NATIVE_PROJECT_PREFIX,
@@ -372,9 +374,20 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // holds the folded ones and is a device preference, not shared state.
   const topGroupCollapsed = usePersistentIds("bb-plugin-project-sidebar:collapsed-top-groups:v1");
   const folderStore = useThreadSections();
+  // Native sections that file a Core coordinator are not Chats folders. The
+  // Core family already has its home under Core; keeping them in the registry
+  // would draw a second copy of the same family under Chats.
+  const coreFolderIds = useMemo(
+    () => coreNativeFolderIds(rawThreads, coreIndex),
+    [coreIndex, rawThreads],
+  );
+  const chatFolders = useMemo(
+    () => chatsFolderRegistry(folderStore.sections, coreFolderIds),
+    [coreFolderIds, folderStore.sections],
+  );
   const knownFolderIds = useMemo(
-    () => new Set(folderStore.sections.map((folder) => folder.id)),
-    [folderStore.sections],
+    () => new Set(chatFolders.map((folder) => folder.id)),
+    [chatFolders],
   );
   const folderNameOf = useCallback(
     (sectionId: string): string | null =>
@@ -1361,7 +1374,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         drag.state?.kind === "thread" && drag.state.overId !== null
           ? { id: drag.state.overId, placement: drag.state.placement ?? "after" }
           : null,
-      threadSections: folderStore.sections,
+      threadSections: chatFolders,
       sectionsAvailable: folderStore.available,
       collapsedGroups: collapsedGroups.ids,
       onToggleGroup: collapsedGroups.toggle,
@@ -1401,7 +1414,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       expandedParents,
       focusThread,
       folderStore.available,
-      folderStore.sections,
+      chatFolders,
       now,
       onNavigate,
       onNewThread,
@@ -1796,7 +1809,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           {folderMoveThread ? <MoveToFolderDialog
             key={folderMoveThreadId}
             thread={folderMoveThread}
-            folders={folderStore.sections}
+            folders={chatFolders}
             currentFolderId={folderMoveCurrent}
             onClose={() => setFolderMoveThreadId(null)}
             onMove={async (destination) => {

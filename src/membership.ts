@@ -57,6 +57,11 @@ export function homeKindOf(sectionId: string): HomeKind {
  *
  * Reference links and unverified legacy rows never create a home: a reference
  * stays where it already lives.
+ *
+ * A Core coordinator is filed in a native thread section so the manager can
+ * find it. That section still appears in BB's global folder registry. It is
+ * not a Chats folder: using it as one would draw a second copy of the Core
+ * family. `coreNativeFolderIds` names those sections so Chats can omit them.
  */
 export function projectThreadView(
   threads: readonly PluginSidebarThread[],
@@ -79,4 +84,36 @@ export function projectThreadView(
     }
     return { ...thread, nativeProjectId: thread.projectId, projectId: home };
   });
+}
+
+/**
+ * Native thread-section ids used as a Core's filing, not as Chats folders.
+ *
+ * The manager places each coordinator in a named section. Chats owns the
+ * global registry and would otherwise render that empty section as another
+ * home next to the Core heading. Only coordinator filing is claimed: an
+ * ordinary family's own folder stays a Chats folder even after a reference
+ * or an unverified association, because those never move its home.
+ */
+export function coreNativeFolderIds(
+  threads: readonly Pick<PluginSidebarThread, "id" | "sectionId">[],
+  index: CoreIndex,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const thread of threads) {
+    if (thread.sectionId == null) continue;
+    if (index.coreByCoordinator.has(thread.id)) ids.add(thread.sectionId);
+  }
+  return ids;
+}
+
+/**
+ * The folders Chats may render or file into. Core-claimed native sections are
+ * omitted so a reference or an empty manager section cannot copy a family.
+ */
+export function chatsFolderRegistry<T extends { id: string }>(
+  folders: readonly T[],
+  coreFolderIds: ReadonlySet<string>,
+): T[] {
+  return folders.filter((folder) => !coreFolderIds.has(folder.id));
 }
