@@ -49,9 +49,10 @@
 }
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
-   left of the name. Working uses the stock `Loading` spinner; idle Cores use
-   `Bot` and idle native Projects use `Folder`. Attention/status trails on the
-   right with the last-updated time. */
+   left of the name (with a gap before the label). Working uses the stock
+   `Loading` spinner; idle Cores use `Bot` with a small status dot on the
+   glyph; idle native Projects use a smaller `Folder`. Core last-updated time
+   trails on the right. Native project rows have no timestamp. */
 .ps-project-glyph {
   display: inline-flex;
   box-sizing: border-box;
@@ -60,15 +61,16 @@
   height: 16px;
   align-items: center;
   justify-content: center;
+  overflow: visible;
   pointer-events: none;
 }
 .ps-project-glyph svg {
   display: block;
 }
 
-/* One reserved left slot for Core/Project identity and thread activity.
-   Status marks trail on the right; idle chats keep the empty box so titles
-   stay aligned. */
+/* One reserved left slot for Core/Project identity and thread status.
+   Threads draw a status circle (or spinner) here; Core status is a badge
+   on the glyph. Idle chats keep the box so titles stay aligned. */
 .ps-status-slot {
   display: inline-flex;
   box-sizing: border-box;

@@ -32,7 +32,7 @@ import {
   type SiblingOrdering,
 } from "./forest";
 import type { projectSidebarRpcContract } from "./server";
-import { ShelfList, TREE_CHILD_INDENT, type TreeContext } from "./ThreadTree";
+import { ShelfList, TREE_CHILD_INDENT, PinnedList, collectLiftedPins, type TreeContext } from "./ThreadTree";
 import { descendantsOf, resolveThreadDisplayTitles, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import {
   chatsFolderRegistry,
@@ -114,8 +114,8 @@ import type { ThreadShelf } from "./lifecycle";
 import { ageGroupKey, personalAgeGroups, type AgeGroup } from "./age-groups";
 import { ManagerCreate } from "./ManagerCreate";
 import { useManagers } from "./useManagers";
-import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus, headingIsWorking, headingShowsTrailingStatus } from "./ProjectStatusGlyph";
-import { StatusFromKind, TrailingMeta } from "./StatusSlot";
+import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus, headingIsWorking, coreStatusBadge } from "./ProjectStatusGlyph";
+import { TrailingMeta } from "./StatusSlot";
 import { AnimatedList } from "./AnimatedList";
 
 function cssEscape(value: string): string {
@@ -1430,6 +1430,15 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     ],
   );
 
+  const liftedPins = useMemo(
+    () =>
+      collectLiftedPins(
+        sections.filter((section) => homeKindOf(section.id) !== "core"),
+        ctx,
+      ),
+    [ctx, sections],
+  );
+
   if (status === "loading") {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
@@ -1530,7 +1539,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // Environment group keys and the date buckets that actually appear, plus the
   // descendant trees. A key for a group the view does not render is never
   // touched, so unrelated hidden preferences survive.
-  const bulkTopGroupKeys = ["core", "projects"];
+  const bulkTopGroupKeys = liftedPins.length > 0
+    ? ["core", "pinned", "projects"]
+    : ["core", "projects"];
   const bulkSectionIds = visibleSections.map((section) => section.id);
   const bulkTargets = useMemo(
     () =>
@@ -1832,7 +1843,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           /> : null}
           <AnimatedList as="div">
             <GroupHeading
-              label="Core"
+              label="Cores"
               open={!topGroupCollapsed.ids.has("core")}
               onToggle={() => topGroupCollapsed.toggle("core")}
             >
@@ -1846,6 +1857,18 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
             {!topGroupCollapsed.ids.has("core")
               ? coreSectionsVisible.map((section) => renderSection(section))
               : null}
+            {liftedPins.length > 0 ? (
+              <>
+                <GroupHeading
+                  label="Pinned"
+                  open={!topGroupCollapsed.ids.has("pinned")}
+                  onToggle={() => topGroupCollapsed.toggle("pinned")}
+                />
+                {!topGroupCollapsed.ids.has("pinned") ? (
+                  <PinnedList items={liftedPins} ctx={ctx} />
+                ) : null}
+              </>
+            ) : null}
             <GroupHeading
               label="Projects"
               open={!topGroupCollapsed.ids.has("projects")}
@@ -1905,7 +1928,7 @@ function GroupHeading({
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
         aria-expanded={open}
         onClick={onToggle}
-        className="flex min-h-6 min-w-0 items-center rounded py-0.5 text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="flex min-h-6 min-w-0 items-center rounded py-0.5 text-left text-2xs font-medium text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
       >
         <span className="truncate">{label}</span>
       </button>
@@ -2031,7 +2054,7 @@ function ProjectSection({
   if (section.personal) {
     return (
       <section aria-label="Standalone chats" data-membership-target="standalone" className="mt-3 first:mt-0 min-h-8">
-        <ShelfList section={section} shelf="active" ctx={ctx} grouped />
+        <ShelfList section={section} shelf="active" ctx={ctx} grouped omitPinned />
       </section>
     );
   }
@@ -2104,7 +2127,7 @@ function ProjectSection({
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
         className={cn(
-          "group/heading relative flex min-h-7 items-center gap-0 rounded-md py-0.5 pl-3 pr-1 transition-colors max-md:pointer-coarse:min-h-11",
+          "group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-0.5 pl-3 pr-1 transition-colors max-md:pointer-coarse:min-h-11",
           sectionOpen && "mb-0.5",
           managerActive
             ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -2126,6 +2149,7 @@ function ProjectSection({
             <ProjectStatusGlyph
               kind={isCore ? "core" : "project"}
               working={headingIsWorking(status ?? "idle")}
+              badge={isCore ? coreStatusBadge(status ?? "idle", Boolean(conflicted)) : "none"}
               label={activityLabel}
             />
           </span>
@@ -2192,27 +2216,13 @@ function ProjectSection({
             <Icon name="Plus" className="size-3.5 max-md:pointer-coarse:size-5" />
           </button>
         ) : null}
-        <TrailingMeta
-          status={
-            conflicted ? (
-              <span
-                role="img"
-                aria-label="Ownership transfer unresolved"
-                title="An ownership transfer for this Core is unresolved. The list shows the observed state."
-                className="flex size-4 shrink-0 items-center justify-center text-warning-text"
-              >
-                <Icon name="AlertTriangle" className="size-3.5" />
-              </span>
-            ) : headingShowsTrailingStatus(status ?? "idle") ? (
-              <StatusFromKind status={status ?? "idle"} label={activityLabel} />
-            ) : displayState === "attention" ? (
-              <Icon name="AlertTriangle" aria-label={activityLabel} className="size-3.5 shrink-0 text-warning-text" />
-            ) : null
-          }
-          updatedAt={latestUpdatedAt}
-          now={ctx.now}
-          showTime={ctx.view.show.updated}
-        />
+        {isCore ? (
+          <TrailingMeta
+            updatedAt={latestUpdatedAt}
+            now={ctx.now}
+            showTime={ctx.view.show.updated}
+          />
+        ) : null}
       </div>
 
       </SidebarActions>
@@ -2234,6 +2244,7 @@ function ProjectSection({
           shelf="active"
           ctx={ctx}
           grouped={!isCore}
+          omitPinned={!isCore}
           keepIds={exceptionIds}
           expandIds={exceptionIds}
         />
@@ -2245,6 +2256,7 @@ function ProjectSection({
           shelf="active"
           ctx={ctx}
           grouped={!isCore}
+          omitPinned={!isCore}
           keepIds={revealedConversations}
           trailing={
             conversationPlan.hiddenConversations > 0 ? (

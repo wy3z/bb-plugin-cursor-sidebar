@@ -15,7 +15,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
-import { activePathIds, flattenShelf, scopeOf, type ProjectSectionData } from "./forest";
+import { activePathIds, flattenShelf, scopeOf, type ProjectSectionData, type DisplayRow } from "./forest";
 import { ageGroupKey, type AgeGroup } from "./age-groups";
 import {
   UNFILED_GROUP_KEY,
@@ -42,13 +42,10 @@ import { PullRequestMark } from "./PullRequestMark";
 import { RowContextMenu } from "./RowContextMenu";
 import {
   StatusOrTime,
-  StatusFromKind,
-  TrailingMeta,
-  activityStatusKind,
-  trailingStatusKind,
+  ThreadAge,
+  ThreadLeadStatus,
 } from "./StatusSlot";
-import { hasStatusGlyph, isActivityIndicator, isTrailingStatusIndicator, StatusGlyph } from "./StatusGlyph";
-import { isWorking } from "./activity";
+import { hasStatusGlyph } from "./StatusGlyph";
 import { statusSourceForGroup, threadDisplayTitle } from "./inbox";
 import type { CoreRowRole } from "./core-ownership";
 import { resolveRowStatus, type ThreadStatusKind } from "./status";
@@ -147,6 +144,68 @@ const ELBOW = 10;
 /** Content indent of a depth-1 child, used to align a trailing tree row. */
 export const TREE_CHILD_INDENT = TREE_RAIL_X + ELBOW - 8;
 
+export interface LiftedPin {
+  section: ProjectSectionData;
+  row: DisplayRow;
+}
+
+/**
+ * Ordinary (non-Core) pinned families, in home order. Rendered as one block
+ * between Cores and Projects; each home's own Pinned cluster is omitted.
+ */
+export function collectLiftedPins(
+  sections: readonly ProjectSectionData[],
+  ctx: TreeContext,
+): LiftedPin[] {
+  const knownFolderIds = new Set(ctx.threadSections.map((folder) => folder.id));
+  const items: LiftedPin[] = [];
+  for (const section of sections) {
+    if (homeKindOf(section.id) === "core") continue;
+    const rows = flattenShelf(
+      section,
+      "active",
+      (id) => ctx.coordinatorIds.has(id) || ctx.expandedParents.has(id),
+    ).filter((row) => !ctx.coordinatorIds.has(row.thread.id));
+    const parentOf = (threadId: string): string | null =>
+      section.forest.parent.get(threadId) ?? null;
+    const pinnedFamilyRoots = new Set<string>();
+    for (const row of rows) {
+      if (row.thread.isPinned) pinnedFamilyRoots.add(familyRootId(parentOf, row.thread.id));
+    }
+    const partition = partitionStandaloneRows(rows, {
+      parentOf,
+      sectionIdOf: (threadId) => {
+        const row = rows.find((candidate) => candidate.thread.id === threadId);
+        const thread = row?.thread ?? ctx.visibleById.get(threadId);
+        return thread?.sectionId ?? null;
+      },
+      isPinned: (rootId) => pinnedFamilyRoots.has(rootId),
+      knownFolderIds,
+    });
+    for (const row of partition.pinned) items.push({ section, row });
+  }
+  return items;
+}
+
+export function PinnedList({ items, ctx }: { items: readonly LiftedPin[]; ctx: TreeContext }) {
+  return (
+    <AnimatedList className="flex flex-col">
+      {items.map(({ section, row }) => (
+        <ThreadRow
+          key={row.thread.id}
+          row={row}
+          section={section}
+          shelf="active"
+          inShelf={new Set(section.byShelf.active.map((thread) => thread.id))}
+          ctx={ctx}
+          rootPinned
+          inFolderId={null}
+        />
+      ))}
+    </AnimatedList>
+  );
+}
+
 /**
  * The final tree sibling for a bounded conversation preview. It draws the
  * closing elbow at the conversation level so the rail ends at "Show more (n)"
@@ -179,6 +238,7 @@ export function ShelfList({
   expandIds,
   trailing,
   grouped,
+  omitPinned = false,
 }: {
   section: ProjectSectionData;
   shelf: ThreadShelf;
@@ -195,6 +255,8 @@ export function ShelfList({
    * siblings and never lift a family into a separate Pinned group.
    */
   grouped: boolean;
+  /** When true, pinned families are rendered in the global Pinned block. */
+  omitPinned?: boolean;
 }) {
   const hasTrailing = trailing !== undefined && !section.personal;
   const rows = useMemo(
@@ -431,7 +493,7 @@ export function ShelfList({
     <>
       {grouping && partition !== null ? (
         <>
-      {partition.pinned.length > 0 ? (
+      {!omitPinned && partition.pinned.length > 0 ? (
         <div className="mt-2 first:mt-0">
           <div
             data-pin-target="pin"
@@ -544,9 +606,9 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
             aria-label={name}
             aria-expanded={open}
             onClick={onToggle}
-            className="flex min-h-7 min-w-0 flex-1 items-center gap-1 rounded py-0.5 text-xs font-medium text-muted-foreground/55 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+            className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded py-0.5 text-xs font-medium text-muted-foreground/55 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
           >
-            <Icon name={open ? "FolderOpen" : "Folder"} className="size-3.5 shrink-0" />
+            <Icon name={open ? "FolderOpen" : "Folder"} className="size-3 shrink-0" />
             <span className="truncate">{name}</span>
           </button>
         </div>
@@ -661,15 +723,6 @@ function ThreadRow({
     exactStatus: ctx.statusOf(thread.id),
   });
   const exactStatus = ctx.statusOf(thread.id);
-  const showLeftActivity =
-    activityStatusKind(exactStatus) ||
-    isWorking(statusThread) ||
-    isActivityIndicator(statusThread.indicator);
-  const trailingStatus = trailingStatusKind(exactStatus) ? (
-    <StatusFromKind status={exactStatus!} label={rowStatus.label} />
-  ) : isTrailingStatusIndicator(statusThread.indicator) ? (
-    <StatusGlyph indicator={statusThread.indicator} label={statusThread.indicatorLabel} />
-  ) : null;
 
   const children = (section.forest.children.get(thread.id) ?? []).filter(
     (child) => inShelf.has(child.id),
@@ -775,7 +828,7 @@ function ThreadRow({
           data-reorder-kind="thread"
           data-reorder-scope={scope}
           className={cn(
-            "group/row relative flex items-center rounded-md pl-3 pr-1 transition-colors",
+            "group/row relative flex items-center gap-1.5 rounded-md pl-3 pr-1 transition-colors",
             secondary ? "ps-workspace-row my-1 py-1" : "py-0.5",
             "min-h-7 max-md:pointer-coarse:min-h-11",
             isActive
@@ -886,15 +939,11 @@ function ThreadRow({
             "ps-status-slot pointer-events-none relative flex w-4 shrink-0 items-center justify-center",
             hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0 max-md:pointer-coarse:opacity-0",
           )}>
-            {showLeftActivity ? (
-              activityStatusKind(exactStatus) ? (
-                <StatusFromKind status={exactStatus!} label={rowStatus.label} />
-              ) : isActivityIndicator(statusThread.indicator) ? (
-                <StatusGlyph indicator={statusThread.indicator} label={statusThread.indicatorLabel} />
-              ) : (
-                <StatusFromKind status="working" label={rowStatus.label} />
-              )
-            ) : null}
+            <ThreadLeadStatus
+              thread={statusThread}
+              exactStatus={exactStatus}
+              label={rowStatus.label}
+            />
           </span>
 
           {coreRole === "worker" ? (
@@ -961,12 +1010,41 @@ function ThreadRow({
           <span className="ps-mobile-status hidden text-xs text-muted-foreground"><StatusOrTime thread={statusThread} now={ctx.now} showTime={ctx.view.show.updated} /></span>
           </div>
 
-          <TrailingMeta
-            status={trailingStatus}
-            updatedAt={statusThread.updatedAt}
-            now={ctx.now}
-            showTime={ctx.view.show.updated}
-          />
+          <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end pl-1">
+            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-muted-foreground/80 group-hover/row:invisible group-focus-within/row:invisible max-md:pointer-coarse:visible">
+              {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
+            </span>
+            <span className="absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100 max-md:pointer-coarse:relative max-md:pointer-coarse:opacity-100">
+              {pinnedCapable ? (
+                <button
+                  type="button"
+                  aria-label={rowPinned ? "Unpin" : "Pin"}
+                  title={rowPinned ? "Unpin" : "Pin"}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    ctx.onTogglePin(thread.id, !rowPinned);
+                  }}
+                  className="pointer-events-auto flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                >
+                  <Icon name={rowPinned ? "PinOff" : "Pin"} className="size-3.5" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                aria-label="Archive"
+                title="Archive"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void actions.archive(thread.id);
+                }}
+                className="pointer-events-auto flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+              >
+                <Icon name="Archive" className="size-3.5" />
+              </button>
+            </span>
+          </div>
         </div>
       </RowContextMenu>
 

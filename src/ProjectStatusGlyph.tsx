@@ -7,12 +7,15 @@ import type { ThreadStatusKind } from "./status";
  * the same fixed 16px box as thread rows, so headings never shift:
  *
  *   working -> the stock `Loading` spinner (native colour + spin)
- *   idle    -> `Bot` for a Core, `Folder` for a native Project
+ *   idle    -> `Bot` for a Core, a smaller `Folder` for a native Project
  *
- * Attention/status never lives here: those marks trail on the right with the
- * last-updated time. Built only from existing BB Icon primitives.
+ * Core attention/status is a small coloured dot on the glyph, not a trailing
+ * icon. Built only from existing BB Icon primitives. A future pass will let
+ * the user pick a Core glyph at creation time; this pass does not add a picker.
  */
 export type ActivityState = "inactive" | "working" | "complete" | "attention" | "review";
+
+export type CoreStatusBadge = "none" | "complete" | "input" | "warning" | "failed";
 
 export const ACTIVITY_LABELS: Record<ActivityState, string> = {
   inactive: "Inactive",
@@ -54,39 +57,86 @@ export function headingIsWorking(status: ThreadStatusKind | null | undefined): b
   return status === "working" || status === "queued";
 }
 
-export function headingShowsTrailingStatus(status: ThreadStatusKind | null | undefined): boolean {
-  return status === "input" || status === "failed" || status === "review" || status === "unavailable";
+/** Complete / question / orange warning / red, as a dot on the Core glyph. */
+export function coreStatusBadge(
+  status: ThreadStatusKind | null | undefined,
+  conflicted = false,
+): CoreStatusBadge {
+  if (conflicted) return "warning";
+  switch (status) {
+    case "failed":
+      return "failed";
+    case "input":
+      return "input";
+    case "review":
+      return "complete";
+    case "unavailable":
+      return "warning";
+    default:
+      return "none";
+  }
 }
+
+const BADGE_TONE: Record<Exclude<CoreStatusBadge, "none">, string> = {
+  complete: "bg-timeline-accent",
+  input: "bg-muted-foreground/70",
+  warning: "bg-warning-text",
+  failed: "bg-destructive",
+};
+
+const BADGE_LABEL: Record<Exclude<CoreStatusBadge, "none">, string> = {
+  complete: "Completed",
+  input: "Needs your input",
+  warning: "Needs attention",
+  failed: "Failed",
+};
 
 /** Existing BB Icon primitives only; no custom glyphs. */
 export function ProjectStatusGlyph({
   kind,
   working,
+  badge = "none",
   label,
   className,
 }: {
   kind: "core" | "project";
   working: boolean;
+  badge?: CoreStatusBadge;
   label: string;
   className?: string;
 }) {
   const name = working ? "Loading" : kind === "core" ? "Bot" : "Folder";
   const iconClass = working
-    ? "animate-spin text-muted-foreground/50"
-    : "text-muted-foreground/70";
+    ? "size-3.5 animate-spin text-muted-foreground/50"
+    : kind === "project"
+      ? "size-3 text-muted-foreground/70"
+      : "size-3.5 text-muted-foreground/70";
+  const mark = kind === "core" && badge !== "none" ? badge : null;
   return (
     <span
       role="img"
-      aria-label={label}
+      aria-label={mark ? `${label}. ${BADGE_LABEL[mark]}` : label}
       data-activity={working ? "working" : "idle"}
       data-heading-kind={kind}
+      data-core-badge={mark ?? undefined}
       className={cn("ps-project-glyph", className)}
     >
-      <Icon
-        name={name}
-        aria-hidden="true"
-        className={cn("size-4 shrink-0", iconClass)}
-      />
+      <span className="relative inline-flex">
+        <Icon
+          name={name}
+          aria-hidden="true"
+          className={cn("shrink-0", iconClass)}
+        />
+        {mark ? (
+          <span
+            aria-hidden
+            className={cn(
+              "ps-core-badge pointer-events-none absolute -right-px -bottom-px size-1.5 rounded-full border border-sidebar",
+              BADGE_TONE[mark],
+            )}
+          />
+        ) : null}
+      </span>
     </span>
   );
 }
