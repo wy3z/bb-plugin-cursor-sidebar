@@ -7,8 +7,8 @@ import type { ThreadStatusKind } from "./status";
  * the same fixed 16px box as thread rows, so headings never shift:
  *
  *   working -> the stock `Loading` spinner (native colour + spin)
- *   idle    -> a nut for every Core until a picker exists; a smaller Folder
- *              for a native Project. Provider logos are never used here.
+ *   idle    -> an orbit/orb for every Core until a picker exists; a smaller
+ *              Folder for a native Project. Provider logos are never used.
  *
  * Core attention/status is a small coloured dot on the glyph, not a trailing
  * icon. No glyph picker.
@@ -105,7 +105,7 @@ export function ProjectStatusGlyph({
   label: string;
   className?: string;
 }) {
-  const name: IconName = working ? "Loading" : kind === "core" ? "Nut" : "Folder";
+  const name: IconName = working ? "Loading" : kind === "core" ? "Orbit" : "Folder";
   const iconClass = working
     ? "size-3.5 animate-spin text-muted-foreground/55"
     : kind === "project"
@@ -119,7 +119,7 @@ export function ProjectStatusGlyph({
       data-activity={working ? "working" : "idle"}
       data-heading-kind={kind}
       data-core-badge={mark ?? undefined}
-      data-core-glyph={kind === "core" ? "nut" : undefined}
+      data-core-glyph={kind === "core" ? "orbit" : undefined}
       className={cn("ps-project-glyph", className)}
     >
       <span className="relative inline-flex">

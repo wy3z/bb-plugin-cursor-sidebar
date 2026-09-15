@@ -367,11 +367,8 @@ export function SidebarViewMenu({
             disabled={markReadBusy || unreadOrdinaryCount === 0}
             onSelect={() => onMarkAllRead()}
           >
-            {markReadBusy ? "Marking as read…" : `Mark all ${unreadOrdinaryCount} unread as read`}
+            {markReadBusy ? "Marking as read…" : "Mark all as read"}
           </DropdownMenu.Item>
-          <DropdownMenu.Label className="px-2 pb-1 text-2xs leading-tight text-muted-foreground/60">
-            Read covers loaded ordinary chats. Managed work is never accepted.
-          </DropdownMenu.Label>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Item
             className={cn(ITEM, "text-destructive data-[highlighted]:text-destructive")}

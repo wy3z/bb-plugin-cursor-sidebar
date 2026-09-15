@@ -84,6 +84,7 @@ import {
 import {
   EXPANDED_AGES_KEY,
   COLLAPSED_GROUPS_KEY,
+  EXPANDED_THREADS_KEY,
   usePersistentIds,
 } from "./collapse";
 import { useThreadSections } from "./useThreadSections";
@@ -370,11 +371,11 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const expandedProjects = usePersistentIds("bb-plugin-project-sidebar:expanded-projects:v1");
   const expandedAges = usePersistentIds(EXPANDED_AGES_KEY);
   const collapsedGroups = usePersistentIds(COLLAPSED_GROUPS_KEY);
-  // Top-level group headings (Core / Projects) default open; this set holds
-  // the folded ones and is a device preference, not shared state. Ordinary
-  // chats sit below Projects with no dedicated heading, so they are not a
-  // top group.
+  // Top-level group headings (Cores / Projects) default open; this set holds
+  // the folded ones and is a device preference, not shared state. Loose chats
+  // under Projects grouping sit in a Threads subheading that defaults closed.
   const topGroupCollapsed = usePersistentIds("bb-plugin-project-sidebar:collapsed-top-groups:v1");
+  const expandedThreads = usePersistentIds(EXPANDED_THREADS_KEY);
   const folderStore = useThreadSections();
   // Native sections that file a Core coordinator are not Chats folders. The
   // Core family already has its home under Core; keeping them in the registry
@@ -1217,13 +1218,14 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     lastSeenThread.current = activeThreadId;
     // A hidden/filtered thread reveals its existing home and ancestors, so the
     // group heading that contains it opens rather than duplicating the row.
-    topGroupCollapsed.remove(
-      homeKindOf(reveal.sectionId) === "core"
-        ? "core"
-        : homeKindOf(reveal.sectionId) === "project"
-          ? "projects"
-          : "chats",
-    );
+    if (homeKindOf(reveal.sectionId) === "core") {
+      topGroupCollapsed.remove("core");
+    } else if (homeKindOf(reveal.sectionId) === "project") {
+      topGroupCollapsed.remove("projects");
+    } else {
+      topGroupCollapsed.remove("projects");
+      expandedThreads.add("threads");
+    }
     // Never permanently open a collapsed project on selection: a collapsed
     // project shows only the selected conversation (the exception row) and
     // keeps its stored expansion. Per-conversation ancestor folding below is
@@ -1231,7 +1233,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     if (reveal.updatedAgeKey) expandedAges.add(reveal.updatedAgeKey);
     if (reveal.collapsedGroupKey) collapsedGroups.remove(reveal.collapsedGroupKey);
     setExpandedParents((current) => new Set([...current, ...reveal.ancestors]));
-  }, [activeThreadId, reveal, expandedAges, collapsedGroups, topGroupCollapsed]);
+  }, [activeThreadId, reveal, expandedAges, collapsedGroups, expandedThreads, topGroupCollapsed]);
 
   // Alt+ArrowUp/Down reorders the focused thread among its siblings, or the
   // focused project among native projects, as a keyboard alternative to
@@ -1589,21 +1591,25 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       ),
     [environmentIdentityOf, knownFolderIds, now, ordinaryThreadStatus, view, visibleSections],
   );
+  const projectsGrouping = view.groupBy === "workspace";
   const anyCollapsed =
     bulkTopGroupKeys.some((key) => topGroupCollapsed.ids.has(key)) ||
+    (projectsGrouping && !expandedThreads.ids.has("threads")) ||
     bulkSectionIds.some((id) => !expandedProjects.ids.has(id)) ||
     [...bulkTargets.groupKeys].some((key) => collapsedGroups.ids.has(key)) ||
     [...bulkTargets.ageKeys].some((key) => !expandedAges.ids.has(key)) ||
     [...bulkTargets.parentIds].some((id) => !expandedParents.has(id));
   const expandAll = useCallback(() => {
     topGroupCollapsed.removeMany(bulkTopGroupKeys);
+    expandedThreads.add("threads");
     expandedProjects.addMany(bulkSectionIds);
     collapsedGroups.removeMany(bulkTargets.groupKeys);
     expandedAges.addMany(bulkTargets.ageKeys);
     setExpandedParents((current) => new Set([...current, ...bulkTargets.parentIds]));
-  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, topGroupCollapsed]);
+  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, expandedThreads, topGroupCollapsed]);
   const collapseAll = useCallback(() => {
     topGroupCollapsed.addMany(bulkTopGroupKeys);
+    expandedThreads.remove("threads");
     expandedProjects.removeMany(bulkSectionIds);
     collapsedGroups.addMany(bulkTargets.groupKeys);
     expandedAges.removeMany(bulkTargets.ageKeys);
@@ -1612,9 +1618,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       for (const id of bulkTargets.parentIds) next.delete(id);
       return next;
     });
-  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, topGroupCollapsed]);
+  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, expandedThreads, topGroupCollapsed]);
 
-  const projectsGrouping = view.groupBy === "workspace";
   const viewMenu = (
     <SidebarViewMenu
       view={view}
@@ -1914,12 +1919,23 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
                   createLabel="New Project"
                   tools={viewMenu}
                 />
-                {!topGroupCollapsed.ids.has("projects")
-                  ? nativeSectionsVisible.map((section) => renderSection(section))
-                  : null}
+                {!topGroupCollapsed.ids.has("projects") ? (
+                  <>
+                    {nativeSectionsVisible.map((section) => renderSection(section))}
+                    <GroupHeading
+                      label="Threads"
+                      open={expandedThreads.ids.has("threads")}
+                      onToggle={() => expandedThreads.toggle("threads")}
+                    />
+                    {expandedThreads.ids.has("threads")
+                      ? chatSectionsVisible.map((section) => renderSection(section))
+                      : null}
+                  </>
+                ) : null}
               </>
-            ) : null}
-            {chatSectionsVisible.map((section) => renderSection(section))}
+            ) : (
+              chatSectionsVisible.map((section) => renderSection(section))
+            )}
           </AnimatedList>
       </div>
     </div>
@@ -2071,7 +2087,7 @@ function ProjectSection({
 
   if (section.personal) {
     return (
-      <section aria-label="Standalone chats" data-membership-target="standalone" className="mt-3 first:mt-0 min-h-8">
+      <section aria-label="Standalone chats" data-membership-target="standalone" className="min-h-8">
         <ShelfList section={section} shelf="active" ctx={ctx} grouped omitPinned />
       </section>
     );

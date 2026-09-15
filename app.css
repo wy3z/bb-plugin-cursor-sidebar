@@ -50,7 +50,7 @@
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
    left of the name (with a gap before the label). Working uses the stock
-   `Loading` spinner; idle Cores always use a nut until a picker exists;
+   `Loading` spinner; idle Cores always use an orbit/orb until a picker exists;
    idle native Projects use a smaller `Folder`. Provider logos are never
    drawn on Core rows. Core last-updated time trails on the right. Native
    project rows have no timestamp. */

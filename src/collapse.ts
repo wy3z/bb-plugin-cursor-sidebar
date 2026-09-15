@@ -14,6 +14,8 @@ export const HIDDEN_PROJECTS_KEY = "bb-plugin-project-sidebar:hidden-projects:v1
 export const EXPANDED_AGES_KEY = "bb-plugin-project-sidebar:expanded-ages:v1";
 /** Pinned and folder groups default open; this set holds the collapsed ones. */
 export const COLLAPSED_GROUPS_KEY = "bb-plugin-project-sidebar:collapsed-groups:v1";
+/** Loose Threads under Projects grouping default collapsed; this set holds the open one. */
+export const EXPANDED_THREADS_KEY = "bb-plugin-project-sidebar:expanded-threads:v1";
 
 function loadIds(key: string): string[] {
   try {
