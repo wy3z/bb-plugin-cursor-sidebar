@@ -2297,7 +2297,7 @@ function ProjectSection({
           />
         );
         if (interior === null || isCore) return interior;
-        return <div className="ps-project-children pl-4">{interior}</div>;
+        return <div className="ps-project-children pl-6">{interior}</div>;
       })()}
 
     </section>

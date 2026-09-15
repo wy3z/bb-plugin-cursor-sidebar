@@ -238,10 +238,9 @@ function usableEnvironmentLabel(value: string | null | undefined): string | null
 }
 
 /**
- * The Environment grouping key for one family. Filters still use
- * `environmentIdentityOf` (unique env ids). Grouping uses a human label so
- * threads that share a host or workspace name sit under one heading (one ARCH
- * group) instead of repeating that label as a heading per unique env id.
+ * The Environment grouping and filter key for one family. Threads that share
+ * a host or workspace name sit under one heading and one filter row (one
+ * `arch`), instead of repeating that label per unique env id.
  */
 export function environmentGroupOf(thread: PluginSidebarThread): EnvironmentIdentity {
   const envName = usableEnvironmentLabel(thread.environment?.name);

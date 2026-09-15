@@ -999,11 +999,11 @@ function ThreadRow({
               open(event);
             }}
             className={cn(
-              "ps-thread-title w-full min-w-0 truncate text-sm",
+              "ps-thread-title w-full min-w-0 overflow-hidden whitespace-nowrap text-sm",
               thread.isUnread && "font-medium",
             )}
           />
-          {secondary ? <span className="ps-thread-info mt-px block w-full truncate text-2xs leading-none text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          {secondary ? <span className="ps-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
           {location && ctx.view.show.host ? <span className="ps-thread-location hidden text-xs text-muted-foreground">{location}</span> : null}
           <span className="ps-mobile-status hidden text-xs text-muted-foreground"><StatusOrTime thread={statusThread} now={ctx.now} showTime={ctx.view.show.updated} /></span>
           </div>
