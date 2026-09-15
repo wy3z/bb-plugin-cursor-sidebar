@@ -150,9 +150,11 @@ export function SidebarViewSyncNotice({
 /**
  * The compact view menu. It mirrors Cursor's organization as submenus
  * (Grouping, Ordering, Show, Filters) over the one persisted SidebarView, using
- * BB's theme tokens. Radix menu primitives supply real arrow-key navigation,
- * roving focus and typeahead, so the radio and checkbox semantics work from the
- * keyboard, not from role attributes alone.
+ * BB's theme tokens. Grouping is one radio: Workspace, Updated, Status, or
+ * Environment — selecting one replaces the current extra grouping; they never
+ * stack. Radix menu primitives supply real arrow-key navigation, roving focus
+ * and typeahead, so the radio and checkbox semantics work from the keyboard,
+ * not from role attributes alone.
  */
 export function SidebarViewMenu({
   view,
@@ -226,8 +228,8 @@ export function SidebarViewMenu({
                   value={view.groupBy}
                   onValueChange={(value) => onUpdate({ groupBy: value as ViewGroupBy })}
                 >
+                  <ChoiceItem value="workspace" label="Workspace" />
                   <ChoiceItem value="updated" label="Updated" hint="default" />
-                  <ChoiceItem value="workspace" label="No extra grouping" />
                   <ChoiceItem value="status" label="Status" />
                   <ChoiceItem value="environment" label="Environment" />
                 </DropdownMenu.RadioGroup>
@@ -347,7 +349,7 @@ export function SidebarViewMenu({
                   </>
                 ) : null}
                 <DropdownMenu.Label className="px-2 py-1 text-2xs leading-tight text-muted-foreground/60">
-                  Pinned and the open chat stay visible; filters never change folders, pins or membership.
+                  Filters apply to standalone chats. Project interiors stay unfiltered. Pinned and the open chat stay visible; filters never change folders, pins or membership.
                 </DropdownMenu.Label>
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>

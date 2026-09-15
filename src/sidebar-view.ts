@@ -42,9 +42,10 @@ export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = {
 
 /**
  * Defaults recover the agreed view: the native Core / Projects / Chats homes
- * with non-empty date buckets inside each ordinary home, the existing stored
- * conversation order, and every ordinary status and environment shown. Reset
- * writes these back without touching thread membership.
+ * with date buckets on standalone chats only, the existing stored conversation
+ * order, and every ordinary status and environment shown. Reset writes these
+ * back without touching thread membership. Workspace / Updated / Status /
+ * Environment grouping is one exclusive choice.
  */
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   groupBy: "updated",
@@ -225,6 +226,43 @@ export function environmentIdentityOf(
   return { id, label };
 }
 
+/**
+ * A directory name, not a BB environment/thread id. Personal workspaces often
+ * use a raw `thr_`/`env_` id as the environment name; that is never grouped as
+ * a heading.
+ */
+function usableEnvironmentLabel(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() || "";
+  if (trimmed === "" || /^(thr|env)_[a-z0-9]+$/i.test(trimmed)) return null;
+  return trimmed;
+}
+
+/**
+ * The Environment grouping key for one family. Filters still use
+ * `environmentIdentityOf` (unique env ids). Grouping uses a human label so
+ * threads that share a host or workspace name sit under one heading (one ARCH
+ * group) instead of repeating that label as a heading per unique env id.
+ */
+export function environmentGroupOf(thread: PluginSidebarThread): EnvironmentIdentity {
+  const envName = usableEnvironmentLabel(thread.environment?.name);
+  if (envName !== null) {
+    return { id: `name:${envName.toLowerCase()}`, label: envName };
+  }
+  const hostId = thread.host?.id?.trim() || null;
+  const hostName = usableEnvironmentLabel(thread.host?.name);
+  if (hostId !== null) {
+    return { id: `host:${hostId}`, label: hostName ?? hostId };
+  }
+  if (hostName !== null) {
+    return { id: `host-name:${hostName.toLowerCase()}`, label: hostName };
+  }
+  const envId = thread.environment?.id ?? null;
+  if (envId !== null) {
+    return { id: `env:${envId}`, label: envId };
+  }
+  return { id: NO_ENVIRONMENT_KEY, label: "No environment" };
+}
+
 export const NO_ENVIRONMENT_KEY = "__none__";
 
 /**
@@ -272,6 +310,7 @@ export function homeDisplayParentOf(
 export interface FamilyAggregate {
   status: ViewStatusFilter;
   environment: EnvironmentIdentity | null;
+  environmentGroup: EnvironmentIdentity;
   latestUpdatedAt: number;
   firstIndex: number;
 }
@@ -303,6 +342,7 @@ function familyAggregates(
       aggregate = {
         status: facts.statusOf(thread),
         environment: facts.environmentOf(thread),
+        environmentGroup: environmentGroupOf(thread),
         latestUpdatedAt: thread.updatedAt,
         firstIndex: firstIndex++,
       };
@@ -315,6 +355,10 @@ function familyAggregates(
     }
     if (aggregate.environment === null) {
       aggregate.environment = facts.environmentOf(thread);
+    }
+    if (aggregate.environmentGroup.id === NO_ENVIRONMENT_KEY) {
+      const grouped = environmentGroupOf(thread);
+      if (grouped.id !== NO_ENVIRONMENT_KEY) aggregate.environmentGroup = grouped;
     }
   }
   return { rootOf, aggregates };
@@ -394,10 +438,11 @@ function environmentAllowed(
 
 /**
  * Filter ordinary conversations by status and environment while keeping the
- * ancestry a surviving child needs. A Core-owned row is always kept. A pinned
- * or current family is always kept. Every ancestor of a kept row is kept, so a
- * match never detaches from its parent or loses its tree rails. Nothing here
- * mutates pin, folder, association or manual-order state.
+ * ancestry a surviving child needs. A Core-owned row is always kept. A native
+ * Project member is always kept (project interiors ignore the selected filter).
+ * A pinned or current family is always kept. Every ancestor of a kept row is
+ * kept, so a match never detaches from its parent or loses its tree rails.
+ * Nothing here mutates pin, folder, association or manual-order state.
  */
 export function filterOrdinaryThreads(
   threads: readonly PluginSidebarThread[],
@@ -542,9 +587,9 @@ export function ordinaryCollapsibleTargets(
       }
     }
     if (view.groupBy === "workspace") continue;
-    // Recency headers only exist on standalone chats. A native Project lists
-    // dated rows flat, so it contributes no age keys.
-    if (view.groupBy === "updated" && home.isPersonal === false) continue;
+    // Extra grouping (Updated / Status / Environment) wraps standalone threads
+    // only. Cores and project folders stay unsplit.
+    if (home.isPersonal === false) continue;
     const keys = ordinaryFamilyGroupKeys(home.members, view, {
       now: options.now,
       parentOf: home.parentOf,
@@ -601,9 +646,10 @@ function groupDefinition(
       canonical: VIEW_STATUS_FILTERS.indexOf(aggregate.status),
     };
   }
+  const grouped = aggregate.environmentGroup;
   return {
-    key: `environment:${aggregate.environment?.id ?? NO_ENVIRONMENT_KEY}`,
-    label: aggregate.environment?.label ?? "No environment",
+    key: `environment:${grouped.id}`,
+    label: grouped.label,
     canonical: aggregate.firstIndex,
   };
 }
@@ -668,6 +714,7 @@ export function groupOrdinaryRows(
         ? {
             status: facts.statusOf(row.thread),
             environment: facts.environmentOf(row.thread),
+            environmentGroup: environmentGroupOf(row.thread),
             latestUpdatedAt: row.thread.updatedAt,
             firstIndex: 0,
           }

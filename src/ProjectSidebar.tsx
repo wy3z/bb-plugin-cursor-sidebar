@@ -755,6 +755,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       filterOrdinaryThreads(visible, view, {
         isCoreHome: isCoreHomeThread,
         bypass: (thread) => {
+          // Native project interiors ignore the selected filter; they keep a
+          // recency list plus Show more. Filters apply to standalone chats.
+          if (homeKindOf(thread.projectId) === "project") return true;
           const root = familyRootOfId(thread.id);
           return pinnedFamilyRoots.has(root) || root === activeFamilyRoot;
         },
@@ -789,12 +792,25 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     const compare = familyAwareComparator(view.sortConversationsBy, facts);
     return compare === null ? undefined : { compare, manual: false };
   }, [view.sortConversationsBy, viewVisible]);
-  // A Core home keeps the native sibling order and manual moves; the ordinary
-  // Projects/Chats homes take the selected automatic order.
+  const recencyOrdering = useMemo<SiblingOrdering>(
+    () => ({
+      compare: (left, right) =>
+        right.updatedAt - left.updatedAt || left.id.localeCompare(right.id),
+      manual: false,
+    }),
+    [],
+  );
+  // A Core home keeps the native sibling order and manual moves. A native
+  // Project lists most-recent conversations regardless of the selected sort.
+  // Standalone chats take the selected automatic order.
   const orderingFor = useCallback(
-    (sectionId: string): SiblingOrdering | undefined =>
-      homeKindOf(sectionId) === "core" ? undefined : siblingOrdering,
-    [siblingOrdering],
+    (sectionId: string): SiblingOrdering | undefined => {
+      const kind = homeKindOf(sectionId);
+      if (kind === "core") return undefined;
+      if (kind === "project") return recencyOrdering;
+      return siblingOrdering;
+    },
+    [recencyOrdering, siblingOrdering],
   );
 
   const sections = useMemo<ProjectSectionData[]>(
@@ -1042,18 +1058,21 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       const scope = scopeOf(section, thread.id);
       // Reorder stays inside one visible automatic group (pinned, one folder,
       // or the selected Workspace/Updated/Status/Environment group), so a drag
-      // never crosses groups, files, pins or duplicates a family.
+      // never crosses groups, files, pins or duplicates a family. Extra grouping
+      // is standalone-only; a project uses Workspace so env/date/status never
+      // constrain its interior.
       const memberById = homeKindOf(section.id) !== "core" && shelf === "active"
         ? new Map(section.members.map((member) => [member.id, member]))
         : null;
-      const groupKeys = homeKindOf(section.id) !== "core" && shelf === "active"
-        ? ordinaryFamilyGroupKeys(section.members, view, {
+      const groupingView = section.personal ? view : { ...view, groupBy: "workspace" as const };
+      const groupKeys = memberById === null
+        ? null
+        : ordinaryFamilyGroupKeys(section.members, groupingView, {
             now,
             parentOf: (id) => section.forest.parent.get(id) ?? null,
             statusOf: ordinaryThreadStatus,
             environmentOf: environmentIdentityOf,
-          })
-        : null;
+          });
       const groupKeyOf = memberById === null || groupKeys === null ? null : (threadId: string): string => {
         return standaloneGroupKey({
           threadId,
@@ -1160,7 +1179,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     // the real date, status or environment group that holds the active family.
     let updatedAgeKey: string | null = null;
     let collapsedGroupKey: string | null = null;
-    if (homeKindOf(sectionId) !== "core") {
+    if (section.personal) {
       const keys = ordinaryFamilyGroupKeys(section.members, view, {
         now,
         parentOf: (id) => section.forest.parent.get(id) ?? null,
@@ -1225,7 +1244,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       const section = sectionsById.get(sectionId);
       if (section === undefined) return false;
       // An automatic conversation order disables manual moves in an ordinary
-      // home only; a Core home keeps its native sibling moves.
+      // home only; a Core home keeps its native sibling moves. Native projects
+      // stay recency-ordered, so they never take a manual sibling move.
+      if (homeKindOf(section.id) === "project") return false;
       if (view.sortConversationsBy !== "manual" && homeKindOf(section.id) !== "core") {
         return false;
       }
@@ -1233,14 +1254,15 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       const memberById = homeKindOf(section.id) !== "core" && shelf === "active"
         ? new Map(section.members.map((member) => [member.id, member]))
         : null;
-      const groupKeys = homeKindOf(section.id) !== "core" && shelf === "active"
-        ? ordinaryFamilyGroupKeys(section.members, view, {
+      const groupingView = section.personal ? view : { ...view, groupBy: "workspace" as const };
+      const groupKeys = memberById === null
+        ? null
+        : ordinaryFamilyGroupKeys(section.members, groupingView, {
             now,
             parentOf: (id) => section.forest.parent.get(id) ?? null,
             statusOf: ordinaryThreadStatus,
             environmentOf: environmentIdentityOf,
-          })
-        : null;
+          });
       const groupKeyOf = memberById === null || groupKeys === null ? null : (id: string): string =>
         standaloneGroupKey({
           threadId: id,
@@ -1929,7 +1951,7 @@ function GroupHeading({
         <Icon
           name={open ? "ChevronDown" : "ChevronRight"}
           aria-hidden="true"
-          className="size-3.5 shrink-0 text-muted-foreground/70 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
+          className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
         />
       </button>
       <span aria-hidden className="min-w-0 flex-1" />
@@ -2163,7 +2185,7 @@ function ProjectSection({
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
             )}
           >
-            <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5" />
+            <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5 text-muted-foreground" />
           </button>
         </span>
         <button

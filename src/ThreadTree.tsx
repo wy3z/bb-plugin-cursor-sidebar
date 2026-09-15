@@ -397,10 +397,10 @@ export function ShelfList({
     if (!grouping || partition === null) {
       return [{ key: shelf, label: null, rows }];
     }
-    // Date buckets belong on standalone chats. Inside a native Project they
-    // leave empty "Last 7 days" / "Last 30 days" headers over a short list, so
-    // dated rows stay a flat recency list — the way Cursor lists project chats.
-    if (!section.personal && ctx.view.groupBy === "updated") {
+    // Extra grouping (Workspace / Updated / Status / Environment) wraps
+    // standalone threads only. Cores and project folders stay a flat recency
+    // list so ARCH / Today / status headings never split them.
+    if (!section.personal) {
       return [{ key: `${shelf}:flat`, label: null, rows: partition.dated }];
     }
     return groupOrdinaryRows(partition.dated, ctx.view, {
@@ -451,6 +451,7 @@ export function ShelfList({
           <div
             data-folder-target={isDate ? UNFILED_GROUP_KEY : undefined}
             data-pin-target={isDate ? "unpin" : undefined}
+            data-thread-group={group.key}
             className={cn("rounded", isDate && unfileActive && "bg-primary/10 ring-1 ring-primary/40")}
           >
             <SectionDivider
@@ -478,6 +479,9 @@ export function ShelfList({
                 ctx={ctx}
                 rootPinned={rootPinnedOf(row.thread.id)}
                 inFolderId={null}
+                environmentGroupLabel={
+                  ctx.view.groupBy === "environment" ? group.label : null
+                }
                 activeRailLevels={railLevels.get(row.thread.id)}
                 activeElbow={railPath?.path.has(row.thread.id) ?? false}
               />
@@ -617,6 +621,11 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
   );
 }
 
+function labelsMatch(value: string | null, groupLabel: string | null): boolean {
+  if (value === null || groupLabel === null) return false;
+  return value.trim().toLowerCase() === groupLabel.trim().toLowerCase();
+}
+
 function ThreadRow({
   row,
   section,
@@ -625,6 +634,7 @@ function ThreadRow({
   ctx,
   rootPinned,
   inFolderId,
+  environmentGroupLabel = null,
   activeRailLevels,
   activeElbow,
 }: {
@@ -637,6 +647,8 @@ function ThreadRow({
   rootPinned: boolean;
   /** The native folder this row renders inside, if any. */
   inFolderId: string | null;
+  /** Environment heading this row sits under, when Grouping is Environment. */
+  environmentGroupLabel?: string | null;
   activeRailLevels?: ReadonlySet<number> | undefined;
   activeElbow?: boolean;
 }) {
@@ -671,15 +683,19 @@ function ThreadRow({
     native.host && native.host.id !== ctx.primaryHostId ? `Host: ${native.host.name}` : null;
   const location =
     remoteHost ?? (workspace === null && branch === null && hostName ? `Host: ${hostName}` : null);
+  // Under an Environment heading the group already names the host/workspace,
+  // so the row keeps branch (and any non-matching host) instead of repeating ARCH.
+  const hideGroupedWorkspace = labelsMatch(workspace, environmentGroupLabel);
+  const hideGroupedHost = labelsMatch(hostName, environmentGroupLabel);
   const secondary = [
-    ctx.view.show.environment ? workspace : null,
+    ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null,
     ctx.view.show.branch ? branch : null,
-    ctx.view.show.host ? location : null,
+    ctx.view.show.host && !hideGroupedHost ? location : null,
   ].filter(Boolean).join(" · ");
   const secondaryTitle = [
-    ctx.view.show.environment && workspace !== null ? workspacePath : null,
+    ctx.view.show.environment && workspace !== null && !hideGroupedWorkspace ? workspacePath : null,
     ctx.view.show.branch ? branch : null,
-    ctx.view.show.host ? location : null,
+    ctx.view.show.host && !hideGroupedHost ? location : null,
   ].filter(Boolean).join(" · ");
   // The resting slot speaks for the whole subtree, so a collapsed parent still
   // shows a running or attention-seeking descendant instead of hiding it.
@@ -987,16 +1003,16 @@ function ThreadRow({
               thread.isUnread && "font-medium",
             )}
           />
-          {secondary ? <span className="ps-thread-info mt-px block w-full truncate text-2xs leading-none text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          {secondary ? <span className="ps-thread-info mt-px block w-full truncate text-2xs leading-none text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
           {location && ctx.view.show.host ? <span className="ps-thread-location hidden text-xs text-muted-foreground">{location}</span> : null}
           <span className="ps-mobile-status hidden text-xs text-muted-foreground"><StatusOrTime thread={statusThread} now={ctx.now} showTime={ctx.view.show.updated} /></span>
           </div>
 
           <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end pl-1">
-            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-muted-foreground/80 group-hover/row:invisible group-focus-within/row:invisible max-md:pointer-coarse:visible">
-              {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
-            </span>
-            <span className="absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100 max-md:pointer-coarse:relative max-md:pointer-coarse:opacity-100">
+            <span
+              data-thread-actions=""
+              className="absolute inset-y-0 right-full z-20 flex items-center gap-0.5 pr-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100 max-md:pointer-coarse:relative max-md:pointer-coarse:right-auto max-md:pointer-coarse:pr-0 max-md:pointer-coarse:opacity-100"
+            >
               {pinnedCapable ? (
                 <button
                   type="button"
@@ -1025,6 +1041,9 @@ function ThreadRow({
               >
                 <Icon name="Archive" className="size-3.5" />
               </button>
+            </span>
+            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-muted-foreground/80">
+              {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
             </span>
           </div>
         </div>

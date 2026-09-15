@@ -9,9 +9,11 @@ import type { ProjectSectionData } from "./forest";
  * their direct children are the project's conversations. The budget keeps
  * every conversation that is actually doing something — executing, waiting on
  * the user, selected, or pinned — and previews only a small number of the
- * remaining inactive ones. Nothing here archives, deletes or reorders: it
- * returns the ids a bounded render should show and the ids behind "N more
- * conversations", and the full native tree stays available when expanded.
+ * remaining inactive ones, newest first. Sidebar filters and extra grouping
+ * (env/date/status) do not apply inside a project. Nothing here archives,
+ * deletes or reorders: it returns the ids a bounded render should show and the
+ * ids behind "N more conversations", and the full native tree stays available
+ * when expanded.
  */
 export const DEFAULT_INACTIVE_CONVERSATIONS = 3;
 

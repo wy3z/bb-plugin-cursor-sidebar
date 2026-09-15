@@ -180,10 +180,21 @@ export function preloadExtendedIcons(): Promise<void> {
 
 const EMPTY_ICON: IconSvgElement = [];
 
+const CHEVRON_ICON_NAMES: ReadonlySet<string> = new Set([
+  "ChevronDown",
+  "ChevronLeft",
+  "ChevronRight",
+  "ChevronUp",
+]);
+
+/** Chevron paths are a short stroke; 2.25 matches Plus at the default 1.5. */
+const CHEVRON_STROKE_WIDTH = 2.25;
+
 export interface IconProps {
   name: IconName;
   className?: string;
   style?: CSSProperties;
+  strokeWidth?: number;
   "aria-hidden"?: boolean | "true" | "false";
   "aria-label"?: string;
 }
@@ -192,9 +203,12 @@ export function Icon({
   name,
   className,
   style,
+  strokeWidth,
   "aria-hidden": ariaHidden,
   "aria-label": ariaLabel,
 }: IconProps) {
+  const resolvedStroke =
+    strokeWidth ?? (CHEVRON_ICON_NAMES.has(name) ? CHEVRON_STROKE_WIDTH : undefined);
   const coreIcon = CORE_ICON_LOOKUP[name];
   if (coreIcon !== undefined) {
     return (
@@ -202,6 +216,7 @@ export function Icon({
         icon={coreIcon}
         className={cn(className)}
         style={style}
+        {...(resolvedStroke !== undefined ? { strokeWidth: resolvedStroke } : {})}
         aria-hidden={ariaHidden}
         aria-label={ariaLabel}
         data-icon={name}
@@ -213,6 +228,7 @@ export function Icon({
       name={name}
       className={className}
       style={style}
+      strokeWidth={resolvedStroke}
       aria-hidden={ariaHidden}
       aria-label={ariaLabel}
     />
@@ -223,6 +239,7 @@ function ExtendedIcon({
   name,
   className,
   style,
+  strokeWidth,
   "aria-hidden": ariaHidden,
   "aria-label": ariaLabel,
 }: IconProps) {
@@ -242,6 +259,7 @@ function ExtendedIcon({
       icon={icon ?? EMPTY_ICON}
       className={cn(className)}
       style={style}
+      {...(strokeWidth !== undefined ? { strokeWidth } : {})}
       aria-hidden={ariaHidden}
       aria-label={ariaLabel}
       data-icon={name}

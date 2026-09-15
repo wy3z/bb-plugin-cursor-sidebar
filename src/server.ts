@@ -77,10 +77,11 @@ const membershipSchema = z.object({ rootThreadId: z.string(), projectId: z.strin
 const membershipListSchema = z.object({ projects: z.array(managerSchema), memberships: z.array(membershipSchema) });
 const managersSchema = z.object({ projects: z.array(managerSchema) });
 
-// The one persisted SidebarView contract. `workspace` is native Project
-// identity with no extra grouping, `updated` date buckets (the default within
-// ordinary homes), `status` the shared status precedence and `environment`
-// execution-environment identity. `statusFilter` lists the selected ordinary
+// The one persisted SidebarView contract. Grouping is one exclusive radio:
+// `workspace` (no extra grouping), `updated` date buckets (the default),
+// `status` the shared status precedence, or `environment` a human host/workspace
+// heading. Selecting one replaces the others; they never stack. Extra grouping
+// wraps standalone threads only. `statusFilter` lists the selected ordinary
 // status kinds, so its full set is "all", a subset narrows and an empty list is
 // "none". `environmentFilter` is null for "all environments", an array selects
 // a subset and an empty array is "none"; the `__none__` key selects rows that
