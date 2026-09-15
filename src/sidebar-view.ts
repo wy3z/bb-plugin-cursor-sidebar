@@ -485,6 +485,8 @@ export function allEnvironmentFilterPatch(on: boolean): Partial<SidebarView> {
 export interface CollapsibleHome {
   id: string;
   isCore: boolean;
+  /** Date buckets only render on standalone chats. */
+  isPersonal?: boolean;
   members: readonly PluginSidebarThread[];
   childrenOf: (threadId: string) => readonly string[];
   parentOf: (threadId: string) => string | null;
@@ -540,6 +542,9 @@ export function ordinaryCollapsibleTargets(
       }
     }
     if (view.groupBy === "workspace") continue;
+    // Recency headers only exist on standalone chats. A native Project lists
+    // dated rows flat, so it contributes no age keys.
+    if (view.groupBy === "updated" && home.isPersonal === false) continue;
     const keys = ordinaryFamilyGroupKeys(home.members, view, {
       now: options.now,
       parentOf: home.parentOf,

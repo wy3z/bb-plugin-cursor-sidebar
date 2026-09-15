@@ -19,10 +19,9 @@ import {
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "@/components/ui/icon";
-import { SidebarActions } from "./SidebarActions";
-import { ProjectChecklist } from "./ProjectChecklist";
-import { NewProjectAction } from "./NewProjectAction";
 import { cn } from "@/lib/utils";
+import { SidebarActions } from "./SidebarActions";
+import { NewProjectAction } from "./NewProjectAction";
 import { isProtectedInteractionTarget } from "./settle-shortcut";
 import {
   activePathIds,
@@ -62,8 +61,7 @@ import {
   type ThreadStatusKind,
 } from "./status";
 import { useCoreAttention, nativeAttentionSignature } from "./useCoreAttention";
-import { listeningHealthLabel } from "./listening-health";
-import { planAttentionReveal, planListeningAction, reachableRevealTargets } from "./core-nav";
+import { planAttentionReveal, reachableRevealTargets } from "./core-nav";
 import { pinAllowed, planPinWrites } from "./pin-scope";
 import { planConversations } from "./conversations";
 import { useWorkspaces } from "./useWorkspaces";
@@ -88,7 +86,6 @@ import {
   COLLAPSED_GROUPS_KEY,
   usePersistentIds,
 } from "./collapse";
-import { useProjectVisibility } from "./useProjectVisibility";
 import { useThreadSections } from "./useThreadSections";
 import { useSidebarView } from "./useSidebarView";
 import { SidebarViewMenu, SidebarViewSyncNotice } from "./SidebarViewMenu";
@@ -117,7 +114,8 @@ import type { ThreadShelf } from "./lifecycle";
 import { ageGroupKey, personalAgeGroups, type AgeGroup } from "./age-groups";
 import { ManagerCreate } from "./ManagerCreate";
 import { useManagers } from "./useManagers";
-import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus } from "./ProjectStatusGlyph";
+import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus, headingIsWorking, headingShowsTrailingStatus } from "./ProjectStatusGlyph";
+import { StatusFromKind, TrailingMeta } from "./StatusSlot";
 import { AnimatedList } from "./AnimatedList";
 
 function cssEscape(value: string): string {
@@ -400,7 +398,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
 
-  const hiddenProjects = useProjectVisibility();
   const [announcement, setAnnouncement] = useState("");
   const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -689,8 +686,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     [baseOrderedProjects],
   );
   const reorderableProjectIds = useMemo(
-    () => baseOrderedProjects.filter((project) => !project.isPersonal && project.id.startsWith(NATIVE_PROJECT_PREFIX) && !hiddenProjects.ids.has(project.id)).map((project) => project.id),
-    [baseOrderedProjects, hiddenProjects.ids],
+    () => baseOrderedProjects.filter((project) => !project.isPersonal && project.id.startsWith(NATIVE_PROJECT_PREFIX)).map((project) => project.id),
+    [baseOrderedProjects],
   );
   const liveProjectIds =
     drag.state?.kind === "project"
@@ -1452,9 +1449,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     );
   }
 
-  const visibleSections = sections.filter(
-    (section) => section.personal || !hiddenProjects.ids.has(section.id),
-  );
+  const visibleSections = sections;
   const sectionKind = (section: ProjectSectionData): "core" | "project" | "chats" =>
     section.personal ? "chats" : homeKindOf(section.id);
   const coreSectionsVisible = visibleSections.filter(
@@ -1542,7 +1537,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       ordinaryCollapsibleTargets(
         visibleSections.map((section) => ({
           id: section.id,
-          isCore: homeKindOf(section.id) === "core",
+            isCore: homeKindOf(section.id) === "core",
+            isPersonal: section.personal,
           members: section.members,
           childrenOf: (threadId) =>
             (section.forest.children.get(threadId) ?? []).map((thread) => thread.id),
@@ -1602,7 +1598,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     // and the handover indicator is independent of the attention observation:
     // a current attention read does not make a failed handover read available.
     const coreMeta: string[] = [];
-    let listeningLabel: string | null = null;
     if (isCore && attentionState) {
       if (attentionState.handoversAwaiting === null) {
         coreMeta.push("Handovers unavailable");
@@ -1611,13 +1606,11 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           `${attentionState.handoversAwaiting} handover${attentionState.handoversAwaiting === 1 ? "" : "s"} waiting`,
         );
       }
-      listeningLabel = listeningHealthLabel(attentionState.health);
     }
     // Unresolved attention the list cannot draw as a row (archived or absent
     // from the native feed). The heading reveals it; a hidden thread with a
     // native row opens directly, and an absent generation opens the Core.
     const revealAttention = isCore ? aggregate.revealAttention : 0;
-    const listeningAction = isCore ? planListeningAction() : null;
     const revealAction = (() => {
       if (!isCore || revealAttention <= 0 || !attentionState?.attention) return null;
       const targets = reachableRevealTargets(
@@ -1638,8 +1631,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         status={aggregate.status}
         statusLabel={aggregate.statusLabel}
         coreMeta={coreMeta}
-        listeningLabel={listeningLabel}
-        listeningTitle={listeningAction?.title}
         revealAttention={revealAttention}
         revealAttentionMore={isCore && aggregate.attentionHasMore}
         revealAttentionTitle={revealAction?.title}
@@ -1708,26 +1699,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         >
           <Icon name="MessageSquarePlus" className="size-3.5" />
         </button>
-        <ProjectChecklist
-          projects={sections.filter((section) => !section.personal)}
-          hiddenIds={hiddenProjects.ids}
-          onVisibilityChange={(id, shown) => shown ? hiddenProjects.remove(id) : hiddenProjects.add(id)}
-        />
-        <SidebarViewMenu
-          view={view}
-          sync={sidebarView.sync}
-          onRetry={sidebarView.retry}
-          onUpdate={sidebarView.update}
-          onReset={sidebarView.reset}
-          environmentOptions={viewEnvironmentOptions}
-          showNoEnvironment={hasEnvironmentlessOrdinary}
-          anyCollapsed={anyCollapsed}
-          onExpandAll={expandAll}
-          onCollapseAll={collapseAll}
-          unreadOrdinaryCount={unreadOrdinary.length}
-          markReadBusy={markReadBusy}
-          onMarkAllRead={() => { void markAllRead(); }}
-        />
       </div>
 
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} className="ps-view-sync-notice" />
@@ -1881,6 +1852,24 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
               onToggle={() => topGroupCollapsed.toggle("projects")}
               onCreate={() => setCreatingProject(true)}
               createLabel="New Project"
+              tools={
+                <SidebarViewMenu
+                  view={view}
+                  sync={sidebarView.sync}
+                  onRetry={sidebarView.retry}
+                  onUpdate={sidebarView.update}
+                  onReset={sidebarView.reset}
+                  environmentOptions={viewEnvironmentOptions}
+                  showNoEnvironment={hasEnvironmentlessOrdinary}
+                  anyCollapsed={anyCollapsed}
+                  onExpandAll={expandAll}
+                  onCollapseAll={collapseAll}
+                  unreadOrdinaryCount={unreadOrdinary.length}
+                  markReadBusy={markReadBusy}
+                  onMarkAllRead={() => { void markAllRead(); }}
+                  triggerClassName="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 data-[state=open]:opacity-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:pointer-coarse:opacity-100"
+                />
+              }
             />
             {!topGroupCollapsed.ids.has("projects")
               ? nativeSectionsVisible.map((section) => renderSection(section))
@@ -1898,6 +1887,7 @@ function GroupHeading({
   onToggle,
   onCreate,
   createLabel,
+  tools,
   children,
 }: {
   label: string;
@@ -1905,6 +1895,7 @@ function GroupHeading({
   onToggle: () => void;
   onCreate?: (() => void) | undefined;
   createLabel?: string | undefined;
+  tools?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -1914,9 +1905,8 @@ function GroupHeading({
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
         aria-expanded={open}
         onClick={onToggle}
-        className="flex min-h-6 min-w-0 items-center gap-1 rounded py-0.5 text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="flex min-h-6 min-w-0 items-center rounded py-0.5 text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
       >
-        <Icon name={open ? "ChevronDown" : "ChevronRight"} className="size-3.5 shrink-0" />
         <span className="truncate">{label}</span>
       </button>
       <span aria-hidden className="min-w-0 flex-1" />
@@ -1932,6 +1922,16 @@ function GroupHeading({
           <Icon name="Plus" className="size-3.5" />
         </button>
       ) : null}
+      {tools}
+      <button
+        type="button"
+        aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:pointer-coarse:opacity-100"
+      >
+        <Icon name={open ? "ChevronDown" : "ChevronRight"} className="size-3.5" />
+      </button>
     </div>
   );
 }
@@ -1955,8 +1955,6 @@ function ProjectSection({
   status,
   statusLabel,
   coreMeta,
-  listeningLabel,
-  listeningTitle,
   revealAttention,
   revealAttentionMore,
   revealAttentionTitle,
@@ -1976,10 +1974,6 @@ function ProjectSection({
   statusLabel?: string | undefined;
   /** Separate handover facts, rendered below the Core heading. */
   coreMeta?: readonly string[] | undefined;
-  /** The one-line Listening health label, or null when there is none. */
-  listeningLabel?: string | null | undefined;
-  /** What the Listening action actually opens, stated truthfully. */
-  listeningTitle?: string | undefined;
   /** Count of archived/absent unresolved attention the heading can reveal. */
   revealAttention?: number | undefined;
   /** True when the bounded attention list was truncated (more exist). */
@@ -2055,29 +2049,16 @@ function ProjectSection({
   const disclosureLabel = sectionOpen
     ? `Collapse ${section.name}`
     : `Expand ${section.name}`;
-  // The Core heading's secondary facts. Listening opens the Core (the SDK has
-  // no cross-plugin view route), stated truthfully; the reveal opens a hidden
-  // native thread directly, else the Core. Handover text is a plain fact.
+  const latestUpdatedAt = section.members.reduce(
+    (max, thread) => Math.max(max, thread.updatedAt),
+    0,
+  );
+  // Handover and unresolved-attention facts stay as heading notes. Listening
+  // health is not shown: Cursor's agent rows carry status on the right, not a
+  // second line of subscription copy.
   const metaNodes: ReactNode[] = [];
   if (ownershipStale) metaNodes.push("Ownership status stale; moves are paused.");
   for (const item of coreMeta ?? []) metaNodes.push(item);
-  if (listeningLabel != null) {
-    metaNodes.push(
-      onOpenManager ? (
-        <button
-          key="listening"
-          type="button"
-          title={listeningTitle ?? "Open the Core"}
-          onClick={onOpenManager}
-          className="rounded text-left underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-        >
-          {listeningLabel}
-        </button>
-      ) : (
-        listeningLabel
-      ),
-    );
-  }
   if ((revealAttention ?? 0) > 0 || revealAttentionMore) {
     const label = `${revealAttention ?? 0}${revealAttentionMore ? "+" : ""} unresolved`;
     const reveal = onRevealAttention ?? onOpenManager;
@@ -2139,11 +2120,32 @@ function ProjectSection({
             )}
           />
         ) : null}
-        {/* The name keeps the section edge; the status slot sits to its left in
-            a fixed box so the title never shifts, and the disclosure sits to
-            the name's right so hover/focus reveal never moves the title. */}
-        <span className="ps-status-slot flex w-4 shrink-0 items-center justify-center">
-          <ProjectStatusGlyph state={displayState} label={activityLabel} />
+        {/* Identity/activity on the left; hover chevron overlays that slot. */}
+        <span className="ps-status-slot relative flex w-4 shrink-0 items-center justify-center">
+          <span className="ps-heading-lead pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0 max-md:pointer-coarse:opacity-0">
+            <ProjectStatusGlyph
+              kind={isCore ? "core" : "project"}
+              working={headingIsWorking(status ?? "idle")}
+              label={activityLabel}
+            />
+          </span>
+          <button
+            type="button"
+            aria-label={disclosureLabel}
+            aria-expanded={sectionOpen}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (ctx.consumeSuppressedClick(section.id)) return;
+              onToggleProject();
+            }}
+            className={cn(
+              "ps-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
+            )}
+          >
+            <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5" />
+          </button>
         </span>
         <button
           type="button"
@@ -2171,35 +2173,6 @@ function ProjectSection({
             )}
           </span>
         </button>
-        {conflicted ? (
-          <span
-            role="img"
-            aria-label="Ownership transfer unresolved"
-            title="An ownership transfer for this Core is unresolved. The list shows the observed state."
-            className="flex size-4 shrink-0 items-center justify-center text-warning-text"
-          >
-            <Icon name="AlertTriangle" className="size-3.5" />
-          </span>
-        ) : null}
-        {/* Expansion is its own accessible action, directly after the name. */}
-        <button
-          type="button"
-          aria-label={disclosureLabel}
-          aria-expanded={sectionOpen}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (ctx.consumeSuppressedClick(section.id)) return;
-            onToggleProject();
-          }}
-          className={cn(
-            "ps-project-disclosure flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
-            "max-md:pointer-coarse:size-9",
-            "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
-          )}
-        >
-          <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5" />
-        </button>
         <span aria-hidden className="min-w-0 flex-1" />
         {onNewThread ? (
           <button
@@ -2219,6 +2192,27 @@ function ProjectSection({
             <Icon name="Plus" className="size-3.5 max-md:pointer-coarse:size-5" />
           </button>
         ) : null}
+        <TrailingMeta
+          status={
+            conflicted ? (
+              <span
+                role="img"
+                aria-label="Ownership transfer unresolved"
+                title="An ownership transfer for this Core is unresolved. The list shows the observed state."
+                className="flex size-4 shrink-0 items-center justify-center text-warning-text"
+              >
+                <Icon name="AlertTriangle" className="size-3.5" />
+              </span>
+            ) : headingShowsTrailingStatus(status ?? "idle") ? (
+              <StatusFromKind status={status ?? "idle"} label={activityLabel} />
+            ) : displayState === "attention" ? (
+              <Icon name="AlertTriangle" aria-label={activityLabel} className="size-3.5 shrink-0 text-warning-text" />
+            ) : null
+          }
+          updatedAt={latestUpdatedAt}
+          now={ctx.now}
+          showTime={ctx.view.show.updated}
+        />
       </div>
 
       </SidebarActions>

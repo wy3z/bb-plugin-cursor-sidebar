@@ -40,8 +40,15 @@ import type { ThreadOwnershipHint } from "./core-ownership";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import { PullRequestMark } from "./PullRequestMark";
 import { RowContextMenu } from "./RowContextMenu";
-import { StatusOrTime, RowStatusSlot, StatusFromKind, ThreadAge } from "./StatusSlot";
-import { hasStatusGlyph } from "./StatusGlyph";
+import {
+  StatusOrTime,
+  StatusFromKind,
+  TrailingMeta,
+  activityStatusKind,
+  trailingStatusKind,
+} from "./StatusSlot";
+import { hasStatusGlyph, isActivityIndicator, isTrailingStatusIndicator, StatusGlyph } from "./StatusGlyph";
+import { isWorking } from "./activity";
 import { statusSourceForGroup, threadDisplayTitle } from "./inbox";
 import type { CoreRowRole } from "./core-ownership";
 import { resolveRowStatus, type ThreadStatusKind } from "./status";
@@ -328,6 +335,12 @@ export function ShelfList({
     if (!grouping || partition === null) {
       return [{ key: shelf, label: null, rows }];
     }
+    // Date buckets belong on standalone chats. Inside a native Project they
+    // leave empty "Last 7 days" / "Last 30 days" headers over a short list, so
+    // dated rows stay a flat recency list — the way Cursor lists project chats.
+    if (!section.personal && ctx.view.groupBy === "updated") {
+      return [{ key: `${shelf}:flat`, label: null, rows: partition.dated }];
+    }
     return groupOrdinaryRows(partition.dated, ctx.view, {
       now: ctx.now,
       parentOf,
@@ -335,7 +348,7 @@ export function ShelfList({
       environmentOf: environmentIdentityOf,
       members: section.members,
     });
-  }, [partition, rows, grouping, ctx.now, ctx.view, parentOf, shelf, section.members]);
+  }, [partition, rows, grouping, ctx.now, ctx.view, parentOf, shelf, section.members, section.personal]);
   const pinnedKey = `pinned:${section.id}`;
   const pinnedOpen = !ctx.collapsedGroups.has(pinnedKey);
   const folderKey = (folderId: string) => `folder:${section.id}:${folderId}`;
@@ -647,6 +660,16 @@ function ThreadRow({
     hasGlyph: hasStatusGlyph(statusThread.indicator),
     exactStatus: ctx.statusOf(thread.id),
   });
+  const exactStatus = ctx.statusOf(thread.id);
+  const showLeftActivity =
+    activityStatusKind(exactStatus) ||
+    isWorking(statusThread) ||
+    isActivityIndicator(statusThread.indicator);
+  const trailingStatus = trailingStatusKind(exactStatus) ? (
+    <StatusFromKind status={exactStatus!} label={rowStatus.label} />
+  ) : isTrailingStatusIndicator(statusThread.indicator) ? (
+    <StatusGlyph indicator={statusThread.indicator} label={statusThread.indicatorLabel} />
+  ) : null;
 
   const children = (section.forest.children.get(thread.id) ?? []).filter(
     (child) => inShelf.has(child.id),
@@ -752,7 +775,8 @@ function ThreadRow({
           data-reorder-kind="thread"
           data-reorder-scope={scope}
           className={cn(
-            "group/row relative flex items-center rounded-md py-0.5 pl-3 pr-1 transition-colors",
+            "group/row relative flex items-center rounded-md pl-3 pr-1 transition-colors",
+            secondary ? "ps-workspace-row my-1 py-1" : "py-0.5",
             "min-h-7 max-md:pointer-coarse:min-h-11",
             isActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -852,19 +876,26 @@ function ThreadRow({
                 ctx.onToggleChildren(thread.id);
               }}
               style={{ left: indent }}
-              className="ps-child-toggle absolute top-1/2 z-10 flex h-4 w-3 -translate-y-1/2 items-center justify-center text-muted-foreground opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:opacity-100"
+              className="ps-child-toggle absolute top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-muted-foreground opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:opacity-100"
             >
               <Icon name={expanded ? "ChevronDown" : "ChevronRight"} className="size-3" />
             </button>
           ) : null}
 
-          {rowStatus.source === "exact" ? (
-            <span className="ps-status-slot pointer-events-none flex w-4 shrink-0 items-center justify-center">
-              <StatusFromKind status={rowStatus.kind} label={rowStatus.label} />
-            </span>
-          ) : (
-            <RowStatusSlot thread={statusThread} />
-          )}
+          <span className={cn(
+            "ps-status-slot pointer-events-none relative flex w-4 shrink-0 items-center justify-center",
+            hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0 max-md:pointer-coarse:opacity-0",
+          )}>
+            {showLeftActivity ? (
+              activityStatusKind(exactStatus) ? (
+                <StatusFromKind status={exactStatus!} label={rowStatus.label} />
+              ) : isActivityIndicator(statusThread.indicator) ? (
+                <StatusGlyph indicator={statusThread.indicator} label={statusThread.indicatorLabel} />
+              ) : (
+                <StatusFromKind status="working" label={rowStatus.label} />
+              )
+            ) : null}
+          </span>
 
           {coreRole === "worker" ? (
             <span
@@ -906,7 +937,7 @@ function ThreadRow({
 
           {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
 
-          <div className="flex min-w-0 flex-1 flex-col items-start gap-0">
+          <div className={cn("flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
           <InlineThreadTitle
             thread={thread}
             editing={isRenaming}
@@ -925,16 +956,17 @@ function ThreadRow({
               thread.isUnread && "font-medium",
             )}
           />
-          {secondary ? <span className="ps-thread-info block w-full truncate text-2xs leading-tight text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          {secondary ? <span className="ps-thread-info mt-px block w-full truncate text-2xs leading-none text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
           {location && ctx.view.show.host ? <span className="ps-thread-location hidden text-xs text-muted-foreground">{location}</span> : null}
           <span className="ps-mobile-status hidden text-xs text-muted-foreground"><StatusOrTime thread={statusThread} now={ctx.now} showTime={ctx.view.show.updated} /></span>
           </div>
 
-          {ctx.view.show.updated ? (
-            <span className="ps-thread-time pointer-events-none flex min-w-6 shrink-0 items-center justify-end pl-1 text-xs text-muted-foreground tabular-nums">
-              <ThreadAge thread={statusThread} now={ctx.now} />
-            </span>
-          ) : null}
+          <TrailingMeta
+            status={trailingStatus}
+            updatedAt={statusThread.updatedAt}
+            now={ctx.now}
+            showTime={ctx.view.show.updated}
+          />
         </div>
       </RowContextMenu>
 

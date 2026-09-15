@@ -23,10 +23,14 @@ import { cn } from "@/lib/utils";
 export function hasStatusGlyph(
   indicator: PluginSidebarThreadIndicator,
 ): boolean {
+  return isActivityIndicator(indicator) || isTrailingStatusIndicator(indicator);
+}
+
+/** Live work shown in the row's left slot, matching Cursor's activity column. */
+export function isActivityIndicator(
+  indicator: PluginSidebarThreadIndicator,
+): boolean {
   switch (indicator) {
-    case "unread-error":
-    case "waiting-for-input":
-    case "unread-success":
     case "runtime":
     case "workflow":
     case "background-agent":
@@ -35,6 +39,20 @@ export function hasStatusGlyph(
     case "goal":
     case "draft":
     case "working-draft":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Attention/result marks that trail on the right with the last-updated time. */
+export function isTrailingStatusIndicator(
+  indicator: PluginSidebarThreadIndicator,
+): boolean {
+  switch (indicator) {
+    case "unread-error":
+    case "waiting-for-input":
+    case "unread-success":
       return true;
     default:
       return false;

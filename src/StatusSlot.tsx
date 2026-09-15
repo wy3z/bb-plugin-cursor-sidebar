@@ -1,7 +1,8 @@
+import type { ReactNode } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { StatusGlyph, hasStatusGlyph } from "./StatusGlyph";
+import { StatusGlyph, hasStatusGlyph, isActivityIndicator, isTrailingStatusIndicator } from "./StatusGlyph";
 import { relativeTimeLabel } from "./relative-time";
 import type { ThreadStatusKind } from "./status";
 
@@ -57,21 +58,57 @@ export function ReadDot({ unread, label }: { unread: boolean; label?: string }) 
 }
 
 /**
- * The row's left status slot. A real status glyph while the thread has
- * something to say; otherwise an empty 16px box so titles stay aligned and
- * idle chats do not look like unlabeled circles.
+ * The row's left slot: live activity only. Idle chats keep the empty 16px box
+ * so titles stay aligned with Core/Project icons; unread weight lives on the
+ * title, and attention marks trail on the right.
  */
 export function RowStatusSlot({ thread }: { thread: PluginSidebarThread }) {
   return (
     <span className="ps-status-slot pointer-events-none flex w-4 shrink-0 items-center justify-center">
-      {hasStatusGlyph(thread.indicator) ? (
+      {isActivityIndicator(thread.indicator) ? (
         <StatusGlyph indicator={thread.indicator} label={thread.indicatorLabel} />
-      ) : (
-        <ReadDot unread={thread.isUnread} label={thread.indicatorLabel ?? undefined} />
-      )}
+      ) : null}
     </span>
   );
 }
+
+/** Status + last-updated time, always the row's trailing column. */
+export function TrailingMeta({
+  status,
+  updatedAt,
+  now,
+  showTime,
+}: {
+  status?: ReactNode;
+  updatedAt: number | null | undefined;
+  now: number;
+  showTime: boolean;
+}) {
+  const time = showTime && updatedAt != null && updatedAt > 0
+    ? relativeTimeLabel(updatedAt, now)
+    : null;
+  if (!status && time === null) return null;
+  return (
+    <span className="ps-thread-meta pointer-events-none flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
+      {status}
+      {time !== null ? (
+        <span className="ps-thread-time tabular-nums text-xs text-muted-foreground/80">
+          {time}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+export function trailingStatusKind(status: ThreadStatusKind | undefined): boolean {
+  return status === "input" || status === "failed" || status === "review" || status === "unavailable";
+}
+
+export function activityStatusKind(status: ThreadStatusKind | undefined): boolean {
+  return status === "working" || status === "queued";
+}
+
+export { isActivityIndicator, isTrailingStatusIndicator };
 
 /** The trailing age label. Status lives in the left slot, never here. */
 export function ThreadAge({ thread, now }: { thread: PluginSidebarThread; now: number }) {

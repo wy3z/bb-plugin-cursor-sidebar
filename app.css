@@ -48,11 +48,10 @@
   .ps-create-dialog h2 { overflow-wrap: anywhere; }
 }
 
-/* The project heading's glyph in the reserved leading status slot: a fixed
-   16px box left of the project name. It reuses existing BB Icon primitives
-   and native styling: the stock `Loading` spinner while working, the native
-   `AlertTriangle` warning glyph for needs-attention, and a `Folder` when
-   idle — matching Cursor's project containers, not a hollow circle. */
+/* The project heading's glyph in the reserved leading slot: a fixed 16px box
+   left of the name. Working uses the stock `Loading` spinner; idle Cores use
+   `Bot` and idle native Projects use `Folder`. Attention/status trails on the
+   right with the last-updated time. */
 .ps-project-glyph {
   display: inline-flex;
   box-sizing: border-box;
@@ -67,11 +66,9 @@
   display: block;
 }
 
-/* One reserved status slot, left of every project heading and thread title.
-   Project headings use a folder (or a live-status glyph). Thread rows keep
-   the 16px box so titles never shift: a real status glyph while the thread
-   has something to say, a filled unread dot, or empty for an idle chat —
-   never a hollow circle standing in as a row icon. */
+/* One reserved left slot for Core/Project identity and thread activity.
+   Status marks trail on the right; idle chats keep the empty box so titles
+   stay aligned. */
 .ps-status-slot {
   display: inline-flex;
   box-sizing: border-box;
@@ -84,6 +81,15 @@
 }
 .ps-status-slot svg {
   display: block;
+}
+
+/* Workspace/repo rows: title and subtitle sit tight; extra margin separates
+   the pair from neighbouring threads. */
+.ps-workspace-row .ps-thread-title {
+  line-height: 1.2;
+}
+.ps-workspace-row .ps-thread-info {
+  line-height: 1.15;
 }
 
 @media (prefers-reduced-motion: reduce) {

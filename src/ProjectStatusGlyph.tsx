@@ -6,11 +6,11 @@ import type { ThreadStatusKind } from "./status";
  * The Core/Project heading's left slot. It always draws exactly one glyph in
  * the same fixed 16px box as thread rows, so headings never shift:
  *
- *   working   -> the stock `Loading` spinner (native colour + spin)
- *   attention -> `AlertTriangle` in the native warning tone
- *   idle/review/complete -> `Folder`, matching Cursor's project containers
+ *   working -> the stock `Loading` spinner (native colour + spin)
+ *   idle    -> `Bot` for a Core, `Folder` for a native Project
  *
- * Built only from existing BB Icon primitives. Child rows are unchanged.
+ * Attention/status never lives here: those marks trail on the right with the
+ * last-updated time. Built only from existing BB Icon primitives.
  */
 export type ActivityState = "inactive" | "working" | "complete" | "attention" | "review";
 
@@ -50,36 +50,42 @@ export function glyphStateForStatus(status: ThreadStatusKind): ActivityState {
   }
 }
 
-/** Existing BB Icon primitives only; no custom glyphs. */
-const STATE_ICON = {
-  inactive: { name: "Folder", className: "text-muted-foreground/70" },
-  working: { name: "Loading", className: "animate-spin text-muted-foreground/50" },
-  complete: { name: "Folder", className: "text-muted-foreground/70" },
-  attention: { name: "AlertTriangle", className: "text-warning-text" },
-  review: { name: "Folder", className: "text-muted-foreground/70" },
-} as const;
+export function headingIsWorking(status: ThreadStatusKind | null | undefined): boolean {
+  return status === "working" || status === "queued";
+}
 
+export function headingShowsTrailingStatus(status: ThreadStatusKind | null | undefined): boolean {
+  return status === "input" || status === "failed" || status === "review" || status === "unavailable";
+}
+
+/** Existing BB Icon primitives only; no custom glyphs. */
 export function ProjectStatusGlyph({
-  state,
+  kind,
+  working,
   label,
   className,
 }: {
-  state: ActivityState;
+  kind: "core" | "project";
+  working: boolean;
   label: string;
   className?: string;
 }) {
-  const icon = STATE_ICON[state];
+  const name = working ? "Loading" : kind === "core" ? "Bot" : "Folder";
+  const iconClass = working
+    ? "animate-spin text-muted-foreground/50"
+    : "text-muted-foreground/70";
   return (
     <span
       role="img"
       aria-label={label}
-      data-activity={state}
+      data-activity={working ? "working" : "idle"}
+      data-heading-kind={kind}
       className={cn("ps-project-glyph", className)}
     >
       <Icon
-        name={icon.name}
+        name={name}
         aria-hidden="true"
-        className={cn("size-4 shrink-0", icon.className)}
+        className={cn("size-4 shrink-0", iconClass)}
       />
     </span>
   );
