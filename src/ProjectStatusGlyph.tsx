@@ -1,4 +1,4 @@
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import type { ThreadStatusKind } from "./status";
 
@@ -7,11 +7,11 @@ import type { ThreadStatusKind } from "./status";
  * the same fixed 16px box as thread rows, so headings never shift:
  *
  *   working -> the stock `Loading` spinner (native colour + spin)
- *   idle    -> `Bot` for a Core, a smaller `Folder` for a native Project
+ *   idle    -> Cursor's Sparkles for a Core, or the Core's own provider logo
+ *              when one exists; a smaller Folder for a native Project
  *
  * Core attention/status is a small coloured dot on the glyph, not a trailing
- * icon. Built only from existing BB Icon primitives. A future pass will let
- * the user pick a Core glyph at creation time; this pass does not add a picker.
+ * icon. No glyph picker.
  */
 export type ActivityState = "inactive" | "working" | "complete" | "attention" | "review";
 
@@ -91,27 +91,31 @@ const BADGE_LABEL: Record<Exclude<CoreStatusBadge, "none">, string> = {
   failed: "Failed",
 };
 
-/** Existing BB Icon primitives only; no custom glyphs. */
+/** Existing BB Icon primitives only; no custom glyphs and no picker. */
 export function ProjectStatusGlyph({
   kind,
   working,
   badge = "none",
   label,
   className,
+  logoUrl,
 }: {
   kind: "core" | "project";
   working: boolean;
   badge?: CoreStatusBadge;
   label: string;
   className?: string;
+  /** Provider logo already on the Core's coordinator; kept when present. */
+  logoUrl?: string | null;
 }) {
-  const name = working ? "Loading" : kind === "core" ? "Bot" : "Folder";
+  const name: IconName = working ? "Loading" : kind === "core" ? "Sparkles" : "Folder";
   const iconClass = working
     ? "size-3.5 animate-spin text-muted-foreground/50"
     : kind === "project"
       ? "size-3 text-muted-foreground/70"
       : "size-3.5 text-muted-foreground/70";
   const mark = kind === "core" && badge !== "none" ? badge : null;
+  const ownLogo = kind === "core" && !working && Boolean(logoUrl);
   return (
     <span
       role="img"
@@ -119,14 +123,23 @@ export function ProjectStatusGlyph({
       data-activity={working ? "working" : "idle"}
       data-heading-kind={kind}
       data-core-badge={mark ?? undefined}
+      data-core-glyph={kind === "core" ? (ownLogo ? "own" : "sparkles") : undefined}
       className={cn("ps-project-glyph", className)}
     >
       <span className="relative inline-flex">
-        <Icon
-          name={name}
-          aria-hidden="true"
-          className={cn("shrink-0", iconClass)}
-        />
+        {ownLogo ? (
+          <img
+            src={logoUrl!}
+            alt=""
+            className="size-3.5 shrink-0 rounded-[2px] object-contain"
+          />
+        ) : (
+          <Icon
+            name={name}
+            aria-hidden="true"
+            className={cn("shrink-0", iconClass)}
+          />
+        )}
         {mark ? (
           <span
             aria-hidden

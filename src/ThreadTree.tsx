@@ -946,25 +946,7 @@ function ThreadRow({
             />
           </span>
 
-          {coreRole === "worker" ? (
-            <span
-              role="img"
-              aria-label="Assigned Worker"
-              title="Assigned Worker"
-              className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground/80"
-            >
-              <Icon name="UserRoundPlus" className="size-3.5" />
-            </span>
-          ) : coreRole === "owned-chat" ? (
-            <span
-              role="img"
-              aria-label="Core-owned chat"
-              title="Core-owned chat"
-              className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground/60"
-            >
-              <Icon name="MessageSquare" className="size-3.5" />
-            </span>
-          ) : hint?.kind === "unverified" ? (
+          {hint?.kind === "unverified" ? (
             <span
               role="img"
               aria-label="Unverified Core association"

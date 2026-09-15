@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
+  experimental_useProviders as useProviders,
   useRpc,
   useBbNavigate,
   type PluginSidebarThread,
@@ -145,6 +146,7 @@ function newRequestKey(scope: string): string {
  */
 export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
   const { status, threads: rawThreads, projects: nativeProjects } = useSidebarThreads();
+  const providers = useProviders();
   // The native sidebar feed signature. It updates exactly when the host's own
   // thread list does, so it is the existing native signal both the manager
   // projection and the per-Core attention read refresh on. No timer.
@@ -1634,6 +1636,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     const nativeId = section.id.startsWith(NATIVE_PROJECT_PREFIX)
       ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
       : null;
+    const coordinator = coordinatorThreadId ? rawById.get(coordinatorThreadId) : undefined;
+    const provider = coordinator
+      ? providers.providers.find((item) => item.id === coordinator.providerId)
+      : undefined;
     return (
       <ProjectSection
         key={section.id}
@@ -1642,6 +1648,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         status={aggregate.status}
         statusLabel={aggregate.statusLabel}
         coreMeta={coreMeta}
+        logoUrl={isCore ? provider?.logoUrl ?? null : null}
         revealAttention={revealAttention}
         revealAttentionMore={isCore && aggregate.attentionHasMore}
         revealAttentionTitle={revealAction?.title}
@@ -1700,18 +1707,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   return (
     <div data-project-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
-      <div className="ps-project-header group/toolbar flex shrink-0 items-center justify-end gap-0.5 pl-1.5 pr-2 pt-0.5">
-        <button
-          type="button"
-          aria-label="New chat"
-          title="New chat"
-          onClick={onNewThread}
-          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
-        >
-          <Icon name="MessageSquarePlus" className="size-3.5" />
-        </button>
-      </div>
-
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} className="ps-view-sync-notice" />
 
       {viewFiltersActive ? (
@@ -1928,11 +1923,17 @@ function GroupHeading({
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
         aria-expanded={open}
         onClick={onToggle}
-        className="flex min-h-6 min-w-0 items-center rounded py-0.5 text-left text-2xs font-medium text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="flex min-h-6 min-w-0 items-center gap-0.5 rounded py-0.5 text-left text-xs font-medium text-muted-foreground/55 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
       >
         <span className="truncate">{label}</span>
+        <Icon
+          name={open ? "ChevronDown" : "ChevronRight"}
+          aria-hidden="true"
+          className="size-3.5 shrink-0 text-muted-foreground/70 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
+        />
       </button>
       <span aria-hidden className="min-w-0 flex-1" />
+      {tools}
       {children}
       {onCreate ? (
         <button
@@ -1945,16 +1946,6 @@ function GroupHeading({
           <Icon name="Plus" className="size-3.5" />
         </button>
       ) : null}
-      {tools}
-      <button
-        type="button"
-        aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
-        aria-expanded={open}
-        onClick={onToggle}
-        className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:pointer-coarse:opacity-100"
-      >
-        <Icon name={open ? "ChevronDown" : "ChevronRight"} className="size-3.5" />
-      </button>
     </div>
   );
 }
@@ -1985,6 +1976,7 @@ function ProjectSection({
   conflicted,
   ownershipStale,
   isCore,
+  logoUrl,
   moveTarget,
   isMoveTarget,
 }: {
@@ -2010,6 +2002,8 @@ function ProjectSection({
   ownershipStale?: boolean;
   /** True for a Core section; native Project sections keep their own copy. */
   isCore?: boolean;
+  /** Coordinator provider logo when the Core already has one. */
+  logoUrl?: string | null;
   moveTarget: string | null;
   isMoveTarget: boolean;
   managerActive: boolean;
@@ -2151,6 +2145,7 @@ function ProjectSection({
               working={headingIsWorking(status ?? "idle")}
               badge={isCore ? coreStatusBadge(status ?? "idle", Boolean(conflicted)) : "none"}
               label={activityLabel}
+              logoUrl={logoUrl}
             />
           </span>
           <button
