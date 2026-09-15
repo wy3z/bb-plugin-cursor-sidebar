@@ -95,6 +95,14 @@
   line-height: 1.15;
 }
 
+/* Chevrons are a short stroke; 2.25 matches Plus at the default 1.5. */
+[data-project-sidebar-root] svg[data-icon="ChevronDown"] path,
+[data-project-sidebar-root] svg[data-icon="ChevronRight"] path,
+[data-project-sidebar-root] svg[data-icon="ChevronLeft"] path,
+[data-project-sidebar-root] svg[data-icon="ChevronUp"] path {
+  stroke-width: 2.25;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ps-project-glyph svg {
     animation: none !important;
