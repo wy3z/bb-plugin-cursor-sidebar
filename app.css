@@ -50,10 +50,10 @@
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
    left of the name (with a gap before the label). Working uses the stock
-   `Loading` spinner; idle Cores use a nut (or the Core's own glyph) with a
-   small status dot on the glyph; idle native Projects use a smaller `Folder`.
-   Core last-updated time trails on the right. Native project rows have no
-   timestamp. */
+   `Loading` spinner; idle Cores always use a nut until a picker exists;
+   idle native Projects use a smaller `Folder`. Provider logos are never
+   drawn on Core rows. Core last-updated time trails on the right. Native
+   project rows have no timestamp. */
 .ps-project-glyph {
   display: inline-flex;
   box-sizing: border-box;
@@ -101,6 +101,20 @@
 [data-project-sidebar-root] svg[data-icon="ChevronLeft"] path,
 [data-project-sidebar-root] svg[data-icon="ChevronUp"] path {
   stroke-width: 2.25;
+}
+
+/* Long titles fade into pin/archive (and the timestamp) instead of colliding. */
+[data-project-sidebar-root] [data-thread-row] .ps-thread-title,
+[data-project-sidebar-root] [data-thread-row] .ps-thread-info {
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
+}
+[data-project-sidebar-root] [data-thread-row]:hover .ps-thread-title,
+[data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-title,
+[data-project-sidebar-root] [data-thread-row]:hover .ps-thread-info,
+[data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-info {
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 52px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 52px), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

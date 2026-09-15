@@ -7,8 +7,8 @@ import type { ThreadStatusKind } from "./status";
  * the same fixed 16px box as thread rows, so headings never shift:
  *
  *   working -> the stock `Loading` spinner (native colour + spin)
- *   idle    -> a nut (cog-style) for a Core, or the Core's own glyph when
- *              one already exists; a smaller Folder for a native Project
+ *   idle    -> a nut for every Core until a picker exists; a smaller Folder
+ *              for a native Project. Provider logos are never used here.
  *
  * Core attention/status is a small coloured dot on the glyph, not a trailing
  * icon. No glyph picker.
@@ -98,24 +98,20 @@ export function ProjectStatusGlyph({
   badge = "none",
   label,
   className,
-  logoUrl,
 }: {
   kind: "core" | "project";
   working: boolean;
   badge?: CoreStatusBadge;
   label: string;
   className?: string;
-  /** Provider logo already on the Core's coordinator; kept when present. */
-  logoUrl?: string | null;
 }) {
   const name: IconName = working ? "Loading" : kind === "core" ? "Nut" : "Folder";
   const iconClass = working
-    ? "size-3.5 animate-spin text-muted-foreground/50"
+    ? "size-3.5 animate-spin text-muted-foreground/55"
     : kind === "project"
-      ? "size-3 text-muted-foreground/70"
-      : "size-3.5 text-muted-foreground/70";
+      ? "size-3 text-muted-foreground/55"
+      : "size-3.5 text-muted-foreground/55";
   const mark = kind === "core" && badge !== "none" ? badge : null;
-  const ownLogo = kind === "core" && !working && Boolean(logoUrl);
   return (
     <span
       role="img"
@@ -123,23 +119,15 @@ export function ProjectStatusGlyph({
       data-activity={working ? "working" : "idle"}
       data-heading-kind={kind}
       data-core-badge={mark ?? undefined}
-      data-core-glyph={kind === "core" ? (ownLogo ? "own" : "nut") : undefined}
+      data-core-glyph={kind === "core" ? "nut" : undefined}
       className={cn("ps-project-glyph", className)}
     >
       <span className="relative inline-flex">
-        {ownLogo ? (
-          <img
-            src={logoUrl!}
-            alt=""
-            className="size-3.5 shrink-0 rounded-[2px] object-contain"
-          />
-        ) : (
-          <Icon
-            name={name}
-            aria-hidden="true"
-            className={cn("shrink-0", iconClass)}
-          />
-        )}
+        <Icon
+          name={name}
+          aria-hidden="true"
+          className={cn("shrink-0", iconClass)}
+        />
         {mark ? (
           <span
             aria-hidden

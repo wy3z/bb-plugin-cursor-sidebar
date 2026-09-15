@@ -3,12 +3,9 @@ import { Icon } from "@/components/ui/icon";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 
 /**
- * The Core header create action: a small native `Plus` that appears on
- * desktop hover/focus of the header row and is always visible on touch. It has
- * no hover requirement to be reachable: focus, keyboard and coarse pointers
- * reveal it, and it carries a real accessible label. Choosing a native Project
- * opens the existing Core creation flow; creating a Core never creates or
- * rewrites a native Project.
+ * The Core header create action: a small native `Plus` that is always visible.
+ * Choosing a native Project opens the existing Core creation flow; creating a
+ * Core never creates or rewrites a native Project.
  */
 export function NewProjectAction({
   projects,
@@ -29,7 +26,7 @@ export function NewProjectAction({
           type="button"
           aria-label={label}
           title={label}
-          className="ps-new-project flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:pointer-coarse:opacity-100"
+          className="ps-new-project flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
         >
           <Icon name="Plus" className="size-3.5" />
         </button>

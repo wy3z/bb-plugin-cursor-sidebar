@@ -78,10 +78,11 @@ const membershipListSchema = z.object({ projects: z.array(managerSchema), member
 const managersSchema = z.object({ projects: z.array(managerSchema) });
 
 // The one persisted SidebarView contract. Grouping is one exclusive radio:
-// `workspace` (no extra grouping), `updated` date buckets (the default),
-// `status` the shared status precedence, or `environment` a human host/workspace
-// heading. Selecting one replaces the others; they never stack. Extra grouping
-// wraps standalone threads only. `statusFilter` lists the selected ordinary
+// `workspace` (Projects: native project homes, no extra thread grouping),
+// `updated` date buckets (the default), `status` the shared status precedence,
+// or `environment` a human host/workspace heading. Selecting one replaces the
+// others; they never stack. Extra grouping wraps standalone threads only. The
+// Projects heading follows the Projects grouping choice. `statusFilter` lists the selected ordinary
 // status kinds, so its full set is "all", a subset narrows and an empty list is
 // "none". `environmentFilter` is null for "all environments", an array selects
 // a subset and an empty array is "none"; the `__none__` key selects rows that

@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
-  experimental_useProviders as useProviders,
   useRpc,
   useBbNavigate,
   type PluginSidebarThread,
@@ -100,6 +99,8 @@ import {
   ordinaryFamilyGroupKeys,
   ordinaryThreadStatus,
   environmentIdentityOf,
+  environmentGroupOf,
+  NO_ENVIRONMENT_KEY,
   unreadOrdinaryThreadIds,
   viewHasActiveFilters,
 } from "./sidebar-view";
@@ -146,7 +147,6 @@ function newRequestKey(scope: string): string {
  */
 export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
   const { status, threads: rawThreads, projects: nativeProjects } = useSidebarThreads();
-  const providers = useProviders();
   // The native sidebar feed signature. It updates exactly when the host's own
   // thread list does, so it is the existing native signal both the manager
   // projection and the per-Core attention read refresh on. No timer.
@@ -771,7 +771,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const hasEnvironmentlessOrdinary = useMemo(
     () =>
       visible.some(
-        (thread) => !isCoreHomeThread(thread) && environmentIdentityOf(thread) === null,
+        (thread) => !isCoreHomeThread(thread) && environmentGroupOf(thread).id === NO_ENVIRONMENT_KEY,
       ),
     [isCoreHomeThread, visible],
   );
@@ -1614,6 +1614,26 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     });
   }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, topGroupCollapsed]);
 
+  const projectsGrouping = view.groupBy === "workspace";
+  const viewMenu = (
+    <SidebarViewMenu
+      view={view}
+      sync={sidebarView.sync}
+      onRetry={sidebarView.retry}
+      onUpdate={sidebarView.update}
+      onReset={sidebarView.reset}
+      environmentOptions={viewEnvironmentOptions}
+      showNoEnvironment={hasEnvironmentlessOrdinary}
+      anyCollapsed={anyCollapsed}
+      onExpandAll={expandAll}
+      onCollapseAll={collapseAll}
+      unreadOrdinaryCount={unreadOrdinary.length}
+      markReadBusy={markReadBusy}
+      onMarkAllRead={() => { void markAllRead(); }}
+      triggerClassName="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+    />
+  );
+
   const renderSection = (section: ProjectSectionData) => {
     const kind = sectionKind(section);
     const isCore = kind === "core";
@@ -1658,10 +1678,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     const nativeId = section.id.startsWith(NATIVE_PROJECT_PREFIX)
       ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
       : null;
-    const coordinator = coordinatorThreadId ? rawById.get(coordinatorThreadId) : undefined;
-    const provider = coordinator
-      ? providers.providers.find((item) => item.id === coordinator.providerId)
-      : undefined;
     return (
       <ProjectSection
         key={section.id}
@@ -1670,7 +1686,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         status={aggregate.status}
         statusLabel={aggregate.statusLabel}
         coreMeta={coreMeta}
-        logoUrl={isCore ? provider?.logoUrl ?? null : null}
         revealAttention={revealAttention}
         revealAttentionMore={isCore && aggregate.attentionHasMore}
         revealAttentionTitle={revealAction?.title}
@@ -1863,6 +1878,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
               label="Cores"
               open={!topGroupCollapsed.ids.has("core")}
               onToggle={() => topGroupCollapsed.toggle("core")}
+              onCreate={!projectsGrouping ? () => setCreatingProject(true) : undefined}
+              createLabel={!projectsGrouping ? "New Project" : undefined}
+              tools={!projectsGrouping ? viewMenu : undefined}
             >
               {managers.available ? (
                 <NewProjectAction
@@ -1886,34 +1904,21 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
                 ) : null}
               </>
             ) : null}
-            <GroupHeading
-              label="Projects"
-              open={!topGroupCollapsed.ids.has("projects")}
-              onToggle={() => topGroupCollapsed.toggle("projects")}
-              onCreate={() => setCreatingProject(true)}
-              createLabel="New Project"
-              tools={
-                <SidebarViewMenu
-                  view={view}
-                  sync={sidebarView.sync}
-                  onRetry={sidebarView.retry}
-                  onUpdate={sidebarView.update}
-                  onReset={sidebarView.reset}
-                  environmentOptions={viewEnvironmentOptions}
-                  showNoEnvironment={hasEnvironmentlessOrdinary}
-                  anyCollapsed={anyCollapsed}
-                  onExpandAll={expandAll}
-                  onCollapseAll={collapseAll}
-                  unreadOrdinaryCount={unreadOrdinary.length}
-                  markReadBusy={markReadBusy}
-                  onMarkAllRead={() => { void markAllRead(); }}
-                  triggerClassName="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 data-[state=open]:opacity-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:pointer-coarse:opacity-100"
+            {projectsGrouping ? (
+              <>
+                <GroupHeading
+                  label="Projects"
+                  open={!topGroupCollapsed.ids.has("projects")}
+                  onToggle={() => topGroupCollapsed.toggle("projects")}
+                  onCreate={() => setCreatingProject(true)}
+                  createLabel="New Project"
+                  tools={viewMenu}
                 />
-              }
-            />
-            {!topGroupCollapsed.ids.has("projects")
-              ? nativeSectionsVisible.map((section) => renderSection(section))
-              : null}
+                {!topGroupCollapsed.ids.has("projects")
+                  ? nativeSectionsVisible.map((section) => renderSection(section))
+                  : null}
+              </>
+            ) : null}
             {chatSectionsVisible.map((section) => renderSection(section))}
           </AnimatedList>
       </div>
@@ -1951,7 +1956,7 @@ function GroupHeading({
         <Icon
           name={open ? "ChevronDown" : "ChevronRight"}
           aria-hidden="true"
-          className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
+          className="size-3.5 shrink-0 text-muted-foreground/55 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
         />
       </button>
       <span aria-hidden className="min-w-0 flex-1" />
@@ -1963,7 +1968,7 @@ function GroupHeading({
           aria-label={createLabel ?? `New ${label}`}
           title={createLabel ?? `New ${label}`}
           onClick={onCreate}
-          className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:pointer-coarse:opacity-100"
+          className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
         >
           <Icon name="Plus" className="size-3.5" />
         </button>
@@ -1998,7 +2003,6 @@ function ProjectSection({
   conflicted,
   ownershipStale,
   isCore,
-  logoUrl,
   moveTarget,
   isMoveTarget,
 }: {
@@ -2024,8 +2028,6 @@ function ProjectSection({
   ownershipStale?: boolean;
   /** True for a Core section; native Project sections keep their own copy. */
   isCore?: boolean;
-  /** Coordinator provider logo when the Core already has one. */
-  logoUrl?: string | null;
   moveTarget: string | null;
   isMoveTarget: boolean;
   managerActive: boolean;
@@ -2167,7 +2169,6 @@ function ProjectSection({
               working={headingIsWorking(status ?? "idle")}
               badge={isCore ? coreStatusBadge(status ?? "idle", Boolean(conflicted)) : "none"}
               label={activityLabel}
-              logoUrl={logoUrl}
             />
           </span>
           <button
@@ -2181,11 +2182,11 @@ function ProjectSection({
               onToggleProject();
             }}
             className={cn(
-              "ps-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "ps-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
             )}
           >
-            <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5 text-muted-foreground" />
+            <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5 text-muted-foreground/55" />
           </button>
         </span>
         <button
@@ -2225,7 +2226,7 @@ function ProjectSection({
               onNewThread();
             }}
             className={cn(
-              "ps-project-new flex size-4 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "ps-project-new flex size-4 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
               "max-md:pointer-coarse:size-9",
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
             )}
@@ -2255,45 +2256,49 @@ function ProjectSection({
         </p>
       ) : null}
 
-      {showCollapsedSelection ? (
-        <ShelfList
-          section={section}
-          shelf="active"
-          ctx={ctx}
-          grouped={!isCore}
-          omitPinned={!isCore}
-          keepIds={exceptionIds}
-          expandIds={exceptionIds}
-        />
-      ) : !sectionOpen ? null : conversationPlan.visible.size === 0 ? (
-        <p className="px-3 py-1 text-xs text-muted-foreground/70">No threads</p>
-      ) : (
-        <ShelfList
-          section={section}
-          shelf="active"
-          ctx={ctx}
-          grouped={!isCore}
-          omitPinned={!isCore}
-          keepIds={revealedConversations}
-          trailing={
-            conversationPlan.hiddenConversations > 0 ? (
-              <button
-                type="button"
-                aria-expanded={showAllConversations}
-                onClick={() => setShowAllConversations((current) => !current)}
-                className="ps-more-conversations flex min-h-7 w-full items-center rounded py-0.5 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
-              >
-                <span aria-hidden className="shrink-0" style={{ width: TREE_CHILD_INDENT }} />
-                <span className="truncate">
-                  {showAllConversations
-                    ? "Show fewer"
-                    : `Show more (${conversationPlan.hiddenConversations})`}
-                </span>
-              </button>
-            ) : undefined
-          }
-        />
-      )}
+      {(() => {
+        const interior = showCollapsedSelection ? (
+          <ShelfList
+            section={section}
+            shelf="active"
+            ctx={ctx}
+            grouped={!isCore}
+            omitPinned={!isCore}
+            keepIds={exceptionIds}
+            expandIds={exceptionIds}
+          />
+        ) : !sectionOpen ? null : conversationPlan.visible.size === 0 ? (
+          <p className="px-3 py-1 text-xs text-muted-foreground/70">No threads</p>
+        ) : (
+          <ShelfList
+            section={section}
+            shelf="active"
+            ctx={ctx}
+            grouped={!isCore}
+            omitPinned={!isCore}
+            keepIds={revealedConversations}
+            trailing={
+              conversationPlan.hiddenConversations > 0 ? (
+                <button
+                  type="button"
+                  aria-expanded={showAllConversations}
+                  onClick={() => setShowAllConversations((current) => !current)}
+                  className="ps-more-conversations flex min-h-7 w-full items-center rounded py-0.5 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+                >
+                  <span aria-hidden className="shrink-0" style={{ width: TREE_CHILD_INDENT }} />
+                  <span className="truncate">
+                    {showAllConversations
+                      ? "Show fewer"
+                      : `Show more (${conversationPlan.hiddenConversations})`}
+                  </span>
+                </button>
+              ) : undefined
+            }
+          />
+        );
+        if (interior === null || isCore) return interior;
+        return <div className="ps-project-children pl-4">{interior}</div>;
+      })()}
 
     </section>
   );

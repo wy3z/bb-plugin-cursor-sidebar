@@ -44,7 +44,7 @@ export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = {
  * Defaults recover the agreed view: the native Core / Projects / Chats homes
  * with date buckets on standalone chats only, the existing stored conversation
  * order, and every ordinary status and environment shown. Reset writes these
- * back without touching thread membership. Workspace / Updated / Status /
+ * back without touching thread membership. Projects / Updated / Status /
  * Environment grouping is one exclusive choice.
  */
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
@@ -424,16 +424,20 @@ export interface OrdinaryFilterFacts {
 
 /**
  * Whether a filter lets one row through. `null` is every environment. An
- * explicit list keeps a row whose own environment is named, or an
- * environment-less row when the `__none__` key is selected.
+ * explicit list keeps a row whose environment *group* is named (one arch for
+ * every thread on that host), or an environment-less row when `__none__` is
+ * selected. Unique env ids from an older client still match as a fallback.
  */
 function environmentAllowed(
   filter: readonly string[] | null,
-  environment: EnvironmentIdentity | null,
+  thread: PluginSidebarThread,
 ): boolean {
   if (filter === null) return true;
-  if (environment === null) return filter.includes(NO_ENVIRONMENT_KEY);
-  return filter.includes(environment.id);
+  const group = environmentGroupOf(thread);
+  if (filter.includes(group.id)) return true;
+  const identity = environmentIdentityOf(thread);
+  if (identity !== null && filter.includes(identity.id)) return true;
+  return false;
 }
 
 /**
@@ -458,7 +462,7 @@ export function filterOrdinaryThreads(
       continue;
     }
     if (!view.statusFilter.includes(ordinaryThreadStatus(thread))) continue;
-    if (!environmentAllowed(view.environmentFilter, environmentIdentityOf(thread))) continue;
+    if (!environmentAllowed(view.environmentFilter, thread)) continue;
     matches.add(thread.id);
     keep.add(thread.id);
   }
@@ -741,16 +745,15 @@ export function groupOrdinaryRows(
     .map((group) => ({ key: group.key, label: group.label, rows: group.rows }));
 }
 
-/** Every distinct environment present in the loaded ordinary conversations. */
+/** Every distinct environment *group* in the loaded ordinary conversations. */
 export function environmentFilterOptions(
   threads: readonly PluginSidebarThread[],
 ): EnvironmentIdentity[] {
   const byId = new Map<string, EnvironmentIdentity>();
   for (const thread of threads) {
-    const environment = environmentIdentityOf(thread);
-    if (environment !== null && !byId.has(environment.id)) {
-      byId.set(environment.id, environment);
-    }
+    const group = environmentGroupOf(thread);
+    if (group.id === NO_ENVIRONMENT_KEY) continue;
+    if (!byId.has(group.id)) byId.set(group.id, group);
   }
   return [...byId.values()].sort((left, right) =>
     left.label.localeCompare(right.label),

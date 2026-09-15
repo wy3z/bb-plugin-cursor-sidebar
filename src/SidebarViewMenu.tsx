@@ -150,7 +150,7 @@ export function SidebarViewSyncNotice({
 /**
  * The compact view menu. It mirrors Cursor's organization as submenus
  * (Grouping, Ordering, Show, Filters) over the one persisted SidebarView, using
- * BB's theme tokens. Grouping is one radio: Workspace, Updated, Status, or
+ * BB's theme tokens. Grouping is one radio: Projects, Updated, Status, or
  * Environment — selecting one replaces the current extra grouping; they never
  * stack. Radix menu primitives supply real arrow-key navigation, roving focus
  * and typeahead, so the radio and checkbox semantics work from the keyboard,
@@ -228,7 +228,7 @@ export function SidebarViewMenu({
                   value={view.groupBy}
                   onValueChange={(value) => onUpdate({ groupBy: value as ViewGroupBy })}
                 >
-                  <ChoiceItem value="workspace" label="Workspace" />
+                  <ChoiceItem value="workspace" label="Projects" />
                   <ChoiceItem value="updated" label="Updated" hint="default" />
                   <ChoiceItem value="status" label="Status" />
                   <ChoiceItem value="environment" label="Environment" />
