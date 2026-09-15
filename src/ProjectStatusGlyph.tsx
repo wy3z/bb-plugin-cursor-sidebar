@@ -3,16 +3,12 @@ import { cn } from "@/lib/utils";
 import type { ThreadStatusKind } from "./status";
 
 /**
- * The Core heading's left status slot. It always draws exactly one glyph in the
- * same fixed 16px box as thread rows, so headings never shift:
+ * The Core/Project heading's left slot. It always draws exactly one glyph in
+ * the same fixed 16px box as thread rows, so headings never shift:
  *
- *   working   -> the stock `Loading` spinner, unchanged (native colour + spin)
+ *   working   -> the stock `Loading` spinner (native colour + spin)
  *   attention -> `AlertTriangle` in the native warning tone
- *   review    -> `CircleCheck`, so a settled Worker awaiting review reads
- *                differently from live work
- *   idle      -> a quiet `Circle` outline (completion is worker history, not
- *                a success claim the heading should make, so a completed
- *                Core rests here too)
+ *   idle/review/complete -> `Folder`, matching Cursor's project containers
  *
  * Built only from existing BB Icon primitives. Child rows are unchanged.
  */
@@ -56,11 +52,11 @@ export function glyphStateForStatus(status: ThreadStatusKind): ActivityState {
 
 /** Existing BB Icon primitives only; no custom glyphs. */
 const STATE_ICON = {
-  inactive: { name: "Circle", className: "text-muted-foreground/40" },
+  inactive: { name: "Folder", className: "text-muted-foreground/70" },
   working: { name: "Loading", className: "animate-spin text-muted-foreground/50" },
-  complete: { name: "CircleCheck", className: "text-foreground" },
+  complete: { name: "Folder", className: "text-muted-foreground/70" },
   attention: { name: "AlertTriangle", className: "text-warning-text" },
-  review: { name: "CircleCheck", className: "text-timeline-accent" },
+  review: { name: "Folder", className: "text-muted-foreground/70" },
 } as const;
 
 export function ProjectStatusGlyph({

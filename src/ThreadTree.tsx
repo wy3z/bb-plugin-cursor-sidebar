@@ -533,7 +533,7 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
             onClick={onToggle}
             className="flex min-h-7 min-w-0 flex-1 items-center gap-1 rounded py-0.5 text-xs font-medium text-muted-foreground/55 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
           >
-            <Icon name="FolderOpen" className="size-3.5 shrink-0" />
+            <Icon name={open ? "FolderOpen" : "Folder"} className="size-3.5 shrink-0" />
             <span className="truncate">{name}</span>
           </button>
         </div>

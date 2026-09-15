@@ -189,10 +189,9 @@ export function SidebarViewMenu({
           type="button"
           aria-label={notice === null ? "Customize sidebar view" : `Customize sidebar view. ${notice.text}`}
           title={notice === null ? "Customize" : notice.text}
-          className="flex min-h-7 shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
         >
           <Icon name="SlidersHorizontal" className="size-3.5" />
-          <span className="hidden md:inline">Customize</span>
           {notice !== null ? (
             <Icon
               name={notice.tone === "warning" ? "AlertTriangle" : "CircleX"}

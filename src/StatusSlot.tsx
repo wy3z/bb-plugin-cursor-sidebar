@@ -42,30 +42,24 @@ export function StatusOrTime({
 }
 
 /**
- * The read dot, drawn from the native `isUnread` flag only. A filled dot is an
- * unread thread, a hollow dot is a read one. No success is inferred.
+ * The unread mark. A filled dot is an unread thread. Read chats draw nothing
+ * here: Cursor's chat list does not use a hollow circle as a row icon, and
+ * unread weight already lives on the title.
  */
 export function ReadDot({ unread, label }: { unread: boolean; label?: string }) {
   const box = "flex size-3.5 shrink-0 items-center justify-center";
-  const aria = label ?? (unread ? "Unread" : "Read");
-  if (unread) {
-    return (
-      <span role="img" aria-label={aria} className={box}>
-        <span className="size-[5px] rounded-full bg-timeline-accent" />
-      </span>
-    );
-  }
+  if (!unread) return null;
   return (
-    <span role="img" aria-label={aria} className={box}>
-      <span className="size-[5px] rounded-full border border-muted-foreground/40" />
+    <span role="img" aria-label={label ?? "Unread"} className={box}>
+      <span className="size-[5px] rounded-full bg-timeline-accent" />
     </span>
   );
 }
 
 /**
- * The row's left status slot. It always draws exactly one glyph in a fixed
- * 16px box, so rows never shift when status changes: the host-resolved status
- * glyph while the thread has something to say, else the truthful read dot.
+ * The row's left status slot. A real status glyph while the thread has
+ * something to say; otherwise an empty 16px box so titles stay aligned and
+ * idle chats do not look like unlabeled circles.
  */
 export function RowStatusSlot({ thread }: { thread: PluginSidebarThread }) {
   return (

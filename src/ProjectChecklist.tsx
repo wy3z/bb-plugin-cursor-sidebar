@@ -1,4 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
+import { Icon } from "@/components/ui/icon";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 
 export function ProjectChecklist({ projects, hiddenIds, onVisibilityChange }: {
@@ -14,10 +15,10 @@ export function ProjectChecklist({ projects, hiddenIds, onVisibilityChange }: {
         <button
           type="button"
           aria-label={`Project options: ${visibleCount} of ${projects.length} shown`}
-          title="Project options"
-          className="flex min-h-7 min-w-0 flex-1 items-center rounded py-0.5 pl-3 pr-1.5 text-xs font-medium text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+          title="Show in sidebar"
+          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
         >
-          Projects
+          <Icon name="ListTodo" className="size-3.5" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>

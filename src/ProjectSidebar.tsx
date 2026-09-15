@@ -370,8 +370,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const expandedProjects = usePersistentIds("bb-plugin-project-sidebar:expanded-projects:v1");
   const expandedAges = usePersistentIds(EXPANDED_AGES_KEY);
   const collapsedGroups = usePersistentIds(COLLAPSED_GROUPS_KEY);
-  // Top-level group headings (Core / Projects / Chats) default open; this set
-  // holds the folded ones and is a device preference, not shared state.
+  // Top-level group headings (Core / Projects) default open; this set holds
+  // the folded ones and is a device preference, not shared state. Ordinary
+  // chats sit below Projects with no dedicated heading, so they are not a
+  // top group.
   const topGroupCollapsed = usePersistentIds("bb-plugin-project-sidebar:collapsed-top-groups:v1");
   const folderStore = useThreadSections();
   // Native sections that file a Core coordinator are not Chats folders. The
@@ -1533,7 +1535,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // Environment group keys and the date buckets that actually appear, plus the
   // descendant trees. A key for a group the view does not render is never
   // touched, so unrelated hidden preferences survive.
-  const bulkTopGroupKeys = ["core", "projects", "chats"];
+  const bulkTopGroupKeys = ["core", "projects"];
   const bulkSectionIds = visibleSections.map((section) => section.id);
   const bulkTargets = useMemo(
     () =>
@@ -1696,7 +1698,16 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   return (
     <div data-project-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
-      <div className="ps-project-header group/section flex shrink-0 items-center gap-1 pl-1.5 pr-2.5 pt-1">
+      <div className="ps-project-header group/toolbar flex shrink-0 items-center justify-end gap-0.5 pl-1.5 pr-2 pt-0.5">
+        <button
+          type="button"
+          aria-label="New chat"
+          title="New chat"
+          onClick={onNewThread}
+          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+        >
+          <Icon name="MessageSquarePlus" className="size-3.5" />
+        </button>
         <ProjectChecklist
           projects={sections.filter((section) => !section.personal)}
           hiddenIds={hiddenProjects.ids}
@@ -1874,16 +1885,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
             {!topGroupCollapsed.ids.has("projects")
               ? nativeSectionsVisible.map((section) => renderSection(section))
               : null}
-            <GroupHeading
-              label="Chats"
-              open={!topGroupCollapsed.ids.has("chats")}
-              onToggle={() => topGroupCollapsed.toggle("chats")}
-              onCreate={onNewThread}
-              createLabel="New chat"
-            />
-            {!topGroupCollapsed.ids.has("chats")
-              ? chatSectionsVisible.map((section) => renderSection(section))
-              : null}
+            {chatSectionsVisible.map((section) => renderSection(section))}
           </AnimatedList>
       </div>
     </div>
@@ -1906,7 +1908,7 @@ function GroupHeading({
   children?: ReactNode;
 }) {
   return (
-    <div className="group/section mt-2 first:mt-0 flex items-center gap-1 pl-3 pr-1.5 pt-1">
+    <div className="group/section mt-1.5 first:mt-0 flex items-center gap-1 pl-3 pr-1.5 pt-0.5">
       <button
         type="button"
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
@@ -2034,7 +2036,7 @@ function ProjectSection({
 
   if (section.personal) {
     return (
-      <section aria-label="Standalone chats" data-membership-target="standalone" className="mt-2 first:mt-0 min-h-8">
+      <section aria-label="Standalone chats" data-membership-target="standalone" className="mt-3 first:mt-0 min-h-8">
         <ShelfList section={section} shelf="active" ctx={ctx} grouped />
       </section>
     );
