@@ -113,8 +113,8 @@
 [data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-title,
 [data-project-sidebar-root] [data-thread-row]:hover .ps-thread-info,
 [data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-info {
-  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 52px), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 52px), transparent);
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 64px), transparent calc(100% - 12px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 64px), transparent calc(100% - 12px), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
