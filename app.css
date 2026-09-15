@@ -50,10 +50,10 @@
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
    left of the name (with a gap before the label). Working uses the stock
-   `Loading` spinner; idle Cores use Cursor's Sparkles (or the Core's own
-   provider logo) with a small status dot on the glyph; idle native Projects
-   use a smaller `Folder`. Core last-updated time trails on the right. Native
-   project rows have no timestamp. */
+   `Loading` spinner; idle Cores use a nut (or the Core's own glyph) with a
+   small status dot on the glyph; idle native Projects use a smaller `Folder`.
+   Core last-updated time trails on the right. Native project rows have no
+   timestamp. */
 .ps-project-glyph {
   display: inline-flex;
   box-sizing: border-box;
