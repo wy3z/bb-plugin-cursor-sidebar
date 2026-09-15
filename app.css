@@ -103,7 +103,8 @@
   stroke-width: 2.25;
 }
 
-/* Long titles fade into pin/archive (and the timestamp) instead of colliding. */
+/* Long titles fade into the timestamp at rest. On hover they reserve space
+   for pin/archive (padding) so those icons are not sitting on the glyphs. */
 [data-project-sidebar-root] [data-thread-row] .ps-thread-title,
 [data-project-sidebar-root] [data-thread-row] .ps-thread-info {
   mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
@@ -113,8 +114,9 @@
 [data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-title,
 [data-project-sidebar-root] [data-thread-row]:hover .ps-thread-info,
 [data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-info {
-  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 64px), transparent calc(100% - 12px), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 64px), transparent calc(100% - 12px), transparent);
+  padding-right: 2.75rem;
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
