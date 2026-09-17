@@ -3,12 +3,12 @@ import * as Popover from "@radix-ui/react-popover";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
-import { PROJECT_ICON_NAMES } from "./project-icons";
+import { PROJECT_ICON_CATEGORIES } from "./project-icons";
 
 /**
  * Anchored glyph palette for one native project. It is a popover rather than a
- * dialog so the heading stays visible while choosing, and it only offers the
- * non-chrome registry names from PROJECT_ICON_NAMES.
+ * dialog so the heading stays visible while choosing, and it offers the curated
+ * PROJECT_ICON_CATEGORIES as labelled sections that the filter narrows in place.
  */
 export function ProjectIconPicker({
   open,
@@ -37,11 +37,22 @@ export function ProjectIconPicker({
     requestAnimationFrame(() => searchRef.current?.focus());
   }, [open]);
 
-  const matches = useMemo(() => {
+  const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (needle === "") return PROJECT_ICON_NAMES;
-    return PROJECT_ICON_NAMES.filter((name) => name.toLowerCase().includes(needle));
+    return PROJECT_ICON_CATEGORIES.map((category) => ({
+      id: category.id,
+      label: category.label,
+      icons:
+        needle === ""
+          ? category.icons
+          : category.icons.filter((name) => name.toLowerCase().includes(needle)),
+    })).filter((group) => group.icons.length > 0);
   }, [query]);
+
+  const matchCount = useMemo(
+    () => groups.reduce((total, group) => total + group.icons.length, 0),
+    [groups],
+  );
 
   // Roving-ish keyboard access: arrows walk the grid, Home/End jump the ends.
   const onGridKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
@@ -97,33 +108,41 @@ export function ProjectIconPicker({
               <Icon name="Folder" aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/70" strokeWidth={2} />
               Use default
             </button>
-            <div
-              role="group"
-              aria-label="Icons"
-              onKeyDown={onGridKeyDown}
-              className="grid grid-cols-8 gap-0.5 max-md:pointer-coarse:grid-cols-6"
-            >
-              {matches.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  data-icon-choice=""
-                  aria-label={name}
-                  title={name}
-                  aria-pressed={current === name}
-                  onClick={() => onPick(name)}
-                  className={cn(
-                    "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:size-10",
-                    current === name && "bg-accent text-foreground",
-                  )}
-                >
-                  <Icon name={name} aria-hidden="true" className="size-4 max-md:pointer-coarse:size-5" strokeWidth={2} />
-                </button>
+            <div onKeyDown={onGridKeyDown}>
+              {groups.map((group) => (
+                <section key={group.id} className="pb-1">
+                  <p className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    {group.label}
+                  </p>
+                  <div
+                    role="group"
+                    aria-label={group.label}
+                    className="grid grid-cols-8 gap-0.5 max-md:pointer-coarse:grid-cols-6"
+                  >
+                    {group.icons.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        data-icon-choice=""
+                        aria-label={name}
+                        title={name}
+                        aria-pressed={current === name}
+                        onClick={() => onPick(name)}
+                        className={cn(
+                          "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:size-10",
+                          current === name && "bg-accent text-foreground",
+                        )}
+                      >
+                        <Icon name={name} aria-hidden="true" className="size-4 max-md:pointer-coarse:size-5" strokeWidth={2} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ))}
+              {matchCount === 0 ? (
+                <p className="px-2 py-3 text-center text-xs text-muted-foreground">No icons match.</p>
+              ) : null}
             </div>
-            {matches.length === 0 ? (
-              <p className="px-2 py-3 text-center text-xs text-muted-foreground">No icons match.</p>
-            ) : null}
           </div>
         </Popover.Content>
       </Popover.Portal>

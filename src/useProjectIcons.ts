@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
-import { ICON_NAMES, type IconName } from "@/components/ui/icon";
+import { type IconName } from "@/components/ui/icon";
 import type { projectSidebarRpcContract } from "./server";
 import { PROJECT_ICON_CHANNEL } from "./server";
-
-const KNOWN_ICONS: ReadonlySet<string> = new Set(ICON_NAMES);
+import { PROJECT_ICON_NAME_SET } from "./project-icons";
 
 function isIconName(value: string): value is IconName {
-  return KNOWN_ICONS.has(value);
+  return PROJECT_ICON_NAME_SET.has(value);
 }
 
 export interface ProjectIcons {
