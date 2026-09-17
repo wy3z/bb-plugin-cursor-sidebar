@@ -44,17 +44,18 @@ const migrations = [
      hidden      INTEGER NOT NULL,
      updated_at  INTEGER NOT NULL
    )`,
-  // A project icon is this plugin's overlay on a native project; the SDK has
-  // no field for it. Keyed by the raw native project id.
-  `CREATE TABLE IF NOT EXISTS project_icon (
-     project_id  TEXT PRIMARY KEY,
-     icon        TEXT NOT NULL,
-     updated_at  INTEGER
-   )`,
   `CREATE TABLE IF NOT EXISTS sidebar_view (
      id          INTEGER PRIMARY KEY CHECK (id = 1),
      json        TEXT NOT NULL,
      updated_at  INTEGER NOT NULL
+   )`,
+  // Appended, never inserted: the migration runner matches recorded statements
+  // by index, so a new migration only ever goes at the end. A project icon is
+  // this plugin's overlay on a native project; the SDK has no field for it.
+  `CREATE TABLE IF NOT EXISTS project_icon (
+     project_id  TEXT PRIMARY KEY,
+     icon        TEXT NOT NULL,
+     updated_at  INTEGER
    )`,
 ];
 
