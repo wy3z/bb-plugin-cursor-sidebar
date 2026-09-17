@@ -41,20 +41,23 @@ export function glyphStateForStatus(status: ThreadStatusKind): ActivityState {
   }
 }
 
-/** Existing BB Icon primitives only; no custom glyphs and no picker. */
+/** Existing BB Icon primitives only; a chosen project icon swaps the folder. */
 export function ProjectStatusGlyph({
   open,
+  icon,
   label,
   className,
 }: {
   /** True when the project section is expanded; picks the open folder. */
   open?: boolean;
+  /** A chosen project icon; its presence replaces the Folder/FolderOpen pair. */
+  icon?: IconName | null;
   label: string;
   className?: string;
 }) {
   // Folder (closed) and FolderOpen are Hugeicons' matched single-weight pair
   // (Folder01 / Folder02). The heavier stroke keeps both crisp at 14px.
-  const name: IconName = open ? "FolderOpen" : "Folder";
+  const name: IconName = icon ?? (open ? "FolderOpen" : "Folder");
   return (
     <span
       role="img"

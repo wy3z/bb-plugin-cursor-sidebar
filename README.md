@@ -20,6 +20,8 @@ A family is filed and pinned by its root: dragging, pinning or moving any reply 
 
 Project visibility and expansion are saved per client. A new project starts collapsed. Drag within a sibling group to reorder, or use **Alt+ArrowUp/Down**. Project ordering uses a plugin overlay rather than changing native storage.
 
+Right-click a project heading and choose **Set icon…** to pick a glyph from the built-in set, or **Use default** to return it to the folder.
+
 A `+` on the Projects heading opens **New project**, which picks a host folder and creates (or reuses) a native BB Project. The Projects control keeps project visibility, grouping, and gesture help.
 
 The SDK cannot change a thread's native project membership, so this plugin does not move chats between projects.

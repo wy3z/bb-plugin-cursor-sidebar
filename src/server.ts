@@ -44,6 +44,13 @@ const migrations = [
      hidden      INTEGER NOT NULL,
      updated_at  INTEGER NOT NULL
    )`,
+  // A project icon is this plugin's overlay on a native project; the SDK has
+  // no field for it. Keyed by the raw native project id.
+  `CREATE TABLE IF NOT EXISTS project_icon (
+     project_id  TEXT PRIMARY KEY,
+     icon        TEXT NOT NULL,
+     updated_at  INTEGER
+   )`,
   `CREATE TABLE IF NOT EXISTS sidebar_view (
      id          INTEGER PRIMARY KEY CHECK (id = 1),
      json        TEXT NOT NULL,
@@ -53,6 +60,13 @@ const migrations = [
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
 const scopeSchema = z.string().trim().min(1).max(400);
+
+// The overlay only guarantees a non-empty string; glyph names are validated in
+// the app against the icon registry, never by importing React code here.
+const projectIconRowSchema = z.object({
+  projectId: z.string(),
+  icon: z.string(),
+});
 
 const viewGroupBySchema = z.enum(["workspace", "updated", "status", "environment"]);
 const viewConversationOrderSchema = z.enum(["manual", "updated", "status"]);
@@ -127,6 +141,17 @@ export const projectSidebarRpcContract = defineRpcContract({
   mergeProjectVisibility: {
     input: z.object({ hiddenIds: z.array(z.string().trim().min(1)).max(10_000) }),
     output: z.object({ hiddenIds: z.array(z.string()) }),
+  },
+  listProjectIcons: {
+    input: z.object({}),
+    output: z.object({ icons: z.array(projectIconRowSchema) }),
+  },
+  setProjectIcon: {
+    input: z.object({
+      projectId: z.string().trim().min(1),
+      icon: z.string().trim().min(1).max(100).nullable(),
+    }),
+    output: z.object({ icons: z.array(projectIconRowSchema) }),
   },
   sidebarView: {
     input: z.object({}),
@@ -220,6 +245,7 @@ export const LIFECYCLE_CHANNEL = "lifecycle";
 export const THREAD_ORDER_CHANNEL = "thread-order";
 export const PROJECT_ORDER_CHANNEL = "project-order";
 export const VISIBILITY_CHANNEL = "project-visibility";
+export const PROJECT_ICON_CHANNEL = "project-icon";
 export const SIDEBAR_VIEW_CHANNEL = "sidebar-view";
 export const THREAD_SECTIONS_CHANNEL = "thread-sections";
 
@@ -287,6 +313,25 @@ export default function plugin(bb: BbPluginApi) {
     db.transaction((values: readonly string[]) => {
       for (const id of values) insert.run(id, now);
     })([...new Set(ids)]);
+  };
+
+  const readIcons = (): Array<{ projectId: string; icon: string }> =>
+    (
+      db
+        .prepare(`SELECT project_id, icon FROM project_icon ORDER BY project_id`)
+        .all() as Array<{ project_id: string; icon: string }>
+    ).map((row) => ({ projectId: row.project_id, icon: row.icon }));
+
+  const writeIcon = (projectId: string, icon: string | null): void => {
+    if (icon === null) {
+      db.prepare(`DELETE FROM project_icon WHERE project_id = ?`).run(projectId);
+      return;
+    }
+    db.prepare(
+      `INSERT INTO project_icon (project_id, icon, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET icon = excluded.icon, updated_at = excluded.updated_at`,
+    ).run(projectId, icon, Date.now());
   };
 
   const readSidebarView = (): SidebarView | null => {
@@ -418,6 +463,14 @@ export default function plugin(bb: BbPluginApi) {
       mergeVisibility(hiddenIds);
       bb.realtime.publish(VISIBILITY_CHANNEL, {});
       return { hiddenIds: readVisibility() };
+    },
+    listProjectIcons() {
+      return { icons: readIcons() };
+    },
+    setProjectIcon({ projectId, icon }) {
+      writeIcon(projectId, icon);
+      bb.realtime.publish(PROJECT_ICON_CHANNEL, { projectId });
+      return { icons: readIcons() };
     },
     sidebarView() {
       return { view: readSidebarView() };

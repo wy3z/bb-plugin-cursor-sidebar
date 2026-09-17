@@ -16,7 +16,7 @@ import {
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { SidebarActions } from "./SidebarActions";
 import { NewProjectAction } from "./NewProjectAction";
@@ -53,6 +53,8 @@ import {
 } from "./conversations";
 import { useWorkspaces } from "./useWorkspaces";
 import { usePrimaryHost } from "./usePrimaryHost";
+import { useProjectIcons } from "./useProjectIcons";
+import { ProjectIconPicker } from "./ProjectIconPicker";
 import { CreateNativeProjectDialog, DeleteProjectDialog } from "./CreateNativeProjectDialog";
 import { useThreadOrders } from "./useThreadOrders";
 import { useReorderDrag, type ReorderDragState } from "./useReorderDrag";
@@ -130,6 +132,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
   const actions = useSidebarThreadActions();
+  const projectIcons = useProjectIcons();
 
   // "Today +" opens BB's native composer with the personal project selected —
   // the projectless "Don't work in a project" mode. Naming it explicitly
@@ -211,6 +214,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState<{ id: string; name: string; chats: number } | null>(null);
+  const [iconPicker, setIconPicker] = useState<{ projectId: string; name: string; anchor: HTMLElement } | null>(null);
 
   const [announcement, setAnnouncement] = useState("");
   const [markReadBusy, setMarkReadBusy] = useState(false);
@@ -1212,6 +1216,12 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         }
         sectionOpen={expandedProjects.ids.has(section.id)}
         onToggleProject={() => expandedProjects.toggle(section.id)}
+        icon={nativeId !== null ? projectIcons.iconFor(nativeId) : null}
+        onSetIcon={
+          kind === "project" && nativeId !== null
+            ? (anchor) => setIconPicker({ projectId: nativeId, name: section.name, anchor })
+            : undefined
+        }
         onDeleteProject={
           kind === "project" && nativeId !== null && section.known
             ? () => setDeletingProject({ id: nativeId, name: section.name, chats: sectionThreads.length })
@@ -1282,6 +1292,19 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
               if (removed === null) throw new Error("The folder was not deleted.");
               setAnnouncement(`Folder ${deletingFolder.name} deleted. Its chats returned to the dated chats.`);
             }} /> : null}
+          <ProjectIconPicker
+            open={iconPicker !== null}
+            onOpenChange={(next) => {
+              if (!next) setIconPicker(null);
+            }}
+            anchor={iconPicker?.anchor ?? null}
+            projectName={iconPicker?.name ?? ""}
+            current={iconPicker === null ? null : projectIcons.iconFor(iconPicker.projectId)}
+            onPick={(icon) => {
+              if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
+              setIconPicker(null);
+            }}
+          />
           <AnimatedList as="div">
             {liftedPins.length > 0 ? (
               <>
@@ -1410,6 +1433,8 @@ function ProjectSection({
   onToggleProject,
   onDeleteProject,
   onNewThread,
+  icon,
+  onSetIcon,
   canDragProject,
   isDragging,
   dropPlacement,
@@ -1425,11 +1450,14 @@ function ProjectSection({
   onToggleProject: () => void;
   onDeleteProject?: (() => void) | undefined;
   onNewThread?: (() => void) | undefined;
+  icon?: IconName | null;
+  onSetIcon?: ((anchor: HTMLElement) => void) | undefined;
   canDragProject: boolean;
   isDragging: boolean;
   dropPlacement: DropPlacement | null;
   onHeadingDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
+  const headingRef = useRef<HTMLDivElement>(null);
   const [inactiveLimit, setInactiveLimit] = useState(DEFAULT_INACTIVE_CONVERSATIONS);
   const conversationPlan = useMemo(
     () =>
@@ -1503,9 +1531,14 @@ function ProjectSection({
       <SidebarActions label={section.name} onHold={onToggleProject} actions={[
         { label: sectionOpen ? "Collapse children" : "Expand children", run: onToggleProject },
         ...(onNewThread ? [{ label: "New chat", run: onNewThread }] : []),
+        ...(onSetIcon ? [{ label: "Set icon…", run: () => {
+          const anchor = headingRef.current;
+          if (anchor !== null) onSetIcon(anchor);
+        } }] : []),
         ...(onDeleteProject ? [{ label: "Delete project", run: onDeleteProject, destructive: true, separatorBefore: true }] : []),
       ]}>
       <div
+        ref={headingRef}
         data-reorder-id={canDragProject ? section.id : undefined}
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
@@ -1527,6 +1560,7 @@ function ProjectSection({
           <span className="ps-heading-lead flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0 max-md:pointer-coarse:opacity-0">
             <ProjectStatusGlyph
               open={sectionOpen}
+              icon={icon}
               label={activityLabel}
             />
           </span>

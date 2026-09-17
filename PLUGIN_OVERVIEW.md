@@ -30,4 +30,6 @@ them with it. Fold state is remembered per client.
 
 Right-click a row to open it in a split, rename it, mark it read, pin it,
 archive it, or delete it. Double-click a title to rename it in place.
-Hovering a row swaps its age for the pin control.
+Hovering a row swaps its age for the pin control. Right-click a project
+heading and choose **Set icon…** to give it a glyph, or **Use default** to
+return it to the folder.
