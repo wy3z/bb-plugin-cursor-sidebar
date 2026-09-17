@@ -736,9 +736,15 @@ export function groupOrdinaryRows(
     group.latestUpdatedAt = Math.max(group.latestUpdatedAt, aggregate.latestUpdatedAt);
   }
 
-  const sorted = [...groups.values()].sort(
-    (left, right) => left.canonical - right.canonical || left.key.localeCompare(right.key),
-  );
+  const sorted = [...groups.values()].sort((left, right) => {
+    // "Most recent" floats the busiest group first; ties and the default keep
+    // the grouping's own canonical order.
+    if (view.sortGroupsBy === "updated") {
+      const byTime = right.latestUpdatedAt - left.latestUpdatedAt;
+      if (byTime !== 0) return byTime;
+    }
+    return left.canonical - right.canonical || left.key.localeCompare(right.key);
+  });
   if (view.groupBy === "updated" && !groups.has("updated:Today")) {
     // No family landed in Today: keep the standalone empty Today group at its
     // canonical head so the heading and its New thread affordance stay put.
