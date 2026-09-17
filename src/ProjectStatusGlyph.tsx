@@ -3,26 +3,17 @@ import { cn } from "@/lib/utils";
 import type { ThreadStatusKind } from "./status";
 
 /**
- * The Core/Project heading's left slot. It always draws exactly one glyph in
- * the same fixed 16px box as thread rows, so headings never shift:
- *
- *   working -> the stock `Loading` spinner (native colour + spin)
- *   idle    -> an orbit/orb for every Core until a picker exists; a smaller
- *              Folder for a native Project. Provider logos are never used.
- *
- * Core attention/status is a small coloured dot on the glyph, not a trailing
- * icon. No glyph picker.
+ * The Project heading's left slot. Always a folder in the same 16px box as
+ * thread discs, so headings never shift. Live work is drawn on the thread
+ * rows, never on the project glyph.
  */
-export type ActivityState = "inactive" | "working" | "complete" | "attention" | "review";
-
-export type CoreStatusBadge = "none" | "complete" | "input" | "warning" | "failed";
+export type ActivityState = "inactive" | "working" | "complete" | "attention";
 
 export const ACTIVITY_LABELS: Record<ActivityState, string> = {
   inactive: "Inactive",
   working: "Working",
   complete: "Completed",
   attention: "Needs your input",
-  review: "For Core review",
 };
 
 /** Precedence: a pending interaction outranks live work, which outranks history. */
@@ -43,101 +34,41 @@ export function glyphStateForStatus(status: ThreadStatusKind): ActivityState {
     case "input":
     case "failed":
       return "attention";
-    case "review":
-      return "review";
     case "working":
-    case "queued":
       return "working";
     default:
       return "inactive";
   }
 }
 
-export function headingIsWorking(status: ThreadStatusKind | null | undefined): boolean {
-  return status === "working" || status === "queued";
-}
-
-/** Complete / question / orange warning / red, as a dot on the Core glyph. */
-export function coreStatusBadge(
-  status: ThreadStatusKind | null | undefined,
-  conflicted = false,
-): CoreStatusBadge {
-  if (conflicted) return "warning";
-  switch (status) {
-    case "failed":
-      return "failed";
-    case "input":
-      return "input";
-    case "review":
-      return "complete";
-    case "unavailable":
-      return "warning";
-    default:
-      return "none";
-  }
-}
-
-const BADGE_TONE: Record<Exclude<CoreStatusBadge, "none">, string> = {
-  complete: "bg-timeline-accent",
-  input: "bg-muted-foreground/70",
-  warning: "bg-warning-text",
-  failed: "bg-destructive",
-};
-
-const BADGE_LABEL: Record<Exclude<CoreStatusBadge, "none">, string> = {
-  complete: "Completed",
-  input: "Needs your input",
-  warning: "Needs attention",
-  failed: "Failed",
-};
-
 /** Existing BB Icon primitives only; no custom glyphs and no picker. */
 export function ProjectStatusGlyph({
-  kind,
-  working,
-  badge = "none",
+  open,
   label,
   className,
 }: {
-  kind: "core" | "project";
-  working: boolean;
-  badge?: CoreStatusBadge;
+  /** True when the project section is expanded; picks the open folder. */
+  open?: boolean;
   label: string;
   className?: string;
 }) {
-  const name: IconName = working ? "Loading" : kind === "core" ? "Orbit" : "Folder";
-  const iconClass = working
-    ? "size-3.5 animate-spin text-muted-foreground/55"
-    : kind === "project"
-      ? "size-3 text-muted-foreground/55"
-      : "size-3.5 text-muted-foreground/55";
-  const mark = kind === "core" && badge !== "none" ? badge : null;
+  // Folder (closed) and FolderOpen are Hugeicons' matched single-weight pair
+  // (Folder01 / Folder02). The heavier stroke keeps both crisp at 14px.
+  const name: IconName = open ? "FolderOpen" : "Folder";
   return (
     <span
       role="img"
-      aria-label={mark ? `${label}. ${BADGE_LABEL[mark]}` : label}
-      data-activity={working ? "working" : "idle"}
-      data-heading-kind={kind}
-      data-core-badge={mark ?? undefined}
-      data-core-glyph={kind === "core" ? "orbit" : undefined}
+      aria-label={label}
+      data-activity="idle"
+      data-heading-kind="project"
       className={cn("ps-project-glyph", className)}
     >
-      <span className="relative inline-flex">
-        <Icon
-          name={name}
-          aria-hidden="true"
-          className={cn("shrink-0", iconClass)}
-        />
-        {mark ? (
-          <span
-            aria-hidden
-            className={cn(
-              "ps-core-badge pointer-events-none absolute -right-px -bottom-px size-1.5 rounded-full border border-sidebar",
-              BADGE_TONE[mark],
-            )}
-          />
-        ) : null}
-      </span>
+      <Icon
+        name={name}
+        aria-hidden="true"
+        className="size-3.5 shrink-0 text-muted-foreground/55"
+        strokeWidth={2}
+      />
     </span>
   );
 }

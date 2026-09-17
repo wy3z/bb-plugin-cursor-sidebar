@@ -135,8 +135,8 @@ export function useThreadSections(): ThreadSectionsStore {
         });
         return result.failed;
       } catch (cause) {
-        // The whole move was refused (managed family, unavailable
-        // membership): every id counts as failed and the caller reports it.
+        // The whole move was refused: every id counts as failed and the
+        // caller reports it.
         return [...threadIds];
       }
     },

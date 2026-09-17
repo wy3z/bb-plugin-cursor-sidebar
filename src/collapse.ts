@@ -29,6 +29,31 @@ function loadIds(key: string): string[] {
   }
 }
 
+/** Presence read: absent means the key was never written on this device. */
+function readStoredIds(key: string): { absent: boolean; ids: string[] } {
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(key);
+  } catch {
+    // Unreadable storage cannot establish absence, so never seed here.
+    // In-memory starts closed; user toggles still drive this mount.
+    return { absent: false, ids: [] };
+  }
+  if (raw === null) return { absent: true, ids: [] };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return { absent: false, ids: [] };
+    return {
+      absent: false,
+      ids: parsed.filter((value): value is string => typeof value === "string"),
+    };
+  } catch {
+    // Corrupt value is present but unreadable, so never seed here. It starts
+    // closed; the next user toggle overwrites and repairs it when writable.
+    return { absent: false, ids: [] };
+  }
+}
+
 function saveIds(key: string, ids: ReadonlySet<string>): void {
   try {
     window.localStorage.setItem(key, JSON.stringify([...ids]));
@@ -49,11 +74,19 @@ export interface PersistentIds {
   replace: (ids: Iterable<string>) => void;
 }
 
-/** A persisted set of ids with add/remove/toggle. */
-export function usePersistentIds(storageKey = PROJECT_COLLAPSED_KEY): PersistentIds {
-  const [ids, setIds] = useState<ReadonlySet<string>>(
-    () => new Set(loadIds(storageKey)),
-  );
+/**
+ * A persisted set of ids with add/remove/toggle. When `initial` is given it
+ * seeds the in-memory set once, only when the storage key was genuinely
+ * absent. Any stored value, including an empty array, is kept as the user's
+ * explicit preference and never reseeded.
+ */
+export function usePersistentIds(storageKey = PROJECT_COLLAPSED_KEY, initial?: Iterable<string>): PersistentIds {
+  const [ids, setIds] = useState<ReadonlySet<string>>(() => {
+    if (initial === undefined) return new Set(loadIds(storageKey));
+    const stored = readStoredIds(storageKey);
+    if (stored.absent) return new Set(initial);
+    return new Set(stored.ids);
+  });
   useEffect(() => {
     saveIds(storageKey, ids);
   }, [storageKey, ids]);

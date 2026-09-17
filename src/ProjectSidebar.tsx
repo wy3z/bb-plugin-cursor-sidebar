@@ -13,8 +13,6 @@ import { toast } from "sonner";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
-  useRpc,
-  useBbNavigate,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -25,53 +23,37 @@ import { NewProjectAction } from "./NewProjectAction";
 import { isProtectedInteractionTarget } from "./settle-shortcut";
 import {
   activePathIds,
+  buildPooledOrdinarySection,
   buildSections,
   flattenShelf,
   scopeOf,
   type ProjectSectionData,
   type SiblingOrdering,
 } from "./forest";
-import type { projectSidebarRpcContract } from "./server";
-import { ShelfList, TREE_CHILD_INDENT, PinnedList, collectLiftedPins, type TreeContext } from "./ThreadTree";
+import { ShelfList, PinnedList, collectLiftedPins, type TreeContext } from "./ThreadTree";
 import { descendantsOf, resolveThreadDisplayTitles, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import {
   chatsFolderRegistry,
-  coreNativeFolderIds,
   homeKindOf,
   nativeProjectSectionId,
   NATIVE_PROJECT_PREFIX,
-  projectSectionId,
   projectThreadView,
   STANDALONE,
 } from "./membership";
 import {
-  buildCoreIndex,
-  coreRowRole,
-  coresWithUnresolvedTransfers,
-  ownershipHint,
-  unattributedTransfers,
-  unresolvedTransfersForCore,
-  type CoreRowRole,
-  type ThreadOwnershipHint,
-} from "./core-ownership";
-import {
-  EMPTY_CORE_EXACT_FACTS,
   summarizeSection,
   worstThreadStatus,
   type ThreadStatusKind,
 } from "./status";
-import { useCoreAttention, nativeAttentionSignature } from "./useCoreAttention";
-import { planAttentionReveal, reachableRevealTargets } from "./core-nav";
 import { pinAllowed, planPinWrites } from "./pin-scope";
-import { planConversations } from "./conversations";
+import {
+  CONVERSATION_PAGE_SIZE,
+  DEFAULT_INACTIVE_CONVERSATIONS,
+  planConversations,
+} from "./conversations";
 import { useWorkspaces } from "./useWorkspaces";
 import { usePrimaryHost } from "./usePrimaryHost";
-import { MoveToProjectDialog } from "./MoveToProjectDialog";
-import { StartProjectFromThreadDialog } from "./StartProjectFromThreadDialog";
-import { AssociateToProjectDialog } from "./AssociateToProjectDialog";
-import { DeleteProjectDialog } from "./DeleteProjectDialog";
-import { CreateNativeProjectDialog } from "./CreateNativeProjectDialog";
-import { ReinitializeCoreDialog } from "./ReinitializeCoreDialog";
+import { CreateNativeProjectDialog, DeleteProjectDialog } from "./CreateNativeProjectDialog";
 import { useThreadOrders } from "./useThreadOrders";
 import { useReorderDrag, type ReorderDragState } from "./useReorderDrag";
 import {
@@ -92,11 +74,8 @@ import { useSidebarView } from "./useSidebarView";
 import { SidebarViewMenu, SidebarViewSyncNotice } from "./SidebarViewMenu";
 import {
   environmentFilterOptions,
-  familyAwareComparator,
   filterOrdinaryThreads,
-  homeDisplayParentOf,
   ordinaryCollapsibleTargets,
-  ordinaryFamilyFacts,
   ordinaryFamilyGroupKeys,
   ordinaryThreadStatus,
   environmentIdentityOf,
@@ -105,7 +84,7 @@ import {
   unreadOrdinaryThreadIds,
   viewHasActiveFilters,
 } from "./sidebar-view";
-import { DeleteFolderDialog, FolderNameDialog, MoveToFolderDialog } from "./FolderDialogs";
+import { DeleteFolderDialog, FolderNameDialog } from "./FolderDialogs";
 import {
   familyIds,
   familyRootId,
@@ -115,10 +94,7 @@ import {
 } from "./standalone-groups";
 import type { ThreadShelf } from "./lifecycle";
 import { ageGroupKey, personalAgeGroups, type AgeGroup } from "./age-groups";
-import { ManagerCreate } from "./ManagerCreate";
-import { useManagers } from "./useManagers";
-import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus, headingIsWorking, coreStatusBadge } from "./ProjectStatusGlyph";
-import { TrailingMeta } from "./StatusSlot";
+import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus } from "./ProjectStatusGlyph";
 import { AnimatedList } from "./AnimatedList";
 
 function cssEscape(value: string): string {
@@ -129,172 +105,36 @@ function cssEscape(value: string): string {
 }
 
 /**
- * A stable identity for one user ownership operation. The backend dedupes by
- * this key, so a repeated submission resolves the original request instead of
- * moving the family twice.
- */
-function newRequestKey(scope: string): string {
-  const random =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${scope}:${random}`.slice(0, 200);
-}
-
-/**
  * Project-grouped thread list. BB's projects are the only containers, the
  * native personal container is shown as Threads, and settled threads sit in
  * one collapsed section under the thread list rather than a shelf per project.
  */
 export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
   const { status, threads: rawThreads, projects: nativeProjects } = useSidebarThreads();
-  // The native sidebar feed signature. It updates exactly when the host's own
-  // thread list does, so it is the existing native signal both the manager
-  // projection and the per-Core attention read refresh on. No timer.
-  const feedKey = useMemo(() => nativeAttentionSignature(rawThreads), [rawThreads]);
-  const managers = useManagers(feedKey);
-  const cores = managers.projects;
-  const coreIndex = useMemo(
-    () => buildCoreIndex(cores, managers.workers, managers.ownership, managers.ownershipObservation),
-    [cores, managers.workers, managers.ownership, managers.ownershipObservation],
-  );
-  // Bounded, deduplicated per-Core reads: exact-generation attention, native
-  // Listening health and pending handovers. Refreshed by the manager's own
-  // channel, never per row and never on a timer.
-  const coreSummaryKey = useMemo(
-    () => cores.map((core) => `${core.id}:${core.coordinatorThreadId ?? ""}`).join(","),
-    [cores],
-  );
-  const coreAttention = useCoreAttention(
-    useMemo(() => cores.map((core) => core.id), [cores]),
-    `${coreSummaryKey}\u0001${feedKey}`,
-  );
-  const [creatingManager, setCreatingManager] = useState<{ id: string; name: string } | null>(null);
-  const [creatingCorePicker, setCreatingCorePicker] = useState(false);
-  const [creatingProject, setCreatingProject] = useState(false);
-  const [reinitializingManager, setReinitializingManager] = useState<{ id: string; name: string } | null>(null);
-  const [openingManager, setOpeningManager] = useState<string | null>(null);
-  const [deletingManager, setDeletingManager] = useState<{ id: string; name: string } | null>(null);
-  const coreSections = useMemo(
-    () => cores.filter((core) => core.coordinatorThreadId).map((core) => ({ id: projectSectionId(core.id), name: core.name, isPersonal: false })),
-    [cores],
-  );
   const nativeProjectSections = useMemo(
     () => nativeProjects.filter((project) => !project.isPersonal).map((project) => ({ id: nativeProjectSectionId(project.id), name: project.name, isPersonal: false })),
     [nativeProjects],
   );
   const projects = useMemo(
-    () => [...coreSections, ...nativeProjectSections, { id: STANDALONE, name: "Chats", isPersonal: true }],
-    [coreSections, nativeProjectSections],
+    () => [...nativeProjectSections, { id: STANDALONE, name: "Chats", isPersonal: true }],
+    [nativeProjectSections],
   );
-  const managerByProject = useMemo(() => new Map(cores.map((manager) => [projectSectionId(manager.id), manager])), [cores]);
-  const managerIds = useMemo(() => new Set(cores.flatMap((manager) => manager.coordinatorThreadId ? [manager.coordinatorThreadId] : [])), [cores]);
-  const managedWorkers = useMemo(() => new Map(managers.workers.map((worker) => [worker.threadId, worker])), [managers.workers]);
-  const projectedThreads = useMemo(() => projectThreadView(rawThreads, coreIndex, nativeProjects), [rawThreads, coreIndex, nativeProjects]);
+  const projectedThreads = useMemo(() => projectThreadView(rawThreads, nativeProjects), [rawThreads, nativeProjects]);
   const threads = useMemo(() => resolveThreadDisplayTitles(projectedThreads), [projectedThreads]);
   const projectedById = useMemo(() => new Map(projectedThreads.map((thread) => [thread.id, thread])), [projectedThreads]);
   const workspacePaths = useWorkspaces(rawThreads);
   const primaryHostId = usePrimaryHost();
   const rawById = useMemo(() => new Map(rawThreads.map((thread) => [thread.id, thread])), [rawThreads]);
-  // Archived native threads the list does not render as rows; the reveal action
-  // can still open one directly by its real native thread id.
-  const archivedIds = useMemo(
-    () => new Set(rawThreads.filter((thread) => thread.isArchived).map((thread) => thread.id)),
-    [rawThreads],
-  );
-  const protectedIds = useMemo(() => new Set([...managerIds, ...managedWorkers.keys()]), [managerIds, managedWorkers]);
-  const parentOfId = useCallback(
-    (id: string): string | null => rawById.get(id)?.parentThreadId ?? null,
-    [rawById],
-  );
-  /** How a Core-owned row sits under its Core, or null when it is ordinary. */
-  const coreRoleOf = useCallback((threadId: string): CoreRowRole | null => {
-    const coreId =
-      coreIndex.coreByCoordinator.get(threadId) ??
-      coreIndex.coreByWorker.get(threadId) ??
-      coreIndex.coreByMember.get(threadId) ??
-      coreIndex.coreByOwnedRoot.get(threadId);
-    if (coreId === undefined) return null;
-    return coreRowRole(coreId, threadId, coreIndex);
-  }, [coreIndex]);
-  /** Verified, unverified or reference provenance for an ordinary row. */
-  const ownershipHintOf = useCallback(
-    (threadId: string): ThreadOwnershipHint | null => ownershipHint(threadId, parentOfId, coreIndex),
-    [coreIndex, parentOfId],
-  );
-  // Removing a family from a Core is a mutating move; it needs the current
-  // verified read, never a stale snapshot. The Core-owned home still shows.
-  const canRemoveFromCore = useCallback(
-    (threadId: string) => managers.ownershipCurrent && coreRoleOf(threadId) === "owned-chat",
-    [managers.ownershipCurrent, coreRoleOf],
-  );
-  const conflictedCores = useMemo(() => coresWithUnresolvedTransfers(coreIndex), [coreIndex]);
-  // Unresolved transfers whose recorded identities name no known Core. They are
-  // never attributed to a family's current owner; the global region reconciles
-  // them by their recorded request key.
-  const unattributed = useMemo(() => unattributedTransfers(coreIndex), [coreIndex]);
-  const coreNameById = useMemo(
-    () => new Map(cores.map((core) => [core.id, core.name] as const)),
-    [cores],
-  );
-  const canMove = useCallback((threadId: string) => {
-    if (!managers.membershipAvailable) return false;
-    // An owned family's move changes Core ownership, which needs a current
-    // verified read. A still-unowned ordinary chat can be adopted without one.
-    if (coreRoleOf(threadId) !== null && !managers.ownershipCurrent) return false;
-    let current = rawById.get(threadId);
-    const seen = new Set<string>();
-    while (current && !seen.has(current.id)) {
-      // Crossing a Core coordinator above an owned family root is expected;
-      // the family is transferable to another Core. A Worker anywhere on the
-      // path, or the coordinator itself, is not.
-      if (current.id !== threadId && coreIndex.coreByCoordinator.has(current.id)) return true;
-      if (protectedIds.has(current.id)) return false;
-      seen.add(current.id);
-      current = current.parentThreadId ? rawById.get(current.parentThreadId) : undefined;
-    }
-    return true;
-  }, [coreIndex, coreRoleOf, managers.membershipAvailable, managers.ownershipCurrent, protectedIds, rawById]);
-  // "Start project from thread" is for a chat that is not already part of a
-  // managed project. A native working-directory membership is not managed
-  // membership, so standalone chats in a shared working directory still qualify.
-  const canStartProject = useCallback((threadId: string) => {
-    if (!managers.available || !managers.membershipAvailable) return false;
-    const projected = projectedById.get(threadId);
-    if (!projected || projected.isArchived) return false;
-    // Eligibility is actual ownership, not the displayed home: a chat under a
-    // native Project can still start a Core, while an owned or assigned family
-    // cannot. A reference link does not make a chat owned.
-    return coreRoleOf(threadId) === null;
-  }, [coreRoleOf, managers.available, managers.membershipAvailable, projectedById]);
-  const [movingThreadId, setMovingThreadId] = useState<string | null>(null);
-  const [startingProjectThreadId, setStartingProjectThreadId] = useState<string | null>(null);
-  const [associating, setAssociating] = useState<{
-    threadId: string;
-    projectId: string | null;
-    mode: "handover" | "reference";
-  } | null>(null);
-  // A chat (standalone or already in a managed project) can be handed over or
-  // added as a reference to another project. The native worker/PM family guard
-  // is the same one `canMove` applies, and the backend re-checks it.
-  const canAssociate = canMove;
-  const openAssociation = useCallback(
-    (threadId: string, projectId: string | null = null, mode: "handover" | "reference" = "handover") => {
-      setAssociating({ threadId, projectId, mode });
-    },
-    [],
-  );
+  const [creatingProject, setCreatingProject] = useState(false);
   const threadOrders = useThreadOrders();
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
   const actions = useSidebarThreadActions();
-  const navigate = useBbNavigate();
 
   // "Today +" opens BB's native composer with the personal project selected —
   // the projectless "Don't work in a project" mode. Naming it explicitly
   // overrides the remembered root-compose project so a new thread never lands
-  // in whatever project was last used. No managed project is involved.
+  // in whatever project was last used.
   const personalProjectId = useMemo(
     () => nativeProjects.find((project) => project.isPersonal)?.id ?? null,
     [nativeProjects],
@@ -307,42 +147,14 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     onNavigate();
   }, [actions, onNavigate, personalProjectId]);
 
-  async function openProjectManager(section: { id: string; name: string }) {
-    if (openingManager) return;
-    const manager = managerByProject.get(section.id);
-    if (!manager) {
-      // A section without a stable Core record has no native project identity
-      // to start one against. Refuse instead of guessing an id.
-      toast.error("This Core is unavailable. Refresh and retry.");
-      return;
-    }
-    if (!manager.coordinatorThreadId) {
-      // The composer request must name the BB-native project id, never the
-      // sidebar's `managed:` section key or the Exo Core id. The manager
-      // reopens the existing Core for this native project, so a stable Core is
-      // never duplicated.
-      setCreatingManager({ id: manager.bbProjectId, name: manager.name });
-      return;
-    }
-    setOpeningManager(section.id);
-    try {
-      const result = await rpc.call("openManager", { managerId: manager.id });
-      if (!result.coordinatorThreadId) throw new Error("The Core is unavailable. Retry shortly.");
-      navigate.toThread(result.coordinatorThreadId);
-      onNavigate();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setOpeningManager(null);
-    }
-  }
-
-  async function deleteManagedProject(managerId: string) {
-    await rpc.call("deleteManager", { managerId });
-    await managers.refresh();
-    setAnnouncement("Core deleted. Its chats remain as an ordinary family.");
-    toast.success("Core deleted. Chats and workspaces kept; its native family remains.");
-  }
+  const nativeChatProjects = useMemo(
+    () => nativeProjects.filter((project) => !project.isPersonal).map((project) => ({ id: project.id, name: project.name })),
+    [nativeProjects],
+  );
+  const openNativeProjectChat = useCallback((project: { id: string; name: string }) => {
+    actions.openNewThread({ projectId: project.id, focusPrompt: true });
+    onNavigate();
+  }, [actions, onNavigate]);
 
   const [scrolling, setScrolling] = useState(false);
   const scrollIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -369,24 +181,23 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const now = nowMinute * 60_000;
 
   const expandedProjects = usePersistentIds("bb-plugin-project-sidebar:expanded-projects:v1");
-  const expandedAges = usePersistentIds(EXPANDED_AGES_KEY);
+  // Fresh devices open Today/Yesterday so populated recency is visible. Any
+  // stored value, including an explicitly empty one, is kept and never
+  // reseeded; a fold afterwards sticks for the whole mount.
+  const expandedAges = usePersistentIds(EXPANDED_AGES_KEY, [
+    ageGroupKey(STANDALONE, "Today"),
+    ageGroupKey(STANDALONE, "Yesterday"),
+  ]);
   const collapsedGroups = usePersistentIds(COLLAPSED_GROUPS_KEY);
-  // Top-level group headings (Cores / Projects) default open; this set holds
-  // the folded ones and is a device preference, not shared state. Loose chats
+  // Top-level group headings (Projects) default open; this set holds the
+  // folded ones and is a device preference, not shared state. Loose chats
   // under Projects grouping sit in a Threads subheading that defaults closed.
   const topGroupCollapsed = usePersistentIds("bb-plugin-project-sidebar:collapsed-top-groups:v1");
   const expandedThreads = usePersistentIds(EXPANDED_THREADS_KEY);
   const folderStore = useThreadSections();
-  // Native sections that file a Core coordinator are not Chats folders. The
-  // Core family already has its home under Core; keeping them in the registry
-  // would draw a second copy of the same family under Chats.
-  const coreFolderIds = useMemo(
-    () => coreNativeFolderIds(rawThreads, coreIndex),
-    [coreIndex, rawThreads],
-  );
   const chatFolders = useMemo(
-    () => chatsFolderRegistry(folderStore.sections, coreFolderIds),
-    [coreFolderIds, folderStore.sections],
+    () => chatsFolderRegistry(folderStore.sections),
+    [folderStore.sections],
   );
   const knownFolderIds = useMemo(
     () => new Set(chatFolders.map((folder) => folder.id)),
@@ -397,11 +208,12 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       folderStore.sections.find((folder) => folder.id === sectionId)?.name ?? null,
     [folderStore.sections],
   );
-  const [folderMoveThreadId, setFolderMoveThreadId] = useState<string | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
+  const [deletingProject, setDeletingProject] = useState<{ id: string; name: string; chats: number } | null>(null);
 
   const [announcement, setAnnouncement] = useState("");
+  const [markReadBusy, setMarkReadBusy] = useState(false);
   const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -428,196 +240,17 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     return map;
   }, [visible]);
 
-  // The exact-generation status of every Core-owned row. A row surfaces a
-  // current failure, review or queue even when its native indicator is silent.
-  // The value is the strongest status across the row and its rendered subtree,
-  // so a folded parent still speaks for a failed child.
-  const coreStatusByThread = useMemo(() => {
-    const map = new Map<string, ThreadStatusKind>();
-    const ownerOf = (id: string): string | undefined =>
-      coreIndex.coreByCoordinator.get(id) ??
-      coreIndex.coreByWorker.get(id) ??
-      coreIndex.coreByMember.get(id) ??
-      coreIndex.coreByOwnedRoot.get(id);
-    for (const thread of visible) {
-      const coreId = ownerOf(thread.id);
-      if (coreId === undefined) continue;
-      const exact = coreAttention.get(coreId);
-      if (exact === undefined) continue;
-      const subtree = [thread, ...(descendantsById.get(thread.id) ?? [])];
-      map.set(thread.id, worstThreadStatus(subtree, exact));
-    }
-    return map;
-  }, [visible, descendantsById, coreIndex, coreAttention]);
-
-  const reportOwnership = useCallback((result: { phase: string; threadIds: string[]; currentMismatch: string | null }, destination: string | null) => {
-    const count = result.threadIds.length;
-    const family = `${count} chat${count === 1 ? "" : "s"}`;
-    if (result.phase === "verified") {
-      setAnnouncement(destination ? `${family} moved to the Core.` : `${family} removed from the Core.`);
-      toast.success(destination ? "Chat family moved to Core" : "Chat family returned to its native home");
-      return;
-    }
-    if (result.phase === "conflict") {
-      const detail = result.currentMismatch ?? "The native parent changed while the move was running.";
-      setAnnouncement(`Ownership conflict: ${detail}`);
-      toast.error("Ownership conflict. The list shows the current state.", { description: detail });
-      return;
-    }
-    if (result.phase === "uncertain") {
-      setAnnouncement("The move could not be verified. Nothing was guessed; retry from the current state.");
-      toast.error("The move could not be verified.", { description: result.currentMismatch ?? undefined });
-      return;
-    }
-    setAnnouncement("The move did not complete. The list shows the current state.");
-    toast.error("The move did not complete.", { description: result.currentMismatch ?? undefined });
-  }, []);
-
-  const moveMembership = useCallback(async (threadId: string, coreId: string | null) => {
-    if (coreRoleOf(threadId) !== null && !managers.ownershipCurrent) {
-      toast.error("Ownership status is unavailable. Nothing was moved; refresh and retry.");
-      return;
-    }
-    const result = coreId === null
-      ? await rpc.call("removeThreadFromCore", { threadId, requestKey: newRequestKey("sidebar-remove") })
-      : await rpc.call("moveThreadToCore", { threadId, projectId: coreId, requestKey: newRequestKey("sidebar-move") });
-    await managers.refresh();
-    reportOwnership(result, coreId);
-  }, [coreRoleOf, managers.ownershipCurrent, managers.refresh, reportOwnership, rpc]);
-  const moveMembershipRef = useRef(moveMembership);
-  moveMembershipRef.current = moveMembership;
-
-  // An explicit provenance resolution for one unverified legacy association.
-  // Nothing is inferred: the user states ownership or reference.
-  const resolveLegacy = useCallback(async (
-    threadId: string,
-    coreId: string,
-    provenance: "ownership" | "reference",
-  ) => {
-    try {
-      const result = await rpc.call("convertLegacyAssociation", { threadId, projectId: coreId, provenance });
-      await managers.refresh();
-      const message = result.action === "moved"
-        ? "Core ownership confirmed."
-        : "Kept as a reference. Its home is unchanged.";
-      setAnnouncement(message);
-      toast.success(message);
-    } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause);
-      setAnnouncement(`Could not resolve the association: ${detail}`);
-      toast.error("Could not resolve the association", { description: detail });
-    }
-  }, [managers.refresh, rpc]);
-
-  const reconcileCore = useCallback(async (coreId: string) => {
-    const transfers = unresolvedTransfersForCore(coreId, coreIndex);
-    if (transfers.length === 0) return;
-    let verified = 0;
-    let unresolved = 0;
-    let refusal: string | null = null;
-    for (const transfer of transfers) {
-      try {
-        const result = await rpc.call("reconcileOwnershipTransfer", { requestKey: transfer.requestKey });
-        if (result.phase === "verified") verified += 1;
-        else unresolved += 1;
-      } catch (cause) {
-        refusal = cause instanceof Error ? cause.message : String(cause);
-      }
-    }
-    await managers.refresh();
-    if (refusal !== null) {
-      setAnnouncement(`Reconcile could not run: ${refusal}`);
-      toast.error("Reconcile could not run", { description: refusal });
-      return;
-    }
-    const message = unresolved === 0
-      ? `Reconciled ${verified} transfer${verified === 1 ? "" : "s"}.`
-      : `${verified} resolved, ${unresolved} still unresolved. The list shows the observed state.`;
-    setAnnouncement(message);
-    toast.success(message);
-  }, [coreIndex, managers.refresh, rpc]);
-
-  // Unattributed transfers have no recorded source or receiver, so no Core can
-  // own the reconciliation. The global region reconciles each by its recorded
-  // request key against the manager, which is the only proof available.
-  const reconcileUnattributed = useCallback(async () => {
-    if (unattributed.length === 0) return;
-    let verified = 0;
-    let unresolved = 0;
-    let refusal: string | null = null;
-    for (const transfer of unattributed) {
-      try {
-        const result = await rpc.call("reconcileOwnershipTransfer", { requestKey: transfer.requestKey });
-        if (result.phase === "verified") verified += 1;
-        else unresolved += 1;
-      } catch (cause) {
-        refusal = cause instanceof Error ? cause.message : String(cause);
-      }
-    }
-    await managers.refresh();
-    if (refusal !== null) {
-      setAnnouncement(`Reconcile could not run: ${refusal}`);
-      toast.error("Reconcile could not run", { description: refusal });
-      return;
-    }
-    const message = unresolved === 0
-      ? `Reconciled ${verified} transfer${verified === 1 ? "" : "s"}.`
-      : `${verified} resolved, ${unresolved} still unresolved. The list shows the observed state.`;
-    setAnnouncement(message);
-    toast.success(message);
-  }, [unattributed, managers.refresh, rpc]);
-
-  // A reference is a non-owning link. Its marker offers navigation to the
-  // existing Core workspace without creating a second home, changing ownership
-  // or waking the Core.
-  const openReferenceCore = useCallback(async (coreId: string) => {
-    const core = cores.find((candidate) => candidate.id === coreId);
-    if (!core) {
-      toast.error("That Core is unavailable. Refresh and retry.");
-      return;
-    }
-    if (core.coordinatorThreadId) {
-      navigate.toThread(core.coordinatorThreadId);
-      onNavigate();
-      return;
-    }
-    const section = coreSections.find((candidate) => candidate.id === projectSectionId(coreId));
-    if (!section) {
-      toast.error("That Core is unavailable. Refresh and retry.");
-      return;
-    }
-    await openProjectManager(section);
-  }, [cores, coreSections, navigate, onNavigate]);
-
   // Defined after the section memos; the drag commit reads it at drop time.
   const commitFolderPinDropRef = useRef<(movingId: string, moveToSection: string | null | undefined, pin: boolean | undefined) => Promise<void>>(async () => {});
   const applyFolderMoveRef = useRef<(threadId: string, sectionId: string | null) => Promise<FolderMoveResult>>(async () => {
     throw new Error("Standalone chats are unavailable.");
   });
 
-  // Ordinary homes (a native Project or Chats) own their pins and folders, and
-  // filing or pinning never crosses a managed worker or coordinator. A Core home
-  // has no folders and never lifts a family: a child's own native pin only
-  // orders its siblings, which is harmless pin metadata, so the ownership-family
-  // walk is skipped there rather than forbidding the pin.
   const canPin = useCallback((threadId: string) => {
     const projected = projectedById.get(threadId);
     if (!projected) return false;
-    const homeKind = homeKindOf(projected.projectId);
-    if (homeKind === "core") return pinAllowed("core", projected.isArchived, false);
-    let crossedProtected = false;
-    let current = rawById.get(threadId);
-    const seen = new Set<string>();
-    while (current && !seen.has(current.id)) {
-      if (protectedIds.has(current.id)) {
-        crossedProtected = true;
-        break;
-      }
-      seen.add(current.id);
-      current = current.parentThreadId ? rawById.get(current.parentThreadId) : undefined;
-    }
-    return pinAllowed(homeKind, projected.isArchived, crossedProtected);
-  }, [projectedById, protectedIds, rawById]);
+    return pinAllowed(homeKindOf(projected.projectId), projected.isArchived, false);
+  }, [projectedById]);
 
   // Commit a released drag into the persistent stores.
   const sectionsRef = useRef<ProjectSectionData[]>([]);
@@ -632,24 +265,15 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         committed.kind === "thread" &&
         committed.moveToSection === undefined &&
         committed.pin === undefined &&
-        committed.moveToProject === undefined &&
-        !manualOrderRef.current &&
-        homeKindOf(committed.sectionId) !== "core"
+        !manualOrderRef.current
       ) {
         return;
       }
       // Folder and pin headers own the drop: the family is filed or (un)pinned
       // with native state, never reordered across clusters and never moved
-      // between projects.
+      // between projects. SDK cannot change a thread's projectId.
       if (committed.kind === "thread" && (committed.moveToSection !== undefined || committed.pin !== undefined)) {
         void commitFolderPinDropRef.current(committed.movingId, committed.moveToSection, committed.pin);
-        return;
-      }
-      if (committed.kind === "thread" && committed.moveToProject !== undefined) {
-        // Dropping onto a Core runs the same ownership transfer as Move to
-        // Core…; dropping onto Chats releases a Core-owned family back to its
-        // native home. No association dialog: the drop states the intent.
-        void moveMembershipRef.current(committed.movingId, committed.moveToProject).catch((error) => toast.error(String(error)));
         return;
       }
       if (committed.kind === "project") {
@@ -675,9 +299,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         mergeVisibleOrder(global, committed.ids),
       );
     },
-    [rpc],
+    [],
   );
-  const drag = useReorderDrag(onDragCommit, canMove);
+  const drag = useReorderDrag(onDragCommit);
 
   // Project order is a plugin overlay; native storage projects stay unchanged.
   const baseOrderedProjects = useMemo(
@@ -727,11 +351,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // which supported metadata a row shows.
   const sidebarView = useSidebarView();
   const view = sidebarView.view;
-  manualOrderRef.current = view.sortConversationsBy === "manual";
-  const isCoreHomeThread = useCallback(
-    (thread: PluginSidebarThread) => homeKindOf(thread.projectId) === "core",
-    [],
-  );
+  manualOrderRef.current = true;
   const familyRootOfId = useCallback(
     (threadId: string) =>
       familyRootId((id) => rawById.get(id)?.parentThreadId ?? null, threadId),
@@ -751,48 +371,35 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     [activeThreadId, familyRootOfId],
   );
   const viewFiltersActive = viewHasActiveFilters(view);
+  // Projects grouping keeps native project interiors unfiltered; every other
+  // grouping filters project threads exactly like standalone chats.
+  const projectsGrouping = view.groupBy === "workspace";
   const viewVisible = useMemo(
     () =>
       filterOrdinaryThreads(visible, view, {
-        isCoreHome: isCoreHomeThread,
         bypass: (thread) => {
-          // Native project interiors ignore the selected filter; they keep a
-          // recency list plus Show more. Filters apply to standalone chats.
-          if (homeKindOf(thread.projectId) === "project") return true;
+          if (projectsGrouping && homeKindOf(thread.projectId) === "project") return true;
           const root = familyRootOfId(thread.id);
           return pinnedFamilyRoots.has(root) || root === activeFamilyRoot;
         },
       }),
-    [activeFamilyRoot, familyRootOfId, isCoreHomeThread, pinnedFamilyRoots, visible, view],
+    [activeFamilyRoot, familyRootOfId, pinnedFamilyRoots, projectsGrouping, visible, view],
   );
   const viewEnvironmentOptions = useMemo(
-    () => environmentFilterOptions(visible.filter((thread) => !isCoreHomeThread(thread))),
-    [isCoreHomeThread, visible],
+    () => environmentFilterOptions(visible),
+    [visible],
   );
   const hasEnvironmentlessOrdinary = useMemo(
     () =>
       visible.some(
-        (thread) => !isCoreHomeThread(thread) && environmentGroupOf(thread).id === NO_ENVIRONMENT_KEY,
+        (thread) => environmentGroupOf(thread).id === NO_ENVIRONMENT_KEY,
       ),
-    [isCoreHomeThread, visible],
+    [visible],
   );
   const unreadOrdinary = useMemo(
-    () => unreadOrdinaryThreadIds(visible, (id) => coreRoleOf(id) !== null),
-    [coreRoleOf, visible],
+    () => unreadOrdinaryThreadIds(visible),
+    [visible],
   );
-  // Automatic ordering reads the same family facts the grouping shows, so a
-  // family sorts by the status or activity its divider shows. Facts come from
-  // the complete visible set with same-home display parents, before any fold.
-  const siblingOrdering = useMemo<SiblingOrdering | undefined>(() => {
-    if (view.sortConversationsBy === "manual") return undefined;
-    const facts = ordinaryFamilyFacts(viewVisible, {
-      parentOf: homeDisplayParentOf(viewVisible),
-      statusOf: ordinaryThreadStatus,
-      environmentOf: environmentIdentityOf,
-    });
-    const compare = familyAwareComparator(view.sortConversationsBy, facts);
-    return compare === null ? undefined : { compare, manual: false };
-  }, [view.sortConversationsBy, viewVisible]);
   const recencyOrdering = useMemo<SiblingOrdering>(
     () => ({
       compare: (left, right) =>
@@ -801,17 +408,14 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     }),
     [],
   );
-  // A Core home keeps the native sibling order and manual moves. A native
-  // Project lists most-recent conversations regardless of the selected sort.
-  // Standalone chats take the selected automatic order.
+  // Native projects stay newest-first. Standalone chats keep stored sibling
+  // order. The old Ordering menu is gone; leftover saved sorts are ignored.
   const orderingFor = useCallback(
     (sectionId: string): SiblingOrdering | undefined => {
-      const kind = homeKindOf(sectionId);
-      if (kind === "core") return undefined;
-      if (kind === "project") return recencyOrdering;
-      return siblingOrdering;
+      if (homeKindOf(sectionId) === "project") return recencyOrdering;
+      return undefined;
     },
-    [recencyOrdering, siblingOrdering],
+    [recencyOrdering],
   );
 
   const sections = useMemo<ProjectSectionData[]>(
@@ -826,6 +430,19 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     [displayProjects, effectiveOrderForScope, orderingFor, viewVisible],
   );
   sectionsRef.current = sections;
+  // Pooled ordinary section for Updated / Status / Environment. Presentation
+  // only: homes, pins, folders and order are untouched.
+  const pooledSection = useMemo(
+    () =>
+      buildPooledOrdinarySection(
+        sections,
+        STANDALONE,
+        "Chats",
+      ),
+    [sections],
+  );
+  const pooledSectionRef = useRef(pooledSection);
+  pooledSectionRef.current = pooledSection;
 
   const sectionsById = useMemo(
     () => new Map(sections.map((section) => [section.id, section])),
@@ -840,7 +457,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   }, [sections]);
 
   // The section a row renders in, used for family walks in any ordinary home.
-  // Callers gate on `canPin`, so a Core home never reaches these paths.
   const homeSectionOf = useCallback((threadId: string): ProjectSectionData | undefined => {
     const sid = sectionByThreadId.get(threadId);
     if (sid === undefined) return undefined;
@@ -929,9 +545,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     const root = section
       ? familyRootId((id) => section.forest.parent.get(id) ?? null, threadId)
       : threadId;
+    const homeKind = section ? homeKindOf(section.id) : "project";
     if (pinned) {
       const writes = planPinWrites({
-        homeKind: "project",
+        homeKind,
         threadId,
         rootId: root,
         familyIds: ids,
@@ -942,7 +559,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       return { failed: [] };
     }
     const writes = planPinWrites({
-      homeKind: "project",
+      homeKind,
       threadId,
       rootId: root,
       familyIds: ids,
@@ -960,34 +577,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     return { failed };
   }, [actions, familyOf, rawById]);
 
-  // Core home: a pin is this thread's own native flag, so it only reorders
-  // siblings. It never writes the family root or clears another member's pin.
-  const applySiblingPin = useCallback(async (
-    threadId: string,
-    pinned: boolean,
-  ): Promise<void> => {
-    const writes = planPinWrites({
-      homeKind: "core",
-      threadId,
-      rootId: threadId,
-      familyIds: [threadId],
-      pinnedMemberIds: [],
-      pinned,
-    });
-    for (const write of writes) await actions.setPinned(write.threadId, write.pinned);
-  }, [actions]);
-
   const togglePin = useCallback(async (threadId: string, pinned: boolean): Promise<void> => {
     const section = homeSectionOf(threadId);
-    const isCore = section !== undefined && homeKindOf(section.id) === "core";
     try {
-      if (isCore) {
-        await applySiblingPin(threadId, pinned);
-        const moved = visibleById.get(threadId);
-        const title = moved ? threadDisplayTitle(moved) : "Chat";
-        setAnnouncement(`${title} ${pinned ? "pinned" : "unpinned"}.`);
-        return;
-      }
       const { failed } = await applyFamilyPin(threadId, section, pinned);
       const moved = visibleById.get(threadId);
       const title = moved ? threadDisplayTitle(moved) : "Chat";
@@ -1005,7 +597,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         description: cause instanceof Error ? cause.message : String(cause),
       });
     }
-  }, [applyFamilyPin, applySiblingPin, homeSectionOf, visibleById]);
+  }, [applyFamilyPin, homeSectionOf, visibleById]);
 
   // A drag that ends on a folder or pin header files or (un)pins the whole
   // family with native state. Parts that already match are skipped, so
@@ -1018,9 +610,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   ): Promise<void> => {
     const section = homeSectionOf(movingId);
     if (!section || !canPin(movingId)) return;
-    // A Core home draws no folder or Pinned cluster, so there is no drop target.
-    // Its row-menu pin is the sibling-only toggle, never a family lift.
-    if (homeKindOf(section.id) === "core") return;
     if (moveToSection !== undefined) {
       const result = await applyFolderMoveRef.current(movingId, moveToSection);
       const error = reportFolderMoveRef.current(movingId, moveToSection, result);
@@ -1056,28 +645,31 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       thread: PluginSidebarThread,
       shelf: ThreadShelf,
     ) => {
-      const scope = scopeOf(section, thread.id);
-      // Reorder stays inside one visible automatic group (pinned, one folder,
-      // or the selected Workspace/Updated/Status/Environment group), so a drag
-      // never crosses groups, files, pins or duplicates a family. Extra grouping
-      // is standalone-only; a project uses Workspace so env/date/status never
-      // constrain its interior.
-      const memberById = homeKindOf(section.id) !== "core" && shelf === "active"
-        ? new Map(section.members.map((member) => [member.id, member]))
+      // A pooled row commits to its native home's scope, never to the display bucket.
+      const homeSection = sectionsById.get(sectionByThreadId.get(thread.id) ?? "") ?? section;
+      const commitSection = section.id === pooledSectionRef.current.id ? homeSection : section;
+      const scope = scopeOf(commitSection, thread.id);
+      // Reorder stays inside one visible automatic group, so a drag never
+      // crosses groups, files, pins or duplicates a family.
+      const memberById = shelf === "active"
+        ? new Map(commitSection.members.map((member) => [member.id, member]))
         : null;
-      const groupingView = section.personal ? view : { ...view, groupBy: "workspace" as const };
+      const groupingView =
+        commitSection.personal || !projectsGrouping
+          ? view
+          : { ...view, groupBy: "workspace" as const };
       const groupKeys = memberById === null
         ? null
-        : ordinaryFamilyGroupKeys(section.members, groupingView, {
+        : ordinaryFamilyGroupKeys(commitSection.members, groupingView, {
             now,
-            parentOf: (id) => section.forest.parent.get(id) ?? null,
+            parentOf: (id) => commitSection.forest.parent.get(id) ?? null,
             statusOf: ordinaryThreadStatus,
             environmentOf: environmentIdentityOf,
           });
       const groupKeyOf = memberById === null || groupKeys === null ? null : (threadId: string): string => {
         return standaloneGroupKey({
           threadId,
-          parentOf: (id) => section.forest.parent.get(id) ?? null,
+          parentOf: (id) => commitSection.forest.parent.get(id) ?? null,
           sectionIdOf: (id) => memberById.get(id)?.sectionId ?? null,
           isPinned: (id) => memberById.get(id)?.isPinned ?? false,
           knownFolderIds,
@@ -1085,13 +677,13 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         });
       };
       const sourceKey = groupKeyOf?.(thread.id) ?? null;
-      const ids = flattenShelf(section, shelf, (id) => managerIds.has(id) || expandedParents.has(id))
-        .filter((row) => scopeOf(section, row.thread.id) === scope)
+      const ids = flattenShelf(commitSection, shelf, (id) => expandedParents.has(id))
+        .filter((row) => scopeOf(commitSection, row.thread.id) === scope)
         .filter((row) => groupKeyOf === null || sourceKey === null || groupKeyOf(row.thread.id) === sourceKey)
         .map((row) => row.thread.id);
-      drag.startThread(event, section.id, scope, ids, thread.id);
+      drag.startThread(event, commitSection.id, scope, ids, thread.id);
     },
-    [drag, expandedParents, knownFolderIds, managerIds, now, view],
+    [drag, expandedParents, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
   );
 
   // Connected focus after a row moves.
@@ -1128,8 +720,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         }
       }
       // Restoring an unassigned thread may move it into a folded date range.
+      // A project thread falls back to the pooled section when pooled.
       if (fallbackKey === null) {
-        const section = sectionsRef.current.find((candidate) => candidate.personal && candidate.shelfById.get(threadId) === "active");
+        const section = sectionsRef.current.find((candidate) => candidate.personal && candidate.shelfById.get(threadId) === "active")
+          ?? (pooledSectionRef.current.shelfById.get(threadId) === "active" ? pooledSectionRef.current : undefined);
         const group = section && personalAgeGroups(section, Date.now()).get(threadId);
         if (section && group) {
           const toggle = container.querySelector<HTMLElement>(
@@ -1163,7 +757,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   // The active thread's display position, for a one-shot reveal.
   const reveal = useMemo(() => {
-    if (activeThreadId === null || managerIds.has(activeThreadId)) return null;
+    if (activeThreadId === null) return null;
     const sectionId = sectionByThreadId.get(activeThreadId);
     if (sectionId === undefined) return null;
     const section = sectionsById.get(sectionId);
@@ -1176,22 +770,24 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       ancestors.push(parentId);
       parentId = section.forest.parent.get(parentId) ?? null;
     }
-    // The generated key is the same one the renderer derives, so a reveal opens
-    // the real date, status or environment group that holds the active family.
+    // The key matches the renderer's, so a reveal opens the real group holding
+    // the active family: from the pool when pooled, else the home section.
     let updatedAgeKey: string | null = null;
     let collapsedGroupKey: string | null = null;
-    if (section.personal) {
-      const keys = ordinaryFamilyGroupKeys(section.members, view, {
+    const pooled = !projectsGrouping ? pooledSectionRef.current : null;
+    const keyScope = pooled ?? (section.personal ? section : null);
+    if (keyScope !== null) {
+      const keys = ordinaryFamilyGroupKeys(keyScope.members, view, {
         now,
-        parentOf: (id) => section.forest.parent.get(id) ?? null,
+        parentOf: (id) => keyScope.forest.parent.get(id) ?? null,
         statusOf: ordinaryThreadStatus,
         environmentOf: environmentIdentityOf,
       });
       const key = keys.get(activeThreadId) ?? null;
       if (key !== null && view.groupBy === "updated") {
-        updatedAgeKey = ageGroupKey(sectionId, key.slice("updated:".length) as AgeGroup);
+        updatedAgeKey = ageGroupKey(keyScope.id, key.slice("updated:".length) as AgeGroup);
       } else if (key !== null && (view.groupBy === "status" || view.groupBy === "environment")) {
-        collapsedGroupKey = `group:${sectionId}:${key}`;
+        collapsedGroupKey = `group:${keyScope.id}:${key}`;
       }
     }
     return {
@@ -1201,7 +797,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       shelf: section.shelfById.get(activeThreadId) ?? "active",
       ancestors,
     };
-  }, [activeThreadId, now, sectionByThreadId, sectionsById, managerIds, view]);
+  }, [activeThreadId, now, projectsGrouping, sectionByThreadId, sectionsById, view]);
 
   // Reveal once per navigation (and once when the store finishes loading).
   // Pending is tracked separately: if data has not arrived, the request stays
@@ -1218,11 +814,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     lastSeenThread.current = activeThreadId;
     // A hidden/filtered thread reveals its existing home and ancestors, so the
     // group heading that contains it opens rather than duplicating the row.
-    if (homeKindOf(reveal.sectionId) === "core") {
-      topGroupCollapsed.remove("core");
-    } else if (homeKindOf(reveal.sectionId) === "project") {
+    if (projectsGrouping && homeKindOf(reveal.sectionId) === "project") {
       topGroupCollapsed.remove("projects");
-    } else {
+    } else if (projectsGrouping) {
       topGroupCollapsed.remove("projects");
       expandedThreads.add("threads");
     }
@@ -1233,7 +827,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     if (reveal.updatedAgeKey) expandedAges.add(reveal.updatedAgeKey);
     if (reveal.collapsedGroupKey) collapsedGroups.remove(reveal.collapsedGroupKey);
     setExpandedParents((current) => new Set([...current, ...reveal.ancestors]));
-  }, [activeThreadId, reveal, expandedAges, collapsedGroups, expandedThreads, topGroupCollapsed]);
+  }, [activeThreadId, reveal, expandedAges, collapsedGroups, expandedThreads, topGroupCollapsed, projectsGrouping]);
 
   // Alt+ArrowUp/Down reorders the focused thread among its siblings, or the
   // focused project among native projects, as a keyboard alternative to
@@ -1245,15 +839,11 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       if (sectionId === undefined) return false;
       const section = sectionsById.get(sectionId);
       if (section === undefined) return false;
-      // An automatic conversation order disables manual moves in an ordinary
-      // home only; a Core home keeps its native sibling moves. Native projects
-      // stay recency-ordered, so they never take a manual sibling move.
+      // Native projects stay recency-ordered, so they never take a manual
+      // sibling move.
       if (homeKindOf(section.id) === "project") return false;
-      if (view.sortConversationsBy !== "manual" && homeKindOf(section.id) !== "core") {
-        return false;
-      }
       const scope = scopeOf(section, threadId);
-      const memberById = homeKindOf(section.id) !== "core" && shelf === "active"
+      const memberById = shelf === "active"
         ? new Map(section.members.map((member) => [member.id, member]))
         : null;
       const groupingView = section.personal ? view : { ...view, groupBy: "workspace" as const };
@@ -1275,7 +865,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           ageGroupOf: (child) => groupKeys.get(child) ?? null,
         });
       const sourceKey = groupKeyOf?.(threadId) ?? null;
-      const all = flattenShelf(section, shelf, (id) => managerIds.has(id) || expandedParents.has(id))
+      const all = flattenShelf(section, shelf, (id) => expandedParents.has(id))
         .filter((row) => scopeOf(section, row.thread.id) === scope)
         .filter((row) => groupKeyOf === null || sourceKey === null || groupKeyOf(row.thread.id) === sourceKey)
         .map((row) => row.thread.id);
@@ -1293,7 +883,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       );
       return true;
     },
-    [expandedParents, knownFolderIds, managerIds, now, sectionByThreadId, sectionsById, threadOrders, view.sortConversationsBy, visibleById],
+    [expandedParents, knownFolderIds, now, sectionByThreadId, sectionsById, threadOrders, view, visibleById],
   );
 
   const moveProjectWithinNative = useCallback(
@@ -1356,27 +946,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   const ctx = useMemo<TreeContext>(
     () => ({
-      coordinatorIds: managerIds,
-      onMove: setMovingThreadId,
-      canMove,
-      onStartProject: setStartingProjectThreadId,
-      canStartProject,
-      onHandOver: (threadId: string) => openAssociation(threadId, null, "handover"),
-      onReference: (threadId: string) => openAssociation(threadId, null, "reference"),
-      onRemoveFromCore: (threadId: string) => {
-        void moveMembershipRef.current(threadId, null).catch((error) => toast.error(String(error)));
-      },
-      coreRoleOf,
-      ownershipHintOf,
-      coreNameOf: (coreId: string) => coreNameById.get(coreId) ?? null,
-      onConfirmOwnership: (threadId: string, coreId: string) => {
-        void resolveLegacy(threadId, coreId, "ownership");
-      },
-      onKeepAsReference: (threadId: string, coreId: string) => {
-        void resolveLegacy(threadId, coreId, "reference");
-      },
-      canRemoveFromCore,
-      canAssociate,
       rawById,
       workspacePaths,
       primaryHostId,
@@ -1400,10 +969,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           ? { id: drag.state.overId, placement: drag.state.placement ?? "after" }
           : null,
       threadSections: chatFolders,
-      sectionsAvailable: folderStore.available,
       collapsedGroups: collapsedGroups.ids,
       onToggleGroup: collapsedGroups.toggle,
-      onMoveToFolder: setFolderMoveThreadId,
       onRemoveFromFolder: (threadId: string) => {
         void (async () => {
           const result = await applyFolderMoveRef.current(threadId, null);
@@ -1418,18 +985,17 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       },
       canPin,
       view,
-      /** Exact-generation status over a Core row's subtree, when it has one. */
-      statusOf: (threadId: string) => coreStatusByThread.get(threadId),
-      folderDropTarget: drag.state?.kind === "thread" ? drag.state.overTarget : null,
-      onOpenReferenceCore: (coreId: string) => {
-        void openReferenceCore(coreId);
+      statusOf: (threadId: string) => {
+        const thread = visibleById.get(threadId);
+        if (thread === undefined) return undefined;
+        return worstThreadStatus([thread, ...(descendantsById.get(threadId) ?? [])]);
       },
+      folderDropTarget: drag.state?.kind === "thread" ? drag.state.overTarget : null,
     }),
     [
-      managerIds, canMove, canStartProject, canAssociate, openAssociation, rawById, workspacePaths, primaryHostId, nativeProjects,
+      rawById, workspacePaths, primaryHostId, nativeProjects,
       activeThreadId,
       canPin,
-      coreStatusByThread,
       collapsedGroups,
       togglePin,
       expandedAges,
@@ -1446,101 +1012,15 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       onThreadDragStart,
       toggleChildren,
       visibleById,
-      coreRoleOf,
-      ownershipHintOf,
-      resolveLegacy,
-      canRemoveFromCore,
-      openReferenceCore,
-      coreNameById,
       view,
     ],
   );
 
   const liftedPins = useMemo(
-    () =>
-      collectLiftedPins(
-        sections.filter((section) => homeKindOf(section.id) !== "core"),
-        ctx,
-      ),
-    [ctx, sections],
+    () => collectLiftedPins(sections, ctx, projects.map((project) => project.id)),
+    [ctx, projects, sections],
   );
 
-  if (status === "loading") {
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
-        <p role="status" className="text-center text-xs text-muted-foreground">
-          Loading threads…
-        </p>
-      </div>
-    );
-  }
-  if (status === "error") {
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
-        <p role="status" className="text-center text-xs text-muted-foreground">
-          Could not load threads.
-        </p>
-      </div>
-    );
-  }
-
-  const visibleSections = sections;
-  const sectionKind = (section: ProjectSectionData): "core" | "project" | "chats" =>
-    section.personal ? "chats" : homeKindOf(section.id);
-  const coreSectionsVisible = visibleSections.filter(
-    (section) =>
-      sectionKind(section) === "core" &&
-      (managerByProject.has(section.id) || section.members.length > 0),
-  );
-  const nativeSectionsVisible = visibleSections.filter(
-    (section) =>
-      sectionKind(section) === "project" &&
-      (section.byShelf.active.length > 0 || section.byShelf.settled.length > 0 ||
-        (section.known && section.members.length === 0)),
-  );
-  const chatSectionsVisible = visibleSections.filter((section) => section.personal);
-
-  const renamingFolder = renamingFolderId
-    ? folderStore.sections.find((folder) => folder.id === renamingFolderId) ?? null
-    : null;
-  const deletingFolder = deletingFolderId
-    ? folderStore.sections.find((folder) => folder.id === deletingFolderId) ?? null
-    : null;
-  const folderMoveThread = folderMoveThreadId ? rawById.get(folderMoveThreadId) ?? null : null;
-  const folderMoveCurrent: string | null = (() => {
-    if (!folderMoveThreadId) return null;
-    const section = homeSectionOf(folderMoveThreadId);
-    if (!section) return null;
-    const root = familyRootId((id) => section.forest.parent.get(id) ?? null, folderMoveThreadId);
-    const rootSection = rawById.get(root)?.sectionId ?? null;
-    return rootSection !== null && knownFolderIds.has(rootSection) ? rootSection : null;
-  })();
-  const deletingFolderChats = (() => {
-    if (!deletingFolderId) return 0;
-    // A folder is global, so its families may sit in any ordinary home. Count
-    // each filed family once from the home that renders it.
-    const seen = new Set<string>();
-    let count = 0;
-    for (const section of sections) {
-      if (homeKindOf(section.id) === "core") continue;
-      for (const member of section.members) {
-        const root = familyRootId((id) => section.forest.parent.get(id) ?? null, member.id);
-        if (seen.has(root)) continue;
-        if ((rawById.get(root)?.sectionId ?? null) !== deletingFolderId) continue;
-        const stack = [root];
-        while (stack.length > 0) {
-          const current = stack.pop()!;
-          if (seen.has(current)) continue;
-          seen.add(current);
-          count += 1;
-          for (const child of section.forest.children.get(current) ?? []) stack.push(child.id);
-        }
-      }
-    }
-    return count;
-  })();
-
-  const [markReadBusy, setMarkReadBusy] = useState(false);
   const markAllRead = useCallback(async () => {
     if (unreadOrdinary.length === 0) return;
     setMarkReadBusy(true);
@@ -1566,16 +1046,22 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // descendant trees. A key for a group the view does not render is never
   // touched, so unrelated hidden preferences survive.
   const bulkTopGroupKeys = liftedPins.length > 0
-    ? ["core", "pinned", "projects"]
-    : ["core", "projects"];
-  const bulkSectionIds = visibleSections.map((section) => section.id);
+    ? ["pinned", "projects"]
+    : ["projects"];
+  const collapseSections = useMemo(
+    () => (projectsGrouping ? sections : [pooledSection]),
+    [pooledSection, projectsGrouping, sections],
+  );
+  const bulkSectionIds = useMemo(
+    () => collapseSections.map((section) => section.id),
+    [collapseSections],
+  );
   const bulkTargets = useMemo(
     () =>
       ordinaryCollapsibleTargets(
-        visibleSections.map((section) => ({
+        collapseSections.map((section) => ({
           id: section.id,
-            isCore: homeKindOf(section.id) === "core",
-            isPersonal: section.personal,
+          isPersonal: section.personal,
           members: section.members,
           childrenOf: (threadId) =>
             (section.forest.children.get(threadId) ?? []).map((thread) => thread.id),
@@ -1589,16 +1075,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           environmentOf: environmentIdentityOf,
         },
       ),
-    [environmentIdentityOf, knownFolderIds, now, ordinaryThreadStatus, view, visibleSections],
+    [collapseSections, knownFolderIds, now, view],
   );
-  const projectsGrouping = view.groupBy === "workspace";
-  const anyCollapsed =
-    bulkTopGroupKeys.some((key) => topGroupCollapsed.ids.has(key)) ||
-    (projectsGrouping && !expandedThreads.ids.has("threads")) ||
-    bulkSectionIds.some((id) => !expandedProjects.ids.has(id)) ||
-    [...bulkTargets.groupKeys].some((key) => collapsedGroups.ids.has(key)) ||
-    [...bulkTargets.ageKeys].some((key) => !expandedAges.ids.has(key)) ||
-    [...bulkTargets.parentIds].some((id) => !expandedParents.has(id));
   const expandAll = useCallback(() => {
     topGroupCollapsed.removeMany(bulkTopGroupKeys);
     expandedThreads.add("threads");
@@ -1620,6 +1098,71 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     });
   }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, expandedThreads, topGroupCollapsed]);
 
+  if (status === "loading") {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
+        <p role="status" className="text-center text-xs text-muted-foreground">
+          Loading threads…
+        </p>
+      </div>
+    );
+  }
+  if (status === "error") {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
+        <p role="status" className="text-center text-xs text-muted-foreground">
+          Could not load threads.
+        </p>
+      </div>
+    );
+  }
+
+  const nativeSectionsVisible = sections.filter(
+    (section) =>
+      !section.personal &&
+      (section.byShelf.active.length > 0 || section.byShelf.settled.length > 0 ||
+        (section.known && section.members.length === 0)),
+  );
+  const chatSectionsVisible = sections.filter((section) => section.personal);
+
+  const renamingFolder = renamingFolderId
+    ? folderStore.sections.find((folder) => folder.id === renamingFolderId) ?? null
+    : null;
+  const deletingFolder = deletingFolderId
+    ? folderStore.sections.find((folder) => folder.id === deletingFolderId) ?? null
+    : null;
+  const deletingFolderChats = (() => {
+    if (!deletingFolderId) return 0;
+    // A folder is global, so its families may sit in any ordinary home. Count
+    // each filed family once from the home that renders it.
+    const seen = new Set<string>();
+    let count = 0;
+    for (const section of sections) {
+      for (const member of section.members) {
+        const root = familyRootId((id) => section.forest.parent.get(id) ?? null, member.id);
+        if (seen.has(root)) continue;
+        if ((rawById.get(root)?.sectionId ?? null) !== deletingFolderId) continue;
+        const stack = [root];
+        while (stack.length > 0) {
+          const current = stack.pop()!;
+          if (seen.has(current)) continue;
+          seen.add(current);
+          count += 1;
+          for (const child of section.forest.children.get(current) ?? []) stack.push(child.id);
+        }
+      }
+    }
+    return count;
+  })();
+
+  const anyCollapsed =
+    bulkTopGroupKeys.some((key) => topGroupCollapsed.ids.has(key)) ||
+    (projectsGrouping && !expandedThreads.ids.has("threads")) ||
+    bulkSectionIds.some((id) => !expandedProjects.ids.has(id)) ||
+    [...bulkTargets.groupKeys].some((key) => collapsedGroups.ids.has(key)) ||
+    [...bulkTargets.ageKeys].some((key) => !expandedAges.ids.has(key)) ||
+    [...bulkTargets.parentIds].some((id) => !expandedParents.has(id));
+
   const viewMenu = (
     <SidebarViewMenu
       view={view}
@@ -1638,48 +1181,17 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       triggerClassName="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
     />
   );
+  const newChatAction = (
+    <NewProjectAction
+      projects={nativeChatProjects}
+      onSelect={openNativeProjectChat}
+    />
+  );
 
   const renderSection = (section: ProjectSectionData) => {
-    const kind = sectionKind(section);
-    const isCore = kind === "core";
-    const manager = managerByProject.get(section.id);
-    const coordinatorThreadId = manager?.coordinatorThreadId;
+    const kind = section.personal ? "chats" : homeKindOf(section.id);
     const sectionThreads = projectedThreads.filter((thread) => thread.projectId === section.id);
-    // A Core's counts come from its own exact-generation read. A stale or
-    // failed read is marked unavailable; a native Project home has no Core
-    // ledger and is simply unread, never unavailable.
-    const attentionState = manager ? coreAttention.get(manager.id) : undefined;
-    const exact = isCore
-      ? attentionState ?? EMPTY_CORE_EXACT_FACTS
-      : { observation: "current-read" as const, reviewThreadIds: new Set<string>(), failedThreadIds: new Set<string>(), queuedThreadIds: new Set<string>() };
-    const aggregate = summarizeSection(section.name, sectionThreads, exact);
-    // Handover count and Listening health are separate bounded facts, never
-    // folded into the status. A failed read says so instead of showing zero,
-    // and the handover indicator is independent of the attention observation:
-    // a current attention read does not make a failed handover read available.
-    const coreMeta: string[] = [];
-    if (isCore && attentionState) {
-      if (attentionState.handoversAwaiting === null) {
-        coreMeta.push("Handovers unavailable");
-      } else if (attentionState.handoversAwaiting > 0) {
-        coreMeta.push(
-          `${attentionState.handoversAwaiting} handover${attentionState.handoversAwaiting === 1 ? "" : "s"} waiting`,
-        );
-      }
-    }
-    // Unresolved attention the list cannot draw as a row (archived or absent
-    // from the native feed). The heading reveals it; a hidden thread with a
-    // native row opens directly, and an absent generation opens the Core.
-    const revealAttention = isCore ? aggregate.revealAttention : 0;
-    const revealAction = (() => {
-      if (!isCore || revealAttention <= 0 || !attentionState?.attention) return null;
-      const targets = reachableRevealTargets(
-        attentionState.attention.entries,
-        (id) => rawById.has(id),
-        archivedIds,
-      );
-      return planAttentionReveal(targets);
-    })();
+    const aggregate = summarizeSection(section.name, sectionThreads);
     const nativeId = section.id.startsWith(NATIVE_PROJECT_PREFIX)
       ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
       : null;
@@ -1690,49 +1202,21 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         ctx={ctx}
         status={aggregate.status}
         statusLabel={aggregate.statusLabel}
-        coreMeta={coreMeta}
-        revealAttention={revealAttention}
-        revealAttentionMore={isCore && aggregate.attentionHasMore}
-        revealAttentionTitle={revealAction?.title}
-        onRevealAttention={revealAction && managers.available && section.known
-          ? () => {
-              if (revealAction.kind === "thread") {
-                navigate.toThread(revealAction.threadId);
-                onNavigate();
-              } else {
-                void openProjectManager(section);
-              }
-            }
-          : undefined}
-        conflicted={isCore && manager ? conflictedCores.has(manager.id) : false}
-        isCore={isCore}
-        onReconcile={isCore && manager && conflictedCores.has(manager.id) && managers.available
-          ? () => { void reconcileCore(manager.id); }
-          : undefined}
-        ownershipStale={isCore && manager ? managers.ownershipObservation === "stale" : false}
-        moveTarget={isCore && manager ? manager.id : null}
-        isMoveTarget={isCore && manager ? drag.state?.moveToProject === manager.id : false}
-        managerActive={Boolean(activeThreadId && coordinatorThreadId === activeThreadId)}
-        managerOpening={openingManager === section.id}
-        onOpenManager={managers.available && isCore && section.known ? () => { void openProjectManager(section); } : undefined}
-        onDelete={managers.available && isCore && manager
-          ? () => setDeletingManager({ id: manager.id, name: section.name })
-          : undefined}
-        onReinitialize={managers.available && isCore && manager
-          ? () => setReinitializingManager({ id: manager.id, name: section.name })
-          : undefined}
         onNewThread={
-          isCore
-            ? undefined
-            : nativeId !== null && section.known
-              ? () => {
-                  actions.openNewThread({ projectId: nativeId, focusPrompt: true });
-                  onNavigate();
-                }
-              : undefined
+          nativeId !== null && section.known
+            ? () => {
+                actions.openNewThread({ projectId: nativeId, focusPrompt: true });
+                onNavigate();
+              }
+            : undefined
         }
         sectionOpen={expandedProjects.ids.has(section.id)}
         onToggleProject={() => expandedProjects.toggle(section.id)}
+        onDeleteProject={
+          kind === "project" && nativeId !== null && section.known
+            ? () => setDeletingProject({ id: nativeId, name: section.name, chats: sectionThreads.length })
+            : undefined
+        }
         canDragProject={kind === "project" && section.known}
         isDragging={drag.state?.kind === "project" && drag.state.movingId === section.id}
         dropPlacement={
@@ -1760,104 +1244,35 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         </p>
       ) : null}
 
-      {cores.length > 0 && managers.ownershipObservation !== "current-read" ? (
-        <p
-          role="status"
-          className="ps-ownership-status px-3 pb-1 text-2xs leading-tight text-warning-text"
-        >
-          {managers.ownershipObservation === "stale"
-            ? "Ownership status is stale. Homes are from the last verified read; moves are paused."
-            : "Ownership status is unavailable. Core homes are hidden until the manager returns."}
-        </p>
-      ) : null}
-
-      {unattributed.length > 0 && managers.available ? (
-        <div className="ps-unattributed-transfers px-3 pb-1">
-          <button
-            type="button"
-            onClick={() => { void reconcileUnattributed(); }}
-            title="Reconcile recorded ownership transfers that name no known source or receiver. Nothing is attributed without proof."
-            className="rounded text-left text-2xs leading-tight text-warning-text underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-          >
-            {unattributed.length} ownership transfer{unattributed.length === 1 ? "" : "s"} need reconciliation
-          </button>
-        </div>
-      ) : null}
-
-
       <div
         ref={listRef}
         onScroll={handleScroll}
         data-scrolling={scrolling}
         onFocusCapture={handleFocusCapture}
         onKeyDown={handleListKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 [scrollbar-width:auto] [scrollbar-color:auto] [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-foreground/20 data-[scrolling=true]:[&::-webkit-scrollbar-thumb]:bg-foreground/20 [&::-webkit-scrollbar-thumb:hover]:bg-foreground/40"
+        className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:auto] [scrollbar-color:auto] [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-foreground/20 data-[scrolling=true]:[&::-webkit-scrollbar-thumb]:bg-foreground/20 [&::-webkit-scrollbar-thumb:hover]:bg-foreground/40"
       >
         <p aria-live="polite" className="sr-only">
           {announcement}
         </p>
-          {movingThreadId ? <MoveToProjectDialog thread={rawById.get(movingThreadId)!} projects={cores}
-            currentProjectId={coreIndex.coreByMember.get(movingThreadId) ?? null}
-            onClose={() => setMovingThreadId(null)} onMove={(coreId) => moveMembership(movingThreadId, coreId)} /> : null}
-          {startingProjectThreadId && rawById.get(startingProjectThreadId) ? <StartProjectFromThreadDialog
-            key={startingProjectThreadId}
-            thread={rawById.get(startingProjectThreadId)!}
-            onClose={() => setStartingProjectThreadId(null)}
-            onStarted={(threadId) => {
-              setStartingProjectThreadId(null);
-              void managers.refresh();
-              if (threadId) { navigate.toThread(threadId); onNavigate(); }
-            }} /> : null}
-          {associating && rawById.get(associating.threadId) ? <AssociateToProjectDialog
-            key={`${associating.threadId}:${associating.projectId ?? ""}:${associating.mode}`}
-            thread={rawById.get(associating.threadId)!}
-            projects={cores}
-            initialProjectId={associating.projectId}
-            initialMode={associating.mode}
-            onClose={() => setAssociating(null)}
-            onDone={(message) => {
-              setAssociating(null);
-              void managers.refresh();
-              toast.success(message);
-            }} /> : null}
-          {deletingManager ? <DeleteProjectDialog
-            project={deletingManager}
-            onClose={() => setDeletingManager(null)}
-            onDelete={() => deleteManagedProject(deletingManager.id)}
-          /> : null}
-          {reinitializingManager ? <ReinitializeCoreDialog
-            core={reinitializingManager}
-            onClose={() => setReinitializingManager(null)}
-            onDone={(message) => { void managers.refresh(); toast.success(message); }} /> : null}
           {creatingProject ? <CreateNativeProjectDialog
             onClose={() => setCreatingProject(false)}
             onCreated={(project) => {
               setCreatingProject(false);
-              void managers.refresh();
               toast.success(`Project ${project.name} is ready.`);
-            }} /> : null}
-          {folderMoveThread ? <MoveToFolderDialog
-            key={folderMoveThreadId}
-            thread={folderMoveThread}
-            folders={chatFolders}
-            currentFolderId={folderMoveCurrent}
-            onClose={() => setFolderMoveThreadId(null)}
-            onMove={async (destination) => {
-              if (!folderMoveThreadId) return;
-              let target = destination;
-              if (destination !== null && destination.startsWith("new:")) {
-                const created = await folderStore.create(destination.slice("new:".length));
-                if (!created) throw new Error("The folder was not created.");
-                target = created.id;
-              }
-              const result = await applyFolderMoveRef.current(folderMoveThreadId, target);
-              const error = reportFolderMoveRef.current(folderMoveThreadId, target, result);
-              if (error !== null) throw new Error(error);
             }} /> : null}
           {renamingFolder ? <FolderNameDialog
             folder={renamingFolder}
             onClose={() => setRenamingFolderId(null)}
             onRename={async (name) => folderStore.rename(renamingFolder.id, name)} /> : null}
+          {deletingProject ? <DeleteProjectDialog
+            project={deletingProject}
+            chatCount={deletingProject.chats}
+            onClose={() => setDeletingProject(null)}
+            onDeleted={() => {
+              setDeletingProject(null);
+              setAnnouncement(`Project ${deletingProject.name} deleted.`);
+            }} /> : null}
           {deletingFolder ? <DeleteFolderDialog
             folder={deletingFolder}
             chatCount={deletingFolderChats}
@@ -1867,42 +1282,19 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
               if (removed === null) throw new Error("The folder was not deleted.");
               setAnnouncement(`Folder ${deletingFolder.name} deleted. Its chats returned to the dated chats.`);
             }} /> : null}
-          {creatingManager ? <ManagerCreate
-            key={creatingManager.id}
-            project={creatingManager}
-            onClose={() => setCreatingManager(null)}
-            onCreated={(threadId) => {
-              setCreatingManager(null);
-              void managers.refresh();
-              navigate.toThread(threadId);
-              onNavigate();
-            }}
-          /> : null}
           <AnimatedList as="div">
-            <GroupHeading
-              label="Cores"
-              open={!topGroupCollapsed.ids.has("core")}
-              onToggle={() => topGroupCollapsed.toggle("core")}
-              onCreate={!projectsGrouping ? () => setCreatingProject(true) : undefined}
-              createLabel={!projectsGrouping ? "New Project" : undefined}
-              tools={!projectsGrouping ? viewMenu : undefined}
-            >
-              {managers.available ? (
-                <NewProjectAction
-                  projects={nativeProjects}
-                  onSelect={(project) => setCreatingManager({ id: project.id, name: project.name })}
-                />
-              ) : null}
-            </GroupHeading>
-            {!topGroupCollapsed.ids.has("core")
-              ? coreSectionsVisible.map((section) => renderSection(section))
-              : null}
             {liftedPins.length > 0 ? (
               <>
                 <GroupHeading
                   label="Pinned"
                   open={!topGroupCollapsed.ids.has("pinned")}
                   onToggle={() => topGroupCollapsed.toggle("pinned")}
+                  tools={
+                    <>
+                      {viewMenu}
+                      {!projectsGrouping ? newChatAction : null}
+                    </>
+                  }
                 />
                 {!topGroupCollapsed.ids.has("pinned") ? (
                   <PinnedList items={liftedPins} ctx={ctx} />
@@ -1917,7 +1309,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
                   onToggle={() => topGroupCollapsed.toggle("projects")}
                   onCreate={() => setCreatingProject(true)}
                   createLabel="New Project"
-                  tools={viewMenu}
+                  tools={liftedPins.length === 0 ? viewMenu : undefined}
                 />
                 {!topGroupCollapsed.ids.has("projects") ? (
                   <>
@@ -1934,7 +1326,25 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
                 ) : null}
               </>
             ) : (
-              chatSectionsVisible.map((section) => renderSection(section))
+              <>
+                <section aria-label="Threads" className="mb-1 mt-3 min-h-8 first:mt-0">
+                  <ShelfList
+                    section={pooledSection}
+                    shelf="active"
+                    ctx={ctx}
+                    grouped
+                    omitPinned
+                    firstGroupTools={
+                      liftedPins.length === 0 ? (
+                        <>
+                          {viewMenu}
+                          {newChatAction}
+                        </>
+                      ) : undefined
+                    }
+                  />
+                </section>
+              </>
             )}
           </AnimatedList>
       </div>
@@ -1960,13 +1370,13 @@ function GroupHeading({
   children?: ReactNode;
 }) {
   return (
-    <div className="group/section mt-1.5 first:mt-0 flex items-center gap-1 pl-3 pr-1.5 pt-0.5">
+    <div className="group/section mt-3 first:mt-0 flex items-center gap-1 pl-3 pr-1.5 pt-1">
       <button
         type="button"
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
         aria-expanded={open}
         onClick={onToggle}
-        className="flex min-h-6 min-w-0 items-center gap-0.5 rounded py-0.5 text-left text-xs font-medium text-muted-foreground/55 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="flex min-h-7 min-w-0 items-center gap-0.5 rounded py-1 text-left text-xs font-medium text-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
       >
         <span className="truncate">{label}</span>
         <Icon
@@ -1998,174 +1408,110 @@ function ProjectSection({
   ctx,
   sectionOpen,
   onToggleProject,
+  onDeleteProject,
   onNewThread,
   canDragProject,
   isDragging,
   dropPlacement,
   onHeadingDragStart,
-  onOpenManager,
-  onDelete,
-  onReinitialize,
-  onReconcile,
-  managerActive,
-  managerOpening,
   status,
   statusLabel,
-  coreMeta,
-  revealAttention,
-  revealAttentionMore,
-  revealAttentionTitle,
-  onRevealAttention,
-  conflicted,
-  ownershipStale,
-  isCore,
-  moveTarget,
-  isMoveTarget,
 }: {
   section: ProjectSectionData;
-  onOpenManager?: (() => void) | undefined;
-  onDelete?: (() => void) | undefined;
-  onReinitialize?: (() => void) | undefined;
-  onReconcile?: (() => void) | undefined;
   status?: ThreadStatusKind | null;
   statusLabel?: string | undefined;
-  /** Separate handover facts, rendered below the Core heading. */
-  coreMeta?: readonly string[] | undefined;
-  /** Count of archived/absent unresolved attention the heading can reveal. */
-  revealAttention?: number | undefined;
-  /** True when the bounded attention list was truncated (more exist). */
-  revealAttentionMore?: boolean | undefined;
-  /** What the reveal action actually opens, stated truthfully. */
-  revealAttentionTitle?: string | undefined;
-  /** Opens a hidden unresolved thread, or the Core when none is reachable. */
-  onRevealAttention?: (() => void) | undefined;
-  conflicted?: boolean;
-  /** The verified ownership read is stale; home is retained, moves pause. */
-  ownershipStale?: boolean;
-  /** True for a Core section; native Project sections keep their own copy. */
-  isCore?: boolean;
-  moveTarget: string | null;
-  isMoveTarget: boolean;
-  managerActive: boolean;
-  managerOpening: boolean;
   ctx: TreeContext;
   sectionOpen: boolean;
   onToggleProject: () => void;
+  onDeleteProject?: (() => void) | undefined;
   onNewThread?: (() => void) | undefined;
   canDragProject: boolean;
   isDragging: boolean;
   dropPlacement: DropPlacement | null;
   onHeadingDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
-  // Presentation-only: keep the project's active conversations visible and
-  // preview a few inactive ones. The count reflects whole conversations, and
-  // the whole set stays one click away. Hooks run before the standalone branch
-  // so the section can sit in the same list without changing hook order.
-  const [showAllConversations, setShowAllConversations] = useState(false);
+  const [inactiveLimit, setInactiveLimit] = useState(DEFAULT_INACTIVE_CONVERSATIONS);
   const conversationPlan = useMemo(
     () =>
-      section.personal
-        ? { visible: new Set<string>(), hidden: new Set<string>(), hiddenConversations: 0 }
-        : planConversations(section, {
-            hiddenGroupIds: ctx.coordinatorIds,
-            activeThreadId: ctx.activeThreadId,
-          }),
-    [ctx.activeThreadId, ctx.coordinatorIds, section],
+      planConversations(section, {
+        activeThreadId: ctx.activeThreadId,
+        limit: inactiveLimit,
+      }),
+    [ctx.activeThreadId, inactiveLimit, section],
   );
-  const revealedConversations = useMemo(
-    () =>
-      showAllConversations
-        ? new Set([...conversationPlan.visible, ...conversationPlan.hidden])
-        : conversationPlan.visible,
-    [conversationPlan, showAllConversations],
-  );
-  // Collapsing a project returns it to the bounded preview, so reopening it
+  const revealedConversations = conversationPlan.visible;
+  // Collapsing a native project returns it to the first page, so reopening it
   // never silently dumps every historical conversation.
   useEffect(() => {
-    if (!sectionOpen) setShowAllConversations(false);
+    if (!sectionOpen) setInactiveLimit(DEFAULT_INACTIVE_CONVERSATIONS);
   }, [sectionOpen]);
+  // Minimal selected ancestor path, render-only: force-open collapsed
+  // ancestors so the active row stays reachable without touching the stored
+  // expansion preference.
+  const selectedPathIds = useMemo(
+    () => new Set(activePathIds(section, ctx.activeThreadId)),
+    [section, ctx.activeThreadId],
+  );
+
+  const showMore =
+    conversationPlan.hiddenConversations > 0 ? (
+      <button
+        type="button"
+        aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, conversationPlan.hiddenConversations)} more conversations`}
+        onClick={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
+        className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+      >
+        <span className="truncate">{`Show more (${conversationPlan.hiddenConversations})`}</span>
+      </button>
+    ) : null;
 
   if (section.personal) {
     return (
-      <section aria-label="Standalone chats" data-membership-target="standalone" className="min-h-8">
-        <ShelfList section={section} shelf="active" ctx={ctx} grouped omitPinned />
+      <section aria-label="Standalone chats" className="mb-1 mt-3 min-h-8 first:mt-0">
+        <ShelfList
+          section={section}
+          shelf="active"
+          ctx={ctx}
+          grouped
+          omitPinned
+          keepIds={revealedConversations}
+        />
+        {showMore}
       </section>
     );
   }
   const displayState = glyphStateForStatus(status ?? "idle");
   // Collapsing a project whose conversation is selected keeps just that
   // selected path visible, without touching the stored expansion preference.
-  // Navigating away (or opening the Core) drops it automatically.
-  const exceptionIds = useMemo(
-    () => new Set(activePathIds(section, ctx.activeThreadId, ctx.coordinatorIds)),
-    [section, ctx.activeThreadId, ctx.coordinatorIds],
-  );
+  const exceptionIds = selectedPathIds;
   const showCollapsedSelection = !sectionOpen && exceptionIds.size > 0;
-  // The label names the resolved status; the glyph is its resting mark.
   const activityLabel = statusLabel ?? ACTIVITY_LABELS[displayState];
   const disclosureLabel = sectionOpen
     ? `Collapse ${section.name}`
     : `Expand ${section.name}`;
-  const latestUpdatedAt = section.members.reduce(
-    (max, thread) => Math.max(max, thread.updatedAt),
-    0,
-  );
-  // Handover and unresolved-attention facts stay as heading notes. Listening
-  // health is not shown: Cursor's agent rows carry status on the right, not a
-  // second line of subscription copy.
-  const metaNodes: ReactNode[] = [];
-  if (ownershipStale) metaNodes.push("Ownership status stale; moves are paused.");
-  for (const item of coreMeta ?? []) metaNodes.push(item);
-  if ((revealAttention ?? 0) > 0 || revealAttentionMore) {
-    const label = `${revealAttention ?? 0}${revealAttentionMore ? "+" : ""} unresolved`;
-    const reveal = onRevealAttention ?? onOpenManager;
-    metaNodes.push(
-      reveal ? (
-        <button
-          key="reveal"
-          type="button"
-          title={revealAttentionTitle ?? "Open the Core for unresolved work"}
-          onClick={reveal}
-          className="rounded text-left underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-        >
-          {label}
-        </button>
-      ) : (
-        label
-      ),
-    );
-  }
+  const isEmpty = conversationPlan.visible.size === 0;
   return (
     <section
-      data-membership-target={moveTarget ?? undefined}
-      data-membership-over={isMoveTarget || undefined}
       aria-label={section.name}
       data-dragging={isDragging ? "true" : undefined}
       className={cn(
-        "mt-0 first:mt-0 transition-opacity duration-150 ease-out motion-reduce:transition-none",
-        sectionOpen && "[&+section]:mt-2",
+        "mt-2 first:mt-0 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+        sectionOpen && "mb-1.5 [&+section]:mt-4",
         isDragging && "opacity-50",
-        isMoveTarget && "rounded bg-primary/10 ring-1 ring-primary/40",
       )}
     >
       <SidebarActions label={section.name} onHold={onToggleProject} actions={[
         { label: sectionOpen ? "Collapse children" : "Expand children", run: onToggleProject },
-        ...(onOpenManager ? [{ label: "Open Core", run: onOpenManager }] : []),
-        ...(onNewThread ? [{ label: isCore ? "New thread" : "New chat", run: onNewThread }] : []),
-        ...(onReconcile ? [{ label: "Reconcile ownership transfer", run: onReconcile }] : []),
-        ...(onReinitialize ? [{ label: "Reinitialize Core", run: onReinitialize }] : []),
-        ...(onDelete ? [{ label: "Delete Core", run: onDelete, destructive: true }] : []),
+        ...(onNewThread ? [{ label: "New chat", run: onNewThread }] : []),
+        ...(onDeleteProject ? [{ label: "Delete project", run: onDeleteProject, destructive: true, separatorBefore: true }] : []),
       ]}>
       <div
         data-reorder-id={canDragProject ? section.id : undefined}
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
         className={cn(
-          "group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-0.5 pl-3 pr-1 transition-colors max-md:pointer-coarse:min-h-11",
-          sectionOpen && "mb-0.5",
-          managerActive
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "hover:bg-sidebar-accent/60",
+          "group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-1 pl-3 pr-1 max-md:pointer-coarse:min-h-11",
+          sectionOpen && "mb-1",
         )}
       >
         {dropPlacement !== null ? (
@@ -2177,13 +1523,10 @@ function ProjectSection({
             )}
           />
         ) : null}
-        {/* Identity/activity on the left; hover chevron overlays that slot. */}
         <span className="ps-status-slot relative flex w-4 shrink-0 items-center justify-center">
-          <span className="ps-heading-lead pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0 max-md:pointer-coarse:opacity-0">
+          <span className="ps-heading-lead flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0 max-md:pointer-coarse:opacity-0">
             <ProjectStatusGlyph
-              kind={isCore ? "core" : "project"}
-              working={headingIsWorking(status ?? "idle")}
-              badge={isCore ? coreStatusBadge(status ?? "idle", Boolean(conflicted)) : "none"}
+              open={sectionOpen}
               label={activityLabel}
             />
           </span>
@@ -2207,24 +1550,14 @@ function ProjectSection({
         </span>
         <button
           type="button"
-          title={onOpenManager ? `Open ${section.name}` : section.name}
-          aria-description="Opens the Core. Double-click to expand or collapse children. Hold, swipe left, the Actions control or Shift+F10 also work."
-          aria-current={managerActive ? "page" : undefined}
-          aria-busy={managerOpening || undefined}
+          title={section.name}
           onClick={(event) => {
             if (ctx.consumeSuppressedClick(section.id)) return;
-            if (onOpenManager) {
-              onOpenManager();
-              return;
-            }
-            // Groups without a Project Manager keep click-to-toggle. Ignore the
-            // second click of a double click so click+click nets one toggle.
             if (event.detail <= 1) onToggleProject();
           }}
-          onDoubleClick={onOpenManager ? () => onToggleProject() : undefined}
           className="flex min-h-5 min-w-0 shrink items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
         >
-          <span className={cn("ps-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/85", managerActive && "text-sidebar-accent-foreground")}>
+          <span className="ps-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/85">
             {section.name}
             {section.known ? null : (
               <span className="text-muted-foreground/50"> (unknown)</span>
@@ -2247,30 +1580,12 @@ function ProjectSection({
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
             )}
           >
-            <Icon name="Plus" className="size-3.5 max-md:pointer-coarse:size-5" />
+            <Icon name="MessageSquarePlus" className="size-3.5 max-md:pointer-coarse:size-5" />
           </button>
-        ) : null}
-        {isCore ? (
-          <TrailingMeta
-            updatedAt={latestUpdatedAt}
-            now={ctx.now}
-            showTime={ctx.view.show.updated}
-          />
         ) : null}
       </div>
 
       </SidebarActions>
-
-      {isCore && metaNodes.length > 0 ? (
-        <p className="ps-core-meta px-3 pb-0.5 text-2xs leading-tight text-muted-foreground/55" role="status">
-          {metaNodes.map((node, index) => (
-            <span key={index}>
-              {index > 0 ? " · " : ""}
-              {node}
-            </span>
-          ))}
-        </p>
-      ) : null}
 
       {(() => {
         const interior = showCollapsedSelection ? (
@@ -2278,42 +1593,28 @@ function ProjectSection({
             section={section}
             shelf="active"
             ctx={ctx}
-            grouped={!isCore}
-            omitPinned={!isCore}
+            grouped
+            omitPinned
             keepIds={exceptionIds}
             expandIds={exceptionIds}
           />
-        ) : !sectionOpen ? null : conversationPlan.visible.size === 0 ? (
+        ) : !sectionOpen ? null : isEmpty ? (
           <p className="px-3 py-1 text-xs text-muted-foreground/70">No threads</p>
         ) : (
-          <ShelfList
-            section={section}
-            shelf="active"
-            ctx={ctx}
-            grouped={!isCore}
-            omitPinned={!isCore}
-            keepIds={revealedConversations}
-            trailing={
-              conversationPlan.hiddenConversations > 0 ? (
-                <button
-                  type="button"
-                  aria-expanded={showAllConversations}
-                  onClick={() => setShowAllConversations((current) => !current)}
-                  className="ps-more-conversations flex min-h-7 w-full items-center rounded py-0.5 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
-                >
-                  <span aria-hidden className="shrink-0" style={{ width: TREE_CHILD_INDENT }} />
-                  <span className="truncate">
-                    {showAllConversations
-                      ? "Show fewer"
-                      : `Show more (${conversationPlan.hiddenConversations})`}
-                  </span>
-                </button>
-              ) : undefined
-            }
-          />
+          <>
+            <ShelfList
+              section={section}
+              shelf="active"
+              ctx={ctx}
+              grouped
+              omitPinned
+              keepIds={revealedConversations}
+            />
+            {showMore}
+          </>
         );
-        if (interior === null || isCore) return interior;
-        return <div className="ps-project-children pl-6">{interior}</div>;
+        if (interior === null) return interior;
+        return <div className="ps-project-children">{interior}</div>;
       })()}
 
     </section>

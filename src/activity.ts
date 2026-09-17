@@ -27,27 +27,4 @@ export function projectNeedsAttention(projectId: string, threads: readonly Plugi
   return threads.some((thread) => thread.projectId === projectId && !thread.isArchived && needsAttention(thread));
 }
 
-/** A delegated worker as the Project Manager reports its lifecycle. */
-export interface CompletedWorker {
-  coordinatorThreadId: string | null;
-  acceptedUpdatedAt: number | null;
-  settledAt: number | null;
-}
 
-/**
- * "Complete" is truthful only with accepted/completed worker history on record:
- * the Project Manager has accepted at least one delegated worker, or that worker
- * settled as an accepted outcome. A project whose only output is still awaiting
- * review claims nothing, so it stays inactive rather than lit.
- */
-export function projectHasCompletedWork(
-  coordinatorThreadId: string | null | undefined,
-  workers: readonly CompletedWorker[],
-): boolean {
-  if (!coordinatorThreadId) return false;
-  return workers.some(
-    (worker) =>
-      worker.coordinatorThreadId === coordinatorThreadId &&
-      (worker.acceptedUpdatedAt !== null || worker.settledAt !== null),
-  );
-}

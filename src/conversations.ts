@@ -1,21 +1,19 @@
 import { isWorking, needsAttention } from "./activity";
-import type { ProjectSectionData } from "./forest";
+import type { DisplayRow, ProjectSectionData } from "./forest";
 
 /**
  * Presentation-only conversation budget for one project.
  *
- * A project's Project Manager conversation is represented by the project
- * heading, not a row, so coordinator threads are transparent while grouping:
- * their direct children are the project's conversations. The budget keeps
- * every conversation that is actually doing something — executing, waiting on
- * the user, selected, or pinned — and previews only a small number of the
- * remaining inactive ones, newest first. Sidebar filters and extra grouping
- * (env/date/status) do not apply inside a project. Nothing here archives,
- * deletes or reorders: it returns the ids a bounded render should show and the
- * ids behind "N more conversations", and the full native tree stays available
- * when expanded.
+ * The budget keeps every conversation that is actually doing something —
+ * executing, waiting on the user, selected, or pinned — and previews a page
+ * of the remaining inactive ones, newest first. Each "Show more" reveals
+ * another page. Sidebar filters and extra grouping (env/date/status) do not
+ * apply inside a project. Nothing here archives, deletes or reorders: it
+ * returns the ids a bounded render should show and the ids behind "N more
+ * conversations", and the full native tree stays available when expanded.
  */
-export const DEFAULT_INACTIVE_CONVERSATIONS = 3;
+export const CONVERSATION_PAGE_SIZE = 10;
+export const DEFAULT_INACTIVE_CONVERSATIONS = CONVERSATION_PAGE_SIZE;
 
 export interface ConversationPlan {
   /** Members to render for the current reveal state. */
@@ -27,18 +25,15 @@ export interface ConversationPlan {
 }
 
 export interface ConversationPlanOptions {
-  /** Coordinator (Project Manager) threads; transparent for grouping. */
-  hiddenGroupIds: ReadonlySet<string>;
   activeThreadId: string | null;
   /** Inactive conversations previewed before the reveal control. */
   limit?: number;
 }
 
-/** The topmost non-coordinator ancestor: the conversation this thread belongs to. */
+/** The topmost ancestor: the conversation this thread belongs to. */
 function conversationRootOf(
   section: ProjectSectionData,
   threadId: string,
-  hiddenGroupIds: ReadonlySet<string>,
   memberIds: ReadonlySet<string>,
 ): string {
   let root = threadId;
@@ -47,12 +42,6 @@ function conversationRootOf(
   for (let step = 0; step < guard; step += 1) {
     const parent = section.forest.parent.get(cursor) ?? null;
     if (parent === null || !memberIds.has(parent)) break;
-    if (hiddenGroupIds.has(parent)) {
-      // A Project Manager heading stands in for the coordinator row; keep
-      // climbing so a worker under it still counts as a top-level conversation.
-      cursor = parent;
-      continue;
-    }
     root = parent;
     cursor = parent;
   }
@@ -75,19 +64,15 @@ export function planConversations(
 
   const rootOf = new Map<string, string>();
   for (const thread of section.members) {
-    rootOf.set(
-      thread.id,
-      conversationRootOf(section, thread.id, options.hiddenGroupIds, memberIds),
-    );
+    rootOf.set(thread.id, conversationRootOf(section, thread.id, memberIds));
   }
 
-  // Group visible (non-coordinator) members into conversation families in the
-  // section's display order. A family is the root plus every nested descendant.
+  // Group visible members into conversation families in the section's display
+  // order. A family is the root plus every nested descendant.
   const family = new Map<string, string[]>();
   const rootOrder: string[] = [];
   const seenRoot = new Set<string>();
   for (const thread of section.byShelf.active) {
-    if (options.hiddenGroupIds.has(thread.id)) continue;
     const root = rootOf.get(thread.id) ?? thread.id;
     const members = family.get(root);
     if (members) members.push(thread.id);
@@ -131,4 +116,58 @@ export function planConversations(
   }
 
   return { visible, hidden, hiddenConversations: remainder.length };
+}
+
+/**
+ * Page one grouped bucket (Today, a status, an environment): newest families
+ * first, then a hard page limit. The open chat is not injected on top, so
+ * toggling a heading cannot make a bonus row appear.
+ */
+export function pageGroupRows(
+  rows: readonly DisplayRow[],
+  parentOf: (threadId: string) => string | null,
+  options: ConversationPlanOptions,
+): { shown: DisplayRow[]; hiddenConversations: number } {
+  if (rows.length === 0) return { shown: [], hiddenConversations: 0 };
+  const limit = options.limit ?? DEFAULT_INACTIVE_CONVERSATIONS;
+  const ids = new Set(rows.map((row) => row.thread.id));
+  const rootOf = (threadId: string): string => {
+    let cursor = threadId;
+    const guard = ids.size + 1;
+    for (let step = 0; step < guard; step += 1) {
+      const parent = parentOf(cursor);
+      if (parent === null || !ids.has(parent)) return cursor;
+      cursor = parent;
+    }
+    return cursor;
+  };
+  const family = new Map<string, DisplayRow[]>();
+  const rootOrder: string[] = [];
+  for (const row of rows) {
+    const root = rootOf(row.thread.id);
+    const members = family.get(root);
+    if (members) members.push(row);
+    else {
+      family.set(root, [row]);
+      rootOrder.push(root);
+    }
+  }
+  const latestOf = (root: string): number => {
+    let latest = 0;
+    for (const member of family.get(root) ?? []) {
+      if (member.thread.updatedAt > latest) latest = member.thread.updatedAt;
+    }
+    return latest;
+  };
+  rootOrder.sort((left, right) => latestOf(right) - latestOf(left) || left.localeCompare(right));
+  const keepRoots = new Set(rootOrder.slice(0, Math.max(0, limit)));
+  const shown: DisplayRow[] = [];
+  for (const root of rootOrder) {
+    if (!keepRoots.has(root)) continue;
+    shown.push(...(family.get(root) ?? []));
+  }
+  return {
+    shown,
+    hiddenConversations: Math.max(0, rootOrder.length - keepRoots.size),
+  };
 }

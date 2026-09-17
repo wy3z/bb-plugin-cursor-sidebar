@@ -15,7 +15,6 @@ import {
   statusFilterPatch,
   type EnvironmentIdentity,
   type SidebarViewSync,
-  type ViewConversationOrder,
   type ViewGroupBy,
   type ViewStatusFilter,
 } from "./sidebar-view";
@@ -149,8 +148,8 @@ export function SidebarViewSyncNotice({
 
 /**
  * The compact view menu. It mirrors Cursor's organization as submenus
- * (Grouping, Ordering, Show, Filters) over the one persisted SidebarView, using
- * BB's theme tokens. Grouping is one radio: Projects, Updated, Status, or
+ * (Grouping, Show, Filters) over the one persisted SidebarView, using BB's
+ * theme tokens. Grouping is one radio: Projects, Updated, Status, or
  * Environment — selecting one replaces the current extra grouping; they never
  * stack. Radix menu primitives supply real arrow-key navigation, roving focus
  * and typeahead, so the radio and checkbox semantics work from the keyboard,
@@ -192,14 +191,14 @@ export function SidebarViewMenu({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          aria-label={notice === null ? "Customize sidebar view" : `Customize sidebar view. ${notice.text}`}
-          title={notice === null ? "Customize" : notice.text}
+          aria-label={notice === null ? "Filters" : `Filters. ${notice.text}`}
+          title={notice === null ? "Filters" : notice.text}
           className={
             triggerClassName ??
             "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
           }
         >
-          <Icon name="SlidersHorizontal" className="size-3.5" />
+          <Icon name="ListFilter" className="size-3.5" />
           {notice !== null ? (
             <Icon
               name={notice.tone === "warning" ? "AlertTriangle" : "CircleX"}
@@ -233,52 +232,6 @@ export function SidebarViewMenu({
                   <ChoiceItem value="status" label="Status" />
                   <ChoiceItem value="environment" label="Environment" />
                 </DropdownMenu.RadioGroup>
-              </DropdownMenu.SubContent>
-            </DropdownMenu.Portal>
-          </Section>
-
-          <Section>
-            <DropdownMenu.SubTrigger className={SUB_TRIGGER}>
-              <span className="min-w-0 flex-1 truncate">Ordering</span>
-              <Icon name="ChevronRight" className="size-3.5 shrink-0 text-muted-foreground/60" />
-            </DropdownMenu.SubTrigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.SubContent {...scope} sideOffset={4} alignOffset={-4} className={CONTENT}>
-                <DropdownMenu.Label className="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                  Conversations
-                </DropdownMenu.Label>
-                <DropdownMenu.RadioGroup
-                  value={view.sortConversationsBy}
-                  onValueChange={(value) =>
-                    onUpdate({ sortConversationsBy: value as ViewConversationOrder })
-                  }
-                >
-                  <ChoiceItem value="manual" label="Manual" hint="default" />
-                  <ChoiceItem value="updated" label="Updated" />
-                  <ChoiceItem value="status" label="Status" />
-                </DropdownMenu.RadioGroup>
-                {view.groupBy !== "workspace" ? (
-                  <>
-                    <DropdownMenu.Separator className="my-1 h-px bg-border" />
-                    <DropdownMenu.Label className="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                      Groups
-                    </DropdownMenu.Label>
-                    <DropdownMenu.RadioGroup
-                      value={view.sortGroupsBy}
-                      onValueChange={(value) =>
-                        onUpdate({ sortGroupsBy: value as "manual" | "updated" })
-                      }
-                    >
-                      <ChoiceItem value="manual" label="Default order" />
-                      <ChoiceItem value="updated" label="Most recent" />
-                    </DropdownMenu.RadioGroup>
-                  </>
-                ) : null}
-                {view.sortConversationsBy !== "manual" ? (
-                  <DropdownMenu.Label className="px-2 py-1 text-2xs leading-tight text-muted-foreground/60">
-                    Manual reorder is off while an automatic conversation order is selected.
-                  </DropdownMenu.Label>
-                ) : null}
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </Section>

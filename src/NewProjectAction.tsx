@@ -3,15 +3,14 @@ import { Icon } from "@/components/ui/icon";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 
 /**
- * The Core header create action: a small native `Plus` that is always visible.
- * Choosing a native Project opens the existing Core creation flow; creating a
- * Core never creates or rewrites a native Project.
+ * Header create action: BB's new-thread bubble. Choosing a native Project
+ * opens a new chat in that working directory.
  */
 export function NewProjectAction({
   projects,
   onSelect,
-  label = "New Core",
-  prompt = "Choose the Project for the new Core.",
+  label = "New chat",
+  prompt = "Choose the Project for the new chat.",
 }: {
   projects: readonly { id: string; name: string }[];
   onSelect: (project: { id: string; name: string }) => void;
@@ -28,7 +27,7 @@ export function NewProjectAction({
           title={label}
           className="ps-new-project flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
         >
-          <Icon name="Plus" className="size-3.5" />
+          <Icon name="MessageSquarePlus" className="size-3.5" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>

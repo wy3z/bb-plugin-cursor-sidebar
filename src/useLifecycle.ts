@@ -26,7 +26,6 @@ import { isWorking } from "./activity";
 export type LifecycleAction = "settle" | "unsettle";
 
 export interface LifecycleApi {
-  isManaged(thread: PluginSidebarThread): boolean;
   shelfFor(
     thread: PluginSidebarThread,
     descendants?: readonly PluginSidebarThread[],
@@ -64,7 +63,7 @@ function messageOf(cause: unknown): string {
  * realtime echo, and it reports failure through a toast so the caller never
  * has to swallow a rejected promise.
  */
-export function useLifecycle(managed: ReadonlyMap<string, { settledAt: number | null; acceptedUpdatedAt: number | null }>): LifecycleState {
+export function useLifecycle(): LifecycleState {
   const rpc = useRpc<typeof projectSidebarRpcContract>();
   const realtimeState = useRealtimeConnectionState();
   const [rows, setRows] = useState<ReadonlyMap<string, ThreadLifecycleRow>>(
@@ -151,22 +150,13 @@ export function useLifecycle(managed: ReadonlyMap<string, { settledAt: number | 
         ),
       };
     };
-    const isManaged = (thread: PluginSidebarThread) => managed.has(thread.id) ||
-      (thread.originPluginId === "project-manager" && thread.originKind !== "fork");
     return {
-      isManaged,
       shelfFor: (thread, descendants = []) => {
         const signals = signalsFor(thread, descendants);
-        if (!isManaged(thread)) return resolveShelf(rows.get(thread.id), signals);
-        const accepted = managed.get(thread.id);
-        // Compare with the reviewed native revision, not the later acceptance
-        // wall clock: a turn can start while the acceptance RPC is in flight.
-        if (!accepted || accepted.acceptedUpdatedAt === null ||
-            thread.updatedAt > accepted.acceptedUpdatedAt) return "active";
-        return resolveShelf({ threadId: thread.id, settledAt: accepted.settledAt }, signals);
+        return resolveShelf(rows.get(thread.id), signals);
       },
       canPark: (thread, descendants = []) =>
-        !isManaged(thread) && canPark(signalsFor(thread, descendants)),
+        canPark(signalsFor(thread, descendants)),
       settle: (threadId) =>
         runMutation(threadId, "settle", () =>
           rpc.call("settle", { threadId }),
@@ -176,7 +166,7 @@ export function useLifecycle(managed: ReadonlyMap<string, { settledAt: number | 
           rpc.call("unsettle", { threadId }),
         ),
     };
-  }, [managed, rows, rpc, runMutation]);
+  }, [rows, rpc, runMutation]);
 
   const isPending = useCallback(
     (threadId: string, action: LifecycleAction) =>

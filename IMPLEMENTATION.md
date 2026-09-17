@@ -1,8 +1,10 @@
+> Historical implementation notes. The current approved behavior is documented in [README.md](README.md); coordinator trees, explicit membership moves and removal of completion shelves supersede earlier UI decisions below.
+
 # Implementation notes
 
 Fresh standalone **Project Sidebar** add-on in
 `/home/wyez/Projects/Personal/bb-plugin-project-sidebar`. The earlier
-Commander/orchestration plans are discarded; the authoritative scope is the
+Coordinator/orchestration plans are discarded; the authoritative scope is the
 "Current UI revision" in `BRIEF.md`. Nothing outside this directory was
 modified.
 

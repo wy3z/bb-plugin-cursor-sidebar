@@ -5,14 +5,11 @@ import type { projectSidebarRpcContract } from "./server";
 import { derivedProjectName } from "./project-name";
 
 /**
- * Create a directory-backed native BB Project. This creates no Core and
- * attaches nothing managed: the new Project is an ordinary container for
- * threads, shown under Projects.
+ * Create a directory-backed native BB Project. The new Project is an ordinary
+ * container for threads, shown under Projects.
  *
- * The name is not user-editable. The manager's directory resolver derives it
- * from the folder and reuses an existing same host+path Project, so a typed
- * name could only be discarded or rename a reused Project. The dialog shows the
- * derived name instead and says plainly that an existing folder is reused.
+ * The name is not user-editable. It is derived from the folder, and an
+ * existing same host+path Project is reused instead of duplicating it.
  */
 export function CreateNativeProjectDialog({ onClose, onCreated }: {
   onClose(): void;
@@ -81,7 +78,7 @@ export function CreateNativeProjectDialog({ onClose, onCreated }: {
         <DialogHeader>
           <DialogTitle>New Project</DialogTitle>
           <DialogDescription>
-            Creates a directory-backed BB Project for ordinary chats. It starts no Core and attaches nothing managed.
+            Creates a directory-backed BB Project for ordinary chats.
             A folder that already backs a Project is reused, and its existing name is kept.
           </DialogDescription>
         </DialogHeader>
@@ -134,6 +131,58 @@ export function CreateNativeProjectDialog({ onClose, onCreated }: {
             onClick={() => { void submit(); }}
           >
             {busy ? "Creating…" : "Create Project"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Delete a native BB Project. This is the real native delete: the project and
+ * all of its threads go. The plugin's own order/visibility rows for it are
+ * keyed by project existence elsewhere, so stale entries cannot linger.
+ */
+export function DeleteProjectDialog({ project, chatCount, onClose, onDeleted }: {
+  project: { id: string; name: string };
+  chatCount: number;
+  onClose(): void;
+  onDeleted(): void;
+}) {
+  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+      <DialogContent className="ps-delete-dialog">
+        <DialogHeader>
+          <DialogTitle>Delete project</DialogTitle>
+          <DialogDescription>
+            Delete “{project.name}” and {chatCount === 0 ? "its threads" : `all ${chatCount} of its chat${chatCount === 1 ? "" : "s"}`}? This deletes the BB project itself, not just its sidebar entry.
+          </DialogDescription>
+        </DialogHeader>
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <button className="rounded px-3 py-2 text-sm" disabled={busy} onClick={onClose}>Cancel</button>
+          <button
+            className="rounded bg-destructive px-3 py-2 text-sm text-destructive-foreground"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await rpc.call("deleteNativeProject", { projectId: project.id });
+                  onDeleted();
+                  onClose();
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : String(cause));
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            {busy ? "Deleting…" : "Delete project"}
           </button>
         </div>
       </DialogContent>

@@ -211,8 +211,8 @@ function orderedMembers(
  * thread whose project is unknown gets its own section keyed by that id, so
  * two unrelated unknown projects never share a heading.
  *
- * `orderingFor` resolves the sibling ordering per section, so an ordinary view
- * ordering never reaches a Core home and Core keeps its native sibling order.
+ * `orderingFor` resolves the sibling ordering per section. Native project
+ * interiors stay newest-first; standalone chats keep stored sibling order.
  */
 export function buildSections(
   visible: readonly PluginSidebarThread[],
@@ -298,6 +298,7 @@ export function flattenShelf(
   isExpanded: (threadId: string) => boolean = () => true,
   includes: (threadId: string) => boolean = () => true,
   hasTrailingSibling: (threadId: string) => boolean = () => false,
+  childLimit: (threadId: string) => number = () => Number.POSITIVE_INFINITY,
 ): DisplayRow[] {
   const inShelf = new Set(section.byShelf[shelf].map((thread) => thread.id));
   const roots = section.byShelf[shelf].filter((thread) => {
@@ -311,9 +312,11 @@ export function flattenShelf(
     if (seen.has(thread.id)) return;
     seen.add(thread.id);
     const children = isExpanded(thread.id)
-      ? (section.forest.children.get(thread.id) ?? []).filter(
-          (child) => inShelf.has(child.id) && includes(child.id) && !seen.has(child.id),
-        )
+      ? (section.forest.children.get(thread.id) ?? [])
+          .filter(
+            (child) => inShelf.has(child.id) && includes(child.id) && !seen.has(child.id),
+          )
+          .slice(0, Math.max(0, childLimit(thread.id)))
       : [];
     const row: DisplayRow | null = includes(thread.id)
       ? { thread, depth, guides, opens: false }
@@ -342,13 +345,54 @@ export function scopeOf(
   return siblingScope(section.id, section.forest.parent.get(threadId) ?? null);
 }
 
+/** One pooled ordinary section for Updated / Status / Environment: every home's members sharing the standalone buckets. */
+export function buildPooledOrdinarySection(
+  homes: readonly ProjectSectionData[],
+  id: string,
+  name: string,
+): ProjectSectionData {
+  const members: PluginSidebarThread[] = [];
+  const parent = new Map<string, string | null>();
+  const children = new Map<string, PluginSidebarThread[]>();
+  const shelfById = new Map<string, ThreadShelf>();
+  const active: PluginSidebarThread[] = [];
+  const settled: PluginSidebarThread[] = [];
+  const scopeIds = new Map<string, readonly string[]>();
+  for (const home of homes) {
+    for (const thread of home.members) {
+      members.push(thread);
+      parent.set(thread.id, home.forest.parent.get(thread.id) ?? null);
+      children.set(thread.id, home.forest.children.get(thread.id) ?? []);
+    }
+    for (const thread of home.byShelf.active) {
+      shelfById.set(thread.id, "active");
+      active.push(thread);
+    }
+    for (const thread of home.byShelf.settled) {
+      shelfById.set(thread.id, "settled");
+      settled.push(thread);
+    }
+    for (const [scope, ids] of home.scopeIds) scopeIds.set(scope, ids);
+  }
+  return {
+    id,
+    name,
+    known: true,
+    personal: true,
+    members,
+    forest: { parent, children },
+    shelfById,
+    byShelf: { active, settled },
+    scopeIds,
+  };
+}
+
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /**
  * The visible ancestor chain from a section root down to `activeThreadId`, in
- * root-first order and excluding the Project Manager grouping rows (they are
- * represented by the heading). Empty when the active thread is not a member of
- * this section. Used to reveal and highlight the selected path.
+ * root-first order. Empty when the active thread is not a member of this
+ * section. Used to reveal and highlight the selected path.
  */
 export function activePathIds(
   section: ProjectSectionData,

@@ -60,7 +60,7 @@ export function ReadDot({ unread, label }: { unread: boolean; label?: string }) 
 
 /**
  * The row's left slot: live activity only. Idle chats keep the empty 16px box
- * so titles stay aligned with Core/Project icons; unread weight lives on the
+ * so titles stay aligned with Project icons; unread weight lives on the
  * title, and attention marks trail on the right.
  */
 export function RowStatusSlot({ thread }: { thread: PluginSidebarThread }) {
@@ -102,11 +102,11 @@ export function TrailingMeta({
 }
 
 export function trailingStatusKind(status: ThreadStatusKind | undefined): boolean {
-  return status === "input" || status === "failed" || status === "review" || status === "unavailable";
+  return status === "input" || status === "failed";
 }
 
 export function activityStatusKind(status: ThreadStatusKind | undefined): boolean {
-  return status === "working" || status === "queued";
+  return status === "working";
 }
 
 /**
@@ -127,11 +127,12 @@ export function ThreadLeadStatus({
     isWorking(thread) ||
     isActivityIndicator(thread.indicator);
   if (working) {
+    // BB's default thread-row spinner size (size-4).
     return (
       <Icon
         name="Loading"
         aria-label={label ?? "Working"}
-        className="size-3 shrink-0 animate-spin text-muted-foreground/50"
+        className="size-4 shrink-0 animate-spin text-muted-foreground/50"
       />
     );
   }
@@ -140,7 +141,7 @@ export function ThreadLeadStatus({
       ? "bg-destructive"
       : exactStatus === "input" || thread.indicator === "waiting-for-input"
         ? "bg-warning-text"
-        : exactStatus === "review" || thread.indicator === "unread-success"
+        : thread.indicator === "unread-success"
           ? "bg-timeline-accent"
           : thread.isUnread
             ? "bg-muted-foreground/65"
@@ -170,10 +171,9 @@ export function ThreadAge({ thread, now }: { thread: PluginSidebarThread; now: n
 }
 
 /**
- * The left slot for a Core-owned row whose exact generation carries a status
- * the native indicator cannot show. Draws the same glyph vocabulary as the
- * heading, only for the attention-bearing kinds; `idle` and `unread` fall back
- * to the read dot the caller renders.
+ * The left slot for a row whose computed status is stronger than the native
+ * indicator. Draws only the attention-bearing kinds; `idle` and `unread` fall
+ * back to the read dot the caller renders.
  */
 export function StatusFromKind({
   status,
@@ -189,14 +189,8 @@ export function StatusFromKind({
       return <Icon name="CircleX" aria-label={aria} className={cn(shared, "text-destructive")} />;
     case "input":
       return <Icon name="CircleQuestion" aria-label={aria} className={cn(shared, "text-muted-foreground/75")} />;
-    case "review":
-      return <Icon name="CircleCheck" aria-label={aria} className={cn(shared, "text-timeline-accent")} />;
-    case "queued":
-      return <Icon name="Spinner" aria-label={aria} className={cn(shared, "text-muted-foreground/60")} />;
     case "working":
       return <Icon name="Loading" aria-label={aria} className={cn("size-4 shrink-0 animate-spin text-muted-foreground/50")} />;
-    case "unavailable":
-      return <Icon name="AlertCircle" aria-label={aria} className={cn(shared, "text-muted-foreground/60")} />;
     default:
       return null;
   }

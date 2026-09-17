@@ -1,3 +1,5 @@
+> Historical implementation notes. The current approved behavior is documented in [README.md](README.md); coordinator trees, explicit membership moves and removal of completion shelves supersede earlier UI decisions below.
+
 # Project Sidebar integration review
 
 ## Trailing child indicator refinement — 2026-09-11
@@ -52,11 +54,11 @@ Accepted and running. Worker thr_guwtjtanc3 runtime stopped; thread remains visi
 
 ## Historical initial implementation review (superseded where above differs)
 
-Reviewed against BRIEF.md and the user's replacement of the Commander concept with native BB projects and Inbox-style thread lifecycle.
+Reviewed against BRIEF.md and the user's replacement of the Coordinator concept with native BB projects and Inbox-style thread lifecycle.
 
 ## Live checks completed
 
-Installed the local add-on with `bb plugin install . --yes` after coordinator typecheck/build passed. BB Appearance reports Automatic is using Project Sidebar. The previously disabled Inbox and project-manager plugins were left disabled.
+Installed the local add-on with `bb plugin install . --yes` after coordinator typecheck/build passed. BB Appearance reports Automatic is using Project Sidebar. The previously disabled Inbox and project-coordinator plugins were left disabled.
 
 - Native project headings match the current BB project roster; the empty bb-filetree-upstream project remains visible. No custom project objects are involved.
 - Expanded BB Projects and opened its completed implementation child.
@@ -64,7 +66,7 @@ Installed the local add-on with `bb plugin install . --yes` after coordinator ty
 - Keyboard Restore reattached that child under its parent and returned focus to its anchor.
 - Opened Snooze from keyboard, selected 30 minutes, observed the per-project Snoozed section and destination-toggle focus, then used Wake thread now. The child returned to its parent. Both temporary lifecycle changes were undone.
 - Manually collapsed and reopened the current project successfully.
-- Project-scoped New thread opened BB's native blank composer with bb-plugin-project-manager selected. No thread was submitted.
+- Project-scoped New thread opened BB's native blank composer with bb-plugin-project-coordinator selected. No thread was submitted.
 - Inspected the desktop layout and 1100×850 layout. Inspected the 390×844 drawer; project folding works and scoped New thread closes the drawer. The composer retains the requested project.
 - Temporary browser viewport override was reset.
 - No Project Sidebar errors in captured browser logs. Existing push-notifications bundle warnings are unrelated. Plugin backend reports running with zero handler errors.

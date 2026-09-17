@@ -41,11 +41,11 @@ export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = {
 };
 
 /**
- * Defaults recover the agreed view: the native Core / Projects / Chats homes
- * with date buckets on standalone chats only, the existing stored conversation
- * order, and every ordinary status and environment shown. Reset writes these
- * back without touching thread membership. Projects / Updated / Status /
- * Environment grouping is one exclusive choice.
+ * Defaults recover the agreed view: native Projects / Chats homes with date
+ * buckets on the pooled ordinary homes, the existing stored
+ * conversation order, and every ordinary status and environment shown.
+ * Reset writes these back without touching thread membership. Projects /
+ * Updated / Status / Environment grouping is one exclusive choice.
  */
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   groupBy: "updated",
@@ -184,7 +184,7 @@ export function coerceSidebarView(value: unknown): SidebarView {
 
 /** The ordinary status a row resolves to from the native feed alone. */
 export function ordinaryThreadStatus(thread: PluginSidebarThread): ViewStatusFilter {
-  const kind = resolveThreadStatus(threadStatusFacts(thread, false));
+  const kind = resolveThreadStatus(threadStatusFacts(thread));
   return ordinaryStatusFilterKind(kind);
 }
 
@@ -196,16 +196,11 @@ function ordinaryStatusFilterKind(kind: ThreadStatusKind): ViewStatusFilter {
     case "unread":
     case "idle":
       return kind;
-    // review, queued and unavailable are Core-observation facts. An ordinary
-    // row never resolves to them, so mapping any of them to idle would be a
-    // classification the feed did not make.
-    default:
-      return "idle";
   }
 }
 
 function ordinaryStatusRank(thread: PluginSidebarThread): number {
-  return THREAD_STATUS_RANK[resolveThreadStatus(threadStatusFacts(thread, false))];
+  return THREAD_STATUS_RANK[resolveThreadStatus(threadStatusFacts(thread))];
 }
 
 /** A row's execution environment, or null when it has no environment yet. */
@@ -286,9 +281,9 @@ export function conversationComparator(
 
 /**
  * The authoritative display parent within one ordinary home. A parent that
- * belongs to a different home (a Core, another Project or Chats) does not own
- * the child here, so the walk never crosses a home boundary. Mirrors the
- * display forest the renderer builds, before that forest exists.
+ * belongs to a different home (another Project or Chats) does not own the
+ * child here, so the walk never crosses a home boundary. Mirrors the display
+ * forest the renderer builds, before that forest exists.
  */
 export function homeDisplayParentOf(
   threads: readonly PluginSidebarThread[],
@@ -415,8 +410,6 @@ export function familyAwareComparator(
 }
 
 export interface OrdinaryFilterFacts {
-  /** A row already owned by a Core, which no ordinary filter may touch. */
-  isCoreHome: (thread: PluginSidebarThread) => boolean;
   /** Pinned or current family: shown with an explanation, never filtered out. */
   bypass: (thread: PluginSidebarThread) => boolean;
 }
@@ -441,11 +434,11 @@ function environmentAllowed(
 
 /**
  * Filter ordinary conversations by status and environment while keeping the
- * ancestry a surviving child needs. A Core-owned row is always kept. A native
- * Project member is always kept (project interiors ignore the selected filter).
- * A pinned or current family is always kept. Every ancestor of a kept row is
- * kept, so a match never detaches from its parent or loses its tree rails.
- * Nothing here mutates pin, folder, association or manual-order state.
+ * ancestry a surviving child needs. A pinned or current family is always
+ * kept. Every ancestor of a kept row is kept, so a match never detaches from
+ * its parent or loses its tree rails. Nothing here mutates pin, folder or
+ * manual-order state. The caller decides whether native project interiors
+ * bypass the filter.
  */
 export function filterOrdinaryThreads(
   threads: readonly PluginSidebarThread[],
@@ -456,7 +449,7 @@ export function filterOrdinaryThreads(
   const keep = new Set<string>();
   const matches = new Set<string>();
   for (const thread of threads) {
-    if (facts.isCoreHome(thread) || facts.bypass(thread)) {
+    if (facts.bypass(thread)) {
       keep.add(thread.id);
       continue;
     }
@@ -532,7 +525,6 @@ export function allEnvironmentFilterPatch(on: boolean): Partial<SidebarView> {
 /** One home's data needed to enumerate its real collapsible targets. */
 export interface CollapsibleHome {
   id: string;
-  isCore: boolean;
   /** Date buckets only render on standalone chats. */
   isPersonal?: boolean;
   members: readonly PluginSidebarThread[];
@@ -553,8 +545,7 @@ export interface CollapsibleTargets {
  * The real collapsible targets a view renders, using the same group keys the
  * renderer derives. Date keys exist only for the Updated grouping and only for
  * buckets that actually appear; generated Status/Environment keys only for
- * their grouping; pinned keys only when a pinned family renders. A Core home
- * contributes only its descendant trees, never generated groups.
+ * their grouping; pinned keys only when a pinned family renders.
  */
 export function ordinaryCollapsibleTargets(
   homes: readonly CollapsibleHome[],
@@ -573,7 +564,6 @@ export function ordinaryCollapsibleTargets(
     for (const thread of home.members) {
       if (home.childrenOf(thread.id).length > 0) parentIds.add(thread.id);
     }
-    if (home.isCore) continue;
     if (home.members.some((thread) => thread.isPinned)) groupKeys.add(`pinned:${home.id}`);
     const pinnedRoots = new Set<string>();
     const filedRoots = new Set<string>();
@@ -590,9 +580,14 @@ export function ordinaryCollapsibleTargets(
       }
     }
     if (view.groupBy === "workspace") continue;
-    // Extra grouping (Updated / Status / Environment) wraps standalone threads
-    // only. Cores and project folders stay unsplit.
+    // Extra grouping wraps the pooled ordinary section; per-home calls still
+    // wrap standalone threads only. Project folders stay unsplit.
     if (home.isPersonal === false) continue;
+    if (view.groupBy === "updated") {
+      // Today exists as a group even when empty, so bulk collapse/expand and
+      // reveal always have its key.
+      ageKeys.add(`age:${home.id}:Today`);
+    }
     const keys = ordinaryFamilyGroupKeys(home.members, view, {
       now: options.now,
       parentOf: home.parentOf,
@@ -695,7 +690,15 @@ export function groupOrdinaryRows(
   view: SidebarView,
   facts: OrdinaryGroupFacts,
 ): OrdinaryGroup[] {
-  if (rows.length === 0) return [];
+  if (rows.length === 0) {
+    // Today stays a standalone Updated group even with nothing in it, so the
+    // heading and its New thread affordance never vanish. Other empty date
+    // buckets stay hidden. Non-Updated groupings render no empty groups.
+    if (view.groupBy === "updated") {
+      return [{ key: "updated:Today", label: "Today", rows: [] }];
+    }
+    return [];
+  }
   if (view.groupBy === "workspace") {
     return [{ key: "__workspace__", label: null, rows: [...rows] }];
   }
@@ -733,15 +736,16 @@ export function groupOrdinaryRows(
     group.latestUpdatedAt = Math.max(group.latestUpdatedAt, aggregate.latestUpdatedAt);
   }
 
-  return [...groups.values()]
-    .sort((left, right) => {
-      if (view.sortGroupsBy === "updated") {
-        const byTime = right.latestUpdatedAt - left.latestUpdatedAt;
-        if (byTime !== 0) return byTime;
-      }
-      return left.canonical - right.canonical || left.key.localeCompare(right.key);
-    })
-    .map((group) => ({ key: group.key, label: group.label, rows: group.rows }));
+  const sorted = [...groups.values()].sort(
+    (left, right) => left.canonical - right.canonical || left.key.localeCompare(right.key),
+  );
+  if (view.groupBy === "updated" && !groups.has("updated:Today")) {
+    // No family landed in Today: keep the standalone empty Today group at its
+    // canonical head so the heading and its New thread affordance stay put.
+    // Other empty date buckets stay hidden.
+    sorted.unshift({ key: "updated:Today", label: "Today", canonical: AGE_GROUPS.indexOf("Today"), latestUpdatedAt: 0, rows: [] });
+  }
+  return sorted.map((group) => ({ key: group.key, label: group.label, rows: group.rows }));
 }
 
 /** Every distinct environment *group* in the loaded ordinary conversations. */
@@ -760,16 +764,14 @@ export function environmentFilterOptions(
 }
 
 /**
- * The unread ordinary conversations the bulk read marks. Core-owned rows,
- * coordinators and assigned Workers are excluded, so the action can never
- * accept or acknowledge managed work. Filtered-out rows are included because
- * the scope is the loaded ordinary set, not the visible rows.
+ * The unread ordinary conversations the bulk read marks. Filtered-out rows
+ * are included because the scope is the loaded ordinary set, not the visible
+ * rows.
  */
 export function unreadOrdinaryThreadIds(
   threads: readonly PluginSidebarThread[],
-  isManaged: (threadId: string) => boolean,
 ): string[] {
   return threads
-    .filter((thread) => !thread.isArchived && thread.isUnread && !isManaged(thread.id))
+    .filter((thread) => !thread.isArchived && thread.isUnread)
     .map((thread) => thread.id);
 }

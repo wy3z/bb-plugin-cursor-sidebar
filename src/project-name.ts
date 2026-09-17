@@ -1,8 +1,18 @@
 /**
- * The Project name the manager derives from a directory path, matching the
- * resolver's own convention (the last path segment). Pure so the composer's
- * read-only name preview is testable without the dialog.
+ * Derive a native Project name from a directory path (last path segment).
+ * Pure so the create-project dialog preview matches the backend.
  */
-export function derivedProjectName(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? "";
+const MAX_DERIVED_NAME = 200;
+
+/** Normalize a path for exact dedup without touching the filesystem. */
+export function normalizeDirectoryPath(path: string): string {
+  const trimmed = path.trim().replace(/\/+$/, "");
+  return trimmed.length === 0 ? "/" : trimmed;
+}
+
+export function derivedProjectName(path: string, hostName?: string | null): string {
+  const normalized = normalizeDirectoryPath(path);
+  const base = normalized.split(/[\\/]/).filter((segment) => segment.length > 0).pop();
+  const candidate = (base ?? hostName ?? "Workspace").trim();
+  return (candidate.length > 0 ? candidate : "Workspace").slice(0, MAX_DERIVED_NAME);
 }

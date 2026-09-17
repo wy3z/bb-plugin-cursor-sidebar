@@ -49,11 +49,8 @@
 }
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
-   left of the name (with a gap before the label). Working uses the stock
-   `Loading` spinner; idle Cores always use an orbit/orb until a picker exists;
-   idle native Projects use a smaller `Folder`. Provider logos are never
-   drawn on Core rows. Core last-updated time trails on the right. Native
-   project rows have no timestamp. */
+   left of the name (with a gap before the label). Native projects always use
+   a folder; live work is drawn on thread rows, never here. */}
 .ps-project-glyph {
   display: inline-flex;
   box-sizing: border-box;
@@ -86,8 +83,7 @@
   display: block;
 }
 
-/* Workspace/repo rows: title and subtitle sit tight; extra margin separates
-   the pair from neighbouring threads. */
+/* Workspace/repo rows: title and subtitle sit as one tight pair. */
 .ps-workspace-row .ps-thread-title {
   line-height: 1.2;
 }

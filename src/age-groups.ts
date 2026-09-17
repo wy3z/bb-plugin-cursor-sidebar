@@ -1,7 +1,7 @@
 import { flattenShelf, type DisplayRow, type ProjectSectionData } from "./forest";
 
 export const AGE_GROUPS = [
-  "Today", "Last 7 days", "Last 30 days", "Older",
+  "Today", "Yesterday", "Last 7 days", "Last 30 days", "Older",
 ] as const;
 export type AgeGroup = typeof AGE_GROUPS[number];
 
@@ -13,9 +13,10 @@ export function ageGroupKey(sectionId: string, group: AgeGroup): string {
  *
  * Uses native `updatedAt` (last thread activity), never `lastReadAt` or
  * observation state, so incidental reads do not reclassify a thread.
- * Cutoffs are 7 and 30 full calendar days before today, so any elapsed
- * label under 7d stays in Today/Last 7 days and any under 30d stays inside
- * Last 30 days. This is the published bucket API for the pinned/folder owner.
+ * Cutoffs are 1, 7 and 30 full calendar days before today, so any elapsed
+ * label under 1d stays in Today/Yesterday, any under 7d stays inside
+ * Last 7 days and any under 30d stays inside Last 30 days. This is the
+ * published bucket API for the pinned/folder owner.
  */
 export function bucketForTimestamp(timestamp: number, now: number): AgeGroup {
   const today = new Date(now);
@@ -26,6 +27,7 @@ export function bucketForTimestamp(timestamp: number, now: number): AgeGroup {
     return date.getTime();
   };
   if (timestamp >= boundary(0)) return "Today";
+  if (timestamp >= boundary(1)) return "Yesterday";
   if (timestamp >= boundary(7)) return "Last 7 days";
   if (timestamp >= boundary(30)) return "Last 30 days";
   return "Older";

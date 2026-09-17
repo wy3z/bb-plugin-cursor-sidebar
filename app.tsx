@@ -14,7 +14,7 @@ export default definePluginApp((app) => {
     id: "project-sidebar",
     title: "Project Sidebar",
     description:
-      "Collapsed project trees, standalone chats and aggregate project activity.",
+      "Native project trees, standalone chats, pins, folders and aggregate activity.",
     component: ProjectSidebar,
   });
 });

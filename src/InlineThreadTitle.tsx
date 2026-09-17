@@ -40,11 +40,15 @@ export function InlineThreadTitle({
   const editableTitle = threadEditableTitle(thread);
   const [draft, setDraft] = useState(editableTitle);
   const finished = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!editing) return;
     setDraft(editableTitle);
     finished.current = false;
+    // Commit-time autoFocus loses to the closing menu's focus restoration in
+    // the same flush, leaving typed text nowhere; take focus after commit.
+    inputRef.current?.focus({ preventScroll: true });
   }, [editing, editableTitle]);
 
   if (!editing) {
@@ -81,6 +85,7 @@ export function InlineThreadTitle({
   return (
     <input
       autoFocus
+      ref={inputRef}
       aria-label={`Rename ${title}`}
       value={draft}
       onFocus={(event) => event.currentTarget.select()}

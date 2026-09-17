@@ -1,6 +1,8 @@
+> Historical implementation notes. The current approved behavior is documented in [README.md](README.md); coordinator trees, explicit membership moves and removal of completion shelves supersede earlier UI decisions below.
+
 # Project Sidebar
 
-This is a fresh sidebar add-on. The user explicitly abandoned the Command/Commander model on 2026-09-11. Earlier orchestration-product plans do not apply here.
+This is a fresh sidebar add-on. The user explicitly abandoned the Command/Coordinator model on 2026-09-11. Earlier orchestration-product plans do not apply here.
 
 ## Current UI revision (user feedback, supersedes conflicting initial details)
 
@@ -43,7 +45,7 @@ Use BB's actual projects as the only project containers. Inside each project, di
 
 Standalone package and plugin ID: bb-plugin-project-sidebar / project-sidebar. Reuse source from /home/wyez/Projects/Personal/bb-plugin-t3sidebar where useful, keeping its MIT attribution. Its checkout and live lifecycle data remain untouched. The new plugin owns its own lifecycle storage; no implicit migration.
 
-No Commander objects, custom project database, orchestrator UI, notes/artifact panels, inbound subscriptions, or integration dependency on project-manager. No wholesale rollback or deletion of prior work. Do not register duplicate thread header actions while Inbox is installed. Register only the new sidebar and necessary plugin settings.
+No Coordinator objects, custom project database, orchestrator UI, notes/artifact panels, inbound subscriptions, or integration dependency on project-coordinator. No wholesale rollback or deletion of prior work. Do not register duplicate thread header actions while Inbox is installed. Register only the new sidebar and necessary plugin settings.
 
 Do not add tests, packages, commits, remotes, PRs, installs/reloads, or mutate real user threads. The BB scaffold already installed its dependencies. Build and typecheck locally; coordinator handles source review and live verification. Remove the generated todo/demo surfaces and demo skill from this new scaffold.
 
