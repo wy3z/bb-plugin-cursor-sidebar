@@ -115,6 +115,33 @@
   -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
 }
 
+/* Radix anchored surfaces grow from the point that opened them. */
+.ps-context-actions,
+.ps-new-project-dialog,
+.ps-project-icon-picker {
+  transform-origin: var(--radix-popover-content-transform-origin, center);
+}
+.ps-view-menu {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, center);
+}
+
+/* Live-work "shine" pulse for the icon status glyphs (Workflow, agents,
+   plan mode, goal). The class was referenced without a definition. */
+@keyframes ps-shine-icon {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+.animate-shine-icon {
+  animation: ps-shine-icon 1.6s ease-in-out infinite;
+}
+
+/* The lifted label that follows the pointer during a reorder drag. It mounts
+   on document.body outside the plugin scope, so it is styled inline; this is
+   the reduced-motion escape hatch and the transform channel hint. */
+.ps-drag-ghost {
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ps-project-glyph svg {
     animation: none !important;
@@ -122,6 +149,12 @@
   }
   .ps-status-slot svg {
     animation: none !important;
+    transition: none !important;
+  }
+  .animate-shine-icon {
+    animation: none !important;
+  }
+  .ps-drag-ghost {
     transition: none !important;
   }
 }

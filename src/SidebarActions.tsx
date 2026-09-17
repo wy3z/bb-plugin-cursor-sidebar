@@ -2,6 +2,8 @@ import { useRef, useState, type ReactNode } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { Icon } from "@/components/ui/icon";
+import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
+import { cn } from "@/lib/utils";
 import {
   ROW_SWIPE_ACTIVATE_PX,
   useRowGesture,
@@ -19,31 +21,41 @@ export function SidebarActions({ label, onHold, actions, swipe, children }: {
   const scope = usePortalScopeProps();
   const { gesture, swipeState } = useRowGesture(onHold ?? (() => setOpen(true)), () => setOpen(true), swipe);
   const offset = swipeState?.offset ?? 0;
+  const settling = swipeState?.settling ?? false;
   const swiping = offset !== 0;
+  const revealed = swiping || settling;
+  const direction = swiping ? Math.sign(offset) : (swipeState?.direction ?? 0);
   const armed = Math.abs(offset) >= ROW_SWIPE_ACTIVATE_PX;
   return <Popover.Root open={open} onOpenChange={setOpen} modal>
     <Popover.Anchor asChild>
       <div
-        className={`ps-gesture-row relative${swiping ? " overflow-hidden rounded-md" : ""}`}
+        className={cn("ps-gesture-row relative", revealed && "overflow-hidden rounded-md")}
         data-no-sidebar-swipe={swipe !== undefined ? "" : undefined}
         {...gesture}
       >
-        {swipe !== undefined && swiping ? (
+        {swipe !== undefined && revealed ? (
           <div
             aria-hidden="true"
-            className={
-              `pointer-events-none absolute inset-0 flex items-center gap-1.5 px-3 text-xs font-medium${offset < 0
-                ? " justify-end bg-destructive/10 text-destructive"
-                : " justify-start bg-sidebar-accent text-foreground"}${armed ? "" : " opacity-50"}`
-            }
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center gap-1.5 px-3 text-xs font-medium transition-opacity duration-200 ease-out motion-reduce:transition-none",
+              direction < 0
+                ? "justify-end bg-destructive/10 text-destructive"
+                : "justify-start bg-sidebar-accent text-foreground",
+              settling ? "opacity-0" : armed ? "opacity-100" : "opacity-50",
+            )}
           >
-            <Icon name={offset < 0 ? "Archive" : "Pin"} className="size-4" />
-            {offset < 0 ? swipe.leftLabel : (swipe.rightLabel ?? "")}
+            <Icon name={direction < 0 ? "Archive" : "Pin"} className="size-4" />
+            {direction < 0 ? swipe.leftLabel : (swipe.rightLabel ?? "")}
           </div>
         ) : null}
         <div
-          className={swiping ? "relative rounded-md bg-sidebar" : undefined}
-          style={swiping ? { transform: `translateX(${offset}px)` } : undefined}
+          className={revealed ? "relative rounded-md bg-sidebar" : undefined}
+          style={revealed ? {
+            transform: `translateX(${offset}px)`,
+            transition: settling && !swiping
+              ? "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)"
+              : "none",
+          } : undefined}
         >
           {children}
         </div>
@@ -64,7 +76,10 @@ export function SidebarActions({ label, onHold, actions, swipe, children }: {
         if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
         trigger.current?.focus({ preventScroll: true });
       }}
-      className="ps-context-actions z-50 grid w-auto min-w-48 max-w-[calc(100vw-2rem)] gap-0.5 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-md">
+      className={cn(
+        "ps-context-actions z-50 grid w-auto min-w-48 max-w-[calc(100vw-2rem)] gap-0.5 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-md",
+        ANCHORED_OVERLAY_MOTION,
+      )}>
       {actions.flatMap(action => [
         ...(action.separatorBefore ? [<div key={`${action.label}:separator`} aria-hidden className="mx-2 my-1 h-px bg-border" />] : []),
         <button key={action.label} type="button" onClick={() => { setOpen(false); action.run(); }}

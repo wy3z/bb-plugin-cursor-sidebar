@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Icon } from "@/components/ui/icon";
+import { cn } from "@/lib/utils";
 
 /** Distinguishes the two fixed thread sections from native project headings. */
 export function SectionDivider({ label, open, onToggle, onNewThread, shelfKey, title, tools }: {
@@ -25,9 +26,12 @@ export function SectionDivider({ label, open, onToggle, onNewThread, shelfKey, t
       >
         <span>{label}</span>
         <Icon
-          name={open ? "ChevronDown" : "ChevronRight"}
+          name="ChevronRight"
           aria-hidden="true"
-          className="size-3.5 shrink-0 text-muted-foreground/55 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground/55 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100",
+            open && "rotate-90",
+          )}
         />
       </button>
       {onNewThread ? (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { PROJECT_ICON_CATEGORIES } from "./project-icons";
@@ -92,7 +93,10 @@ export function ProjectIconPicker({
           align="start"
           sideOffset={4}
           onCloseAutoFocus={(event) => event.preventDefault()}
-          className="ps-project-icon-picker z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
+          className={cn(
+            "ps-project-icon-picker z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md",
+            ANCHORED_OVERLAY_MOTION,
+          )}
         >
           <input
             ref={searchRef}

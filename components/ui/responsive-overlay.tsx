@@ -10,6 +10,7 @@ import {
   preventOverlayTriggerSelection,
 } from "./overlay-trigger.js";
 import { useIsCompactViewport } from "./hooks/use-compact-viewport.js";
+import { usePrefersReducedMotion } from "./hooks/use-media-query.js";
 import { usePortalScopeProps } from "../../lib/portal-scope.js";
 import { cn } from "../../lib/utils.js";
 
@@ -522,8 +523,26 @@ export function PersistentResponsiveDrawerShell({
   const settledStateRef = React.useRef<boolean | null>(null);
   const labelId = React.useId();
   const portalScopeProps = usePortalScopeProps();
-  const transition = `transform ${motionDurationMs}ms ${PERSISTENT_DRAWER_EASING}`;
-  const backdropTransition = `opacity ${motionDurationMs}ms ${PERSISTENT_DRAWER_EASING}`;
+  const reducedMotion = usePrefersReducedMotion();
+  // The drawer enters on the steep iOS-like curve; reduced motion turns the
+  // travel into an instant swap, and the backdrop fades on a plain ease so the
+  // dimming does not inherit the drawer's aggressive start.
+  const transition = reducedMotion
+    ? "none"
+    : `transform ${motionDurationMs}ms ${PERSISTENT_DRAWER_EASING}`;
+  const backdropTransition = reducedMotion
+    ? "none"
+    : `opacity ${motionDurationMs}ms ease-out`;
+  const [moving, setMoving] = React.useState(false);
+  React.useEffect(() => {
+    if (reducedMotion) {
+      setMoving(false);
+      return;
+    }
+    setMoving(true);
+    const timeout = window.setTimeout(() => setMoving(false), motionDurationMs + 50);
+    return () => window.clearTimeout(timeout);
+  }, [motionDurationMs, open, reducedMotion]);
   const onOpenChangeRef = React.useRef(onOpenChange);
   React.useLayoutEffect(() => {
     onOpenChangeRef.current = onOpenChange;
@@ -695,7 +714,7 @@ export function PersistentResponsiveDrawerShell({
         style={{
           transform: open ? "translate3d(0, 0, 0)" : "translate3d(0, 100%, 0)",
           transition,
-          willChange: open ? "transform" : undefined,
+          willChange: moving && !reducedMotion ? "transform" : undefined,
         }}
         onTransitionEnd={(event) => {
           if (

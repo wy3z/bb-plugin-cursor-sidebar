@@ -685,7 +685,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         .filter((row) => scopeOf(commitSection, row.thread.id) === scope)
         .filter((row) => groupKeyOf === null || sourceKey === null || groupKeyOf(row.thread.id) === sourceKey)
         .map((row) => row.thread.id);
-      drag.startThread(event, commitSection.id, scope, ids, thread.id);
+      drag.startThread(event, commitSection.id, scope, ids, thread.id, threadDisplayTitle(thread));
     },
     [drag, expandedParents, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
   );
@@ -1235,7 +1235,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
             : null
         }
         onHeadingDragStart={(event) => {
-          drag.startProject(event, reorderableProjectIds, section.id);
+          drag.startProject(event, reorderableProjectIds, section.id, section.name);
         }}
       />
     );
@@ -1403,9 +1403,12 @@ function GroupHeading({
       >
         <span className="truncate">{label}</span>
         <Icon
-          name={open ? "ChevronDown" : "ChevronRight"}
+          name="ChevronRight"
           aria-hidden="true"
-          className="size-3.5 shrink-0 text-muted-foreground/55 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground/55 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100",
+            open && "rotate-90",
+          )}
         />
       </button>
       <span aria-hidden className="min-w-0 flex-1" />
@@ -1487,7 +1490,7 @@ function ProjectSection({
         type="button"
         aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, conversationPlan.hiddenConversations)} more conversations`}
         onClick={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
-        className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
       >
         <span className="truncate">{`Show more (${conversationPlan.hiddenConversations})`}</span>
       </button>
@@ -1579,7 +1582,13 @@ function ProjectSection({
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
             )}
           >
-            <Icon name={sectionOpen ? "ChevronDown" : "ChevronRight"} className="size-3.5 text-muted-foreground/55" />
+            <Icon
+              name="ChevronRight"
+              className={cn(
+                "size-3.5 text-muted-foreground/55 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                sectionOpen && "rotate-90",
+              )}
+            />
           </button>
         </span>
         <button
