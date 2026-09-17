@@ -8,10 +8,22 @@ import { useEffect, useRef, useState, type HTMLAttributes } from "react";
  */
 export const ROW_SWIPE_ACTIVATE_PX = 72;
 export const ROW_SWIPE_CLAMP_PX = 110;
-const ROW_SWIPE_LOCK_PX = 12;
-const ROW_SWIPE_VERTICAL_PX = 8;
+/**
+ * One slop for the whole touch. Past it the gesture is a scroll or a swipe and
+ * the hold is cancelled in the same breath, so there is no zone where the hold
+ * dies and nothing takes over. It doubles as the hold's drift tolerance: a
+ * still finger holds, a moving one swipes.
+ */
+const ROW_TOUCH_SLOP_PX = 8;
 /** Release below the commit threshold eases back over this long. */
 const ROW_SWIPE_SETTLE_MS = 220;
+/**
+ * Two-stage touch hold. A short hold arms a reorder, so holding then dragging
+ * moves the row; only a long hold with no movement opens the menu. Kept well
+ * apart so a paused drag never turns into a menu.
+ */
+const ROW_REORDER_ARM_MS = 250;
+const ROW_MENU_HOLD_MS = 650;
 
 /** Touch swipe actions for one row. Present means the swipe is armed. */
 export interface RowSwipeBinding {
@@ -49,6 +61,11 @@ export function useRowGesture(
   onHold: () => void,
   onMenu: () => void,
   swipe?: RowSwipeBinding,
+  /**
+   * Touch long-press reorder. It is offered after a short hold, and only takes
+   * the touch once the finger moves; a still long-press keeps its menu.
+   */
+  onReorderStart?: (pointerId: number, clientX: number, clientY: number) => boolean,
 ): {
   gesture: HTMLAttributes<HTMLElement>;
   swipeState: RowSwipeState | null;
@@ -99,11 +116,24 @@ export function useRowGesture(
         let dy = 0;
         let swipeLocked = false;
         const suppress = () => { suppressUntil.current = Date.now() + 1200; };
+        let curX = clientX;
+        let curY = clientY;
+        // A shorter hold than the menu only ARMS a reorder. If the finger then
+        // moves, the reorder takes the touch; if it stays still, the hold below
+        // still opens the menu, so a long-press never loses its menu.
+        let reorderArmed = false;
+        const armTimer = onReorderStart === undefined ? null : setTimeout(() => {
+          if (recognized || moved || swipeLocked) return;
+          reorderArmed = true;
+        }, ROW_REORDER_ARM_MS);
         const timer = setTimeout(() => {
+          // Only a still finger holds: if the touch has already started to
+          // move or swipe, the hold must not fire and open the menu.
+          if (moved || swipeLocked) return;
           recognized = true;
           suppress();
           callbacks.current.onHold();
-        }, 550);
+        }, ROW_MENU_HOLD_MS);
         const resetSwipe = (animate: boolean) => {
           swipeLocked = false;
           clearSettle();
@@ -122,6 +152,7 @@ export function useRowGesture(
         };
         const cleanup = () => {
           clearTimeout(timer);
+          if (armTimer !== null) clearTimeout(armTimer);
           window.removeEventListener("pointermove", move);
           window.removeEventListener("pointerup", up);
           window.removeEventListener("pointercancel", abort);
@@ -134,26 +165,45 @@ export function useRowGesture(
         const additional = (e: PointerEvent) => { if (e.pointerId !== pointerId) scroll(); };
         const move = (e: PointerEvent) => {
           if (e.pointerId !== pointerId) return;
+          curX = e.clientX;
+          curY = e.clientY;
           // A recognized hold owns the gesture: later movement can neither
           // arm a swipe nor reopen the menu, so hold and swipe never combine.
           if (recognized) return;
           dx = e.clientX - clientX; dy = e.clientY - clientY;
-          if (!swipeLocked && swipeArmed) {
-            // Direction lock: vertical wins early and the browser scrolls;
-            // horizontal past the lock owns the touch for the swipe. A
-            // vertical take-over cancels exactly like a scroll, so the
-            // release tap can never open the row mid-scroll.
-            if (Math.abs(dy) > ROW_SWIPE_VERTICAL_PX && Math.abs(dy) >= Math.abs(dx)) {
+          // Armed by the short hold: a vertical move hands the touch to the
+          // reorder, while a horizontal one is still the swipe, so a slow swipe
+          // never turns into a reorder.
+          if (reorderArmed && Math.hypot(dx, dy) >= ROW_TOUCH_SLOP_PX) {
+            if (Math.abs(dy) > Math.abs(dx)) {
+              reorderArmed = false;
+              recognized = true;
+              suppress();
+              onReorderStart?.(pointerId, curX, curY);
+              cleanup();
+              return;
+            }
+            reorderArmed = false;
+          }
+          if (!swipeLocked) {
+            // Below the slop the finger is still a candidate hold. Its tiny
+            // drift is tolerated so a steady hold can open the menu.
+            if (Math.hypot(dx, dy) < ROW_TOUCH_SLOP_PX) return;
+            // Past the slop the touch is a scroll or a swipe; the hold dies
+            // here, so no movement leaves the gesture dead.
+            clearTimeout(timer);
+            if (Math.abs(dy) >= Math.abs(dx)) {
               scroll();
               return;
             }
-            if (Math.abs(dx) >= ROW_SWIPE_LOCK_PX && Math.abs(dx) >= Math.abs(dy) * 1.5) {
-              swipeLocked = true;
+            if (!swipeArmed) {
+              moved = true;
+              suppress();
+              return;
             }
+            swipeLocked = true;
           }
           if (swipeLocked) {
-            dx = e.clientX - clientX; dy = e.clientY - clientY;
-            clearTimeout(timer);
             suppress();
             const offset = Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx));
             setSwipeState({
@@ -161,12 +211,6 @@ export function useRowGesture(
               settling: false,
               direction: offset < 0 ? -1 : offset > 0 ? 1 : 0,
             });
-            return;
-          }
-          if (Math.hypot(dx, dy) > 10) {
-            moved = true;
-            clearTimeout(timer);
-            suppress();
           }
         };
         const up = (e: PointerEvent) => {

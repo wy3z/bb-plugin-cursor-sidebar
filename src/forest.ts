@@ -58,6 +58,13 @@ export interface ProjectSectionData {
   byShelf: Readonly<Record<ThreadShelf, readonly PluginSidebarThread[]>>;
   /** Base sibling order per scope, used to merge a drag into the full set. */
   scopeIds: ReadonlyMap<string, readonly string[]>;
+  /**
+   * A pooled section renders threads from many homes under one id, so
+   * `section.id` no longer names a thread's real sibling scope. This maps each
+   * thread to its home scope so a drag still matches and writes to the right
+   * place. Absent on a per-home section, where the scope derives from the id.
+   */
+  scopeByThreadId?: ReadonlyMap<string, string>;
 }
 
 /** Total, stable order: newest first, id as the tie-breaker. */
@@ -343,7 +350,12 @@ export function scopeOf(
   section: ProjectSectionData,
   threadId: string,
 ): string {
-  return siblingScope(section.id, section.forest.parent.get(threadId) ?? null);
+  // A pooled section knows each thread's real home scope; a per-home section
+  // derives it from its own id.
+  return (
+    section.scopeByThreadId?.get(threadId) ??
+    siblingScope(section.id, section.forest.parent.get(threadId) ?? null)
+  );
 }
 
 /** One pooled ordinary section for Updated / Status / Environment: every home's members sharing the standalone buckets. */
@@ -359,11 +371,16 @@ export function buildPooledOrdinarySection(
   const active: PluginSidebarThread[] = [];
   const settled: PluginSidebarThread[] = [];
   const scopeIds = new Map<string, readonly string[]>();
+  const scopeByThreadId = new Map<string, string>();
   for (const home of homes) {
     for (const thread of home.members) {
       members.push(thread);
       parent.set(thread.id, home.forest.parent.get(thread.id) ?? null);
       children.set(thread.id, home.forest.children.get(thread.id) ?? []);
+      scopeByThreadId.set(
+        thread.id,
+        siblingScope(home.id, home.forest.parent.get(thread.id) ?? null),
+      );
     }
     for (const thread of home.byShelf.active) {
       shelfById.set(thread.id, "active");
@@ -385,6 +402,7 @@ export function buildPooledOrdinarySection(
     shelfById,
     byShelf: { active, settled },
     scopeIds,
+    scopeByThreadId,
   };
 }
 

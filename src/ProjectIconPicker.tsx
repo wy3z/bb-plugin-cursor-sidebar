@@ -105,7 +105,7 @@ export function ProjectIconPicker({
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder="Filter icons"
             aria-label="Filter icons"
-            className="mb-2 w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:py-2.5"
+            className="mb-2 w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring max-md:py-2.5 pointer-coarse:py-2.5"
           />
           <div ref={scrollRef} className="max-h-64 overflow-y-auto">
             <button
@@ -113,7 +113,7 @@ export function ProjectIconPicker({
               onClick={() => onPick(null)}
               aria-pressed={current === null}
               className={cn(
-                "mb-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:py-2.5",
+                "mb-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:py-2.5 pointer-coarse:py-2.5",
                 current === null && "bg-accent",
               )}
             >
@@ -191,7 +191,7 @@ function IconSection({
         <div
           role="group"
           aria-label={label}
-          className="grid grid-cols-8 gap-0.5 max-md:pointer-coarse:grid-cols-6"
+          className="grid grid-cols-8 gap-0.5 max-md:grid-cols-6 pointer-coarse:grid-cols-6"
         >
           {icons.map((name) => (
             <button
@@ -203,11 +203,11 @@ function IconSection({
               aria-pressed={current === name}
               onClick={() => onPick(name)}
               className={cn(
-                "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:size-10",
+                "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:size-10 pointer-coarse:size-10",
                 current === name && "bg-accent text-foreground",
               )}
             >
-              <Icon name={name} aria-hidden="true" className="size-4 max-md:pointer-coarse:size-5" strokeWidth={2} />
+              <Icon name={name} aria-hidden="true" className="size-4 max-md:size-5 pointer-coarse:size-5" strokeWidth={2} />
             </button>
           ))}
         </div>

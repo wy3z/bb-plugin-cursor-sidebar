@@ -50,7 +50,7 @@ Checked both the installed app and live DOM:
   working tone as `text-muted-foreground/50` (`/70` does not occur).
 - Live: native thread spinners render
   `data-icon="Loading"`, `animate-spin`, `text-muted-foreground/50`,
-  `size-4 max-md:pointer-coarse:size-5`, computed `oklab(0.78 0 0 / 0.5)`.
+  `size-4 max-md:size-5 pointer-coarse:size-5`, computed `oklab(0.78 0 0 / 0.5)`.
 - The project indicator renders the same `data-icon="Loading"`, `animate-spin`,
   `text-muted-foreground/50`, `size-4` and computed `oklab(0.78 0 0 / 0.5)`.
 

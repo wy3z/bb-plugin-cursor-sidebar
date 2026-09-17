@@ -199,7 +199,7 @@ export function SidebarViewMenu({
           title={notice === null ? "Customize" : notice.text}
           className={
             triggerClassName ??
-            "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+            "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
           }
         >
           <Icon name="ListFilter" className="size-3.5" />

@@ -85,7 +85,7 @@ export function StatusGlyph({
         <Icon
           name="CircleQuestion"
           aria-label={aria}
-          className={cn(shared, "text-muted-foreground/75")}
+          className={cn(shared, "text-sidebar-foreground/73")}
         />
       );
     case "runtime":
@@ -93,7 +93,7 @@ export function StatusGlyph({
         <Icon
           name="Loading"
           aria-label={aria}
-          className={cn("size-4 shrink-0", className, "animate-spin text-muted-foreground/50")}
+          className={cn("size-4 shrink-0", className, "animate-spin text-sidebar-foreground/73")}
         />
       );
     case "workflow":
@@ -112,7 +112,7 @@ export function StatusGlyph({
         <Icon
           name="Edit"
           aria-label={aria}
-          className={cn(shared, "text-muted-foreground")}
+          className={cn(shared, "text-sidebar-foreground/73")}
         />
       );
     case "unread-success":
@@ -148,7 +148,7 @@ function ShineIcon({
     <Icon
       name={name}
       aria-label={label}
-      className={cn("animate-shine-icon text-muted-foreground/50", className)}
+      className={cn("animate-shine-icon text-sidebar-foreground/73", className)}
     />
   );
 }

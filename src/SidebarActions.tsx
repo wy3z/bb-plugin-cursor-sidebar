@@ -13,13 +13,13 @@ import {
 export interface SidebarAction { label: string; run: () => void; destructive?: boolean; separatorBefore?: boolean }
 
 /** One context surface for right-click, keyboard, assistive technology and touch. */
-export function SidebarActions({ label, onHold, actions, swipe, children }: {
-  label: string; onHold?: () => void; actions: readonly SidebarAction[]; swipe?: RowSwipeBinding; children: ReactNode;
+export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, children }: {
+  label: string; onHold?: () => void; onReorderStart?: (pointerId: number, clientX: number, clientY: number) => boolean; actions: readonly SidebarAction[]; swipe?: RowSwipeBinding; children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const scope = usePortalScopeProps();
-  const { gesture, swipeState } = useRowGesture(onHold ?? (() => setOpen(true)), () => setOpen(true), swipe);
+  const { gesture, swipeState } = useRowGesture(onHold ?? (() => setOpen(true)), () => setOpen(true), swipe, onReorderStart);
   const offset = swipeState?.offset ?? 0;
   const settling = swipeState?.settling ?? false;
   const swiping = offset !== 0;
@@ -83,7 +83,7 @@ export function SidebarActions({ label, onHold, actions, swipe, children }: {
       {actions.flatMap(action => [
         ...(action.separatorBefore ? [<div key={`${action.label}:separator`} aria-hidden className="mx-2 my-1 h-px bg-border" />] : []),
         <button key={action.label} type="button" onClick={() => { setOpen(false); action.run(); }}
-          className={`rounded px-2.5 py-1.5 text-left text-sm whitespace-nowrap outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:py-2.5 ${action.destructive ? "text-destructive" : ""}`}>{action.label}</button>,
+          className={`rounded px-2.5 py-1.5 text-left text-sm whitespace-nowrap outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-ring max-md:py-2.5 pointer-coarse:py-2.5 ${action.destructive ? "text-destructive" : ""}`}>{action.label}</button>,
       ])}
     </Popover.Content></Popover.Portal>
   </Popover.Root>;

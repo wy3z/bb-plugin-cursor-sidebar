@@ -301,12 +301,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         setThreadParentRef.current(committed.movingId, committed.parentTargetId);
         return;
       }
-      if (
-        committed.kind === "thread" &&
-        committed.moveToSection === undefined &&
-        committed.pin === undefined &&
-        !manualOrderRef.current
-      ) {
+      // An automatic conversation order owns the list: a thread drag must not
+      // reorder, file, or (un)pin. Dropping over a divider would otherwise
+      // silently change filing or pin state on a move the user meant as a drag.
+      if (committed.kind === "thread" && !manualOrderRef.current) {
         return;
       }
       // Folder and pin headers own the drop: the family is filed or (un)pinned
@@ -695,19 +693,18 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   }, [applyFamilyPin, canPin, familyOf, homeSectionOf, rawById, visibleById]);
   commitFolderPinDropRef.current = commitFolderPinDrop;
 
-  const onThreadDragStart = useCallback(
+  // The ids a thread drag carries, from a pooled row to its native home's
+  // scope. Reorder stays inside one visible automatic group, so a drag never
+  // crosses groups, files, pins or duplicates a family.
+  const threadDragPlan = useCallback(
     (
-      event: ReactPointerEvent<HTMLElement>,
       section: ProjectSectionData,
       thread: PluginSidebarThread,
       shelf: ThreadShelf,
-    ) => {
-      // A pooled row commits to its native home's scope, never to the display bucket.
+    ): { commitSection: ProjectSectionData; scope: string; ids: string[] } => {
       const homeSection = sectionsById.get(sectionByThreadId.get(thread.id) ?? "") ?? section;
       const commitSection = section.id === pooledSectionRef.current.id ? homeSection : section;
       const scope = scopeOf(commitSection, thread.id);
-      // Reorder stays inside one visible automatic group, so a drag never
-      // crosses groups, files, pins or duplicates a family.
       const memberById = shelf === "active"
         ? new Map(commitSection.members.map((member) => [member.id, member]))
         : null;
@@ -738,9 +735,48 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         .filter((row) => scopeOf(commitSection, row.thread.id) === scope)
         .filter((row) => groupKeyOf === null || sourceKey === null || groupKeyOf(row.thread.id) === sourceKey)
         .map((row) => row.thread.id);
+      return { commitSection, scope, ids };
+    },
+    [expandedParents, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
+  );
+
+  const onThreadDragStart = useCallback(
+    (
+      event: ReactPointerEvent<HTMLElement>,
+      section: ProjectSectionData,
+      thread: PluginSidebarThread,
+      shelf: ThreadShelf,
+    ) => {
+      const { commitSection, scope, ids } = threadDragPlan(section, thread, shelf);
       drag.startThread(event, commitSection.id, scope, ids, thread.id, threadDisplayTitle(thread));
     },
-    [drag, expandedParents, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
+    [drag, threadDragPlan],
+  );
+
+  // The touch long-press pick-up, same payload, engaged at once.
+  const onThreadDragPickUp = useCallback(
+    (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      section: ProjectSectionData,
+      thread: PluginSidebarThread,
+      shelf: ThreadShelf,
+    ) => {
+      const { commitSection, scope, ids } = threadDragPlan(section, thread, shelf);
+      drag.startThreadPickUp(pointerId, clientX, clientY, commitSection.id, scope, ids, thread.id, threadDisplayTitle(thread));
+    },
+    [drag, threadDragPlan],
+  );
+
+  // Touch long-press pick-up for a project heading, over the same overlay order
+  // the mouse drag writes.
+  const onProjectDragPickUp = useCallback(
+    (pointerId: number, clientX: number, clientY: number, sectionId: string) => {
+      const name = displayProjects.find((project) => project.id === sectionId)?.name ?? "";
+      drag.startProjectPickUp(pointerId, clientX, clientY, reorderableProjectIds, sectionId, name);
+    },
+    [displayProjects, drag, reorderableProjectIds],
   );
 
   // Connected focus after a row moves.
@@ -1020,6 +1056,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       onToggleChildren: toggleChildren,
       focusThread,
       onThreadDragStart,
+      onThreadDragPickUp,
+      onProjectDragPickUp,
+      canReorderThreads: view.sortConversationsBy === "manual",
       consumeSuppressedClick: drag.consumeSuppressedClick,
       draggingThreadId: drag.state?.kind === "thread" ? drag.state.movingId : null,
       dropTarget:
@@ -1069,6 +1108,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       onNavigate,
       onNewThread,
       onThreadDragStart,
+      onThreadDragPickUp,
+      onProjectDragPickUp,
       toggleChildren,
       visibleById,
       view,
@@ -1160,7 +1201,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   if (status === "loading") {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
-        <p role="status" className="text-center text-xs text-muted-foreground">
+        <p role="status" className="text-center text-xs text-sidebar-foreground/73">
           Loading threads…
         </p>
       </div>
@@ -1169,7 +1210,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   if (status === "error") {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-6">
-        <p role="status" className="text-center text-xs text-muted-foreground">
+        <p role="status" className="text-center text-xs text-sidebar-foreground/73">
           Could not load threads.
         </p>
       </div>
@@ -1237,7 +1278,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       unreadOrdinaryCount={unreadOrdinary.length}
       markReadBusy={markReadBusy}
       onMarkAllRead={() => { void markAllRead(); }}
-      triggerClassName="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+      triggerClassName="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 data-[state=open]:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
     />
   );
   const newChatAction = (
@@ -1303,7 +1344,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       {viewFiltersActive ? (
         <p
           role="status"
-          className="ps-filter-note px-3 pb-1 text-2xs leading-tight text-muted-foreground/60"
+          className="ps-filter-note px-3 pb-1 text-2xs leading-tight text-sidebar-foreground/73"
         >
           Pinned and the open chat ignore the status and environment filters. Folders, pins and membership are unchanged.
         </p>
@@ -1454,14 +1495,14 @@ function GroupHeading({
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
         aria-expanded={open}
         onClick={onToggle}
-        className="flex min-h-7 min-w-0 items-center gap-0.5 rounded py-1 text-left text-xs font-medium text-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="flex min-h-7 min-w-0 items-center gap-0.5 rounded py-1 text-left text-xs font-medium text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
       >
         <span className="truncate">{label}</span>
         <Icon
           name="ChevronRight"
           aria-hidden="true"
           className={cn(
-            "size-3.5 shrink-0 text-muted-foreground/55 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100",
+            "size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             open && "rotate-90",
           )}
         />
@@ -1475,7 +1516,7 @@ function GroupHeading({
           aria-label={createLabel ?? `New ${label}`}
           title={createLabel ?? `New ${label}`}
           onClick={onCreate}
-          className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+          className="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
         >
           <Icon name="Plus" className="size-3.5" />
         </button>
@@ -1562,7 +1603,7 @@ function ProjectSection({
         type="button"
         aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, conversationPlan.hiddenConversations)} more conversations`}
         onClick={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
-        className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+        className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
       >
         <span className="truncate">{`Show more (${conversationPlan.hiddenConversations})`}</span>
       </button>
@@ -1570,7 +1611,7 @@ function ProjectSection({
 
   if (section.personal) {
     return (
-      <section aria-label="Standalone chats" className="mb-1 mt-3 min-h-8 first:mt-0">
+      <section aria-label="Standalone chats" className="mb-1 mt-1 min-h-8 first:mt-0">
         <ShelfList
           section={section}
           shelf="active"
@@ -1599,7 +1640,18 @@ function ProjectSection({
         isDragging && "opacity-50",
       )}
     >
-      <SidebarActions label={section.name} onHold={onToggleProject} actions={[
+      <SidebarActions
+        label={section.name}
+        onHold={onToggleProject}
+        onReorderStart={
+          canDragProject
+            ? (pointerId, clientX, clientY) => {
+                ctx.onProjectDragPickUp(pointerId, clientX, clientY, section.id);
+                return true;
+              }
+            : undefined
+        }
+        actions={[
         { label: sectionOpen ? "Collapse children" : "Expand children", run: onToggleProject },
         ...(onNewThread ? [{ label: "New chat", run: onNewThread }] : []),
         ...(onSetIcon ? [{ label: "Set icon…", run: () => {
@@ -1614,7 +1666,7 @@ function ProjectSection({
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
         className={cn(
-          "group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-1 pl-3 pr-1 max-md:pointer-coarse:min-h-11",
+          "group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-1 pl-3 pr-1 max-md:min-h-11 pointer-coarse:min-h-11",
           sectionOpen && "mb-1",
         )}
       >
@@ -1628,7 +1680,7 @@ function ProjectSection({
           />
         ) : null}
         <span className="ps-status-slot relative flex w-4 shrink-0 items-center justify-center">
-          <span className="ps-heading-lead flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0 max-md:pointer-coarse:opacity-0">
+          <span className="ps-heading-lead flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
             <ProjectStatusGlyph
               open={sectionOpen}
               icon={icon}
@@ -1647,14 +1699,14 @@ function ProjectSection({
               onToggleProject();
             }}
             className={cn(
-              "ps-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
-              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
+              "ps-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
           >
             <Icon
               name="ChevronRight"
               className={cn(
-                "size-3.5 text-muted-foreground/55 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                "size-3.5 text-sidebar-foreground/73 transition-transform duration-150 ease-out motion-reduce:transition-none",
                 sectionOpen && "rotate-90",
               )}
             />
@@ -1667,12 +1719,12 @@ function ProjectSection({
             if (ctx.consumeSuppressedClick(section.id)) return;
             if (event.detail <= 1) onToggleProject();
           }}
-          className="flex min-h-5 min-w-0 shrink items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+          className="flex min-h-5 min-w-0 shrink items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
         >
-          <span className="ps-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/85">
+          <span className="ps-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/95">
             {section.name}
             {section.known ? null : (
-              <span className="text-muted-foreground/50"> (unknown)</span>
+              <span className="text-sidebar-foreground/73"> (unknown)</span>
             )}
           </span>
         </button>
@@ -1687,12 +1739,12 @@ function ProjectSection({
               onNewThread();
             }}
             className={cn(
-              "ps-project-new flex size-4 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
-              "max-md:pointer-coarse:size-9",
-              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:pointer-coarse:opacity-100",
+              "ps-project-new flex size-4 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "max-md:size-9 pointer-coarse:size-9",
+              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
           >
-            <Icon name="MessageSquarePlus" className="size-3.5 max-md:pointer-coarse:size-5" />
+            <Icon name="MessageSquarePlus" className="size-3.5 max-md:size-5 pointer-coarse:size-5" />
           </button>
         ) : null}
       </div>
@@ -1721,7 +1773,7 @@ function ProjectSection({
         }
         if (!sectionOpen) return null;
         const interior = isEmpty ? (
-          <p className="px-3 py-1 text-xs text-muted-foreground/70">No threads</p>
+          <p className="px-3 py-1 text-xs text-sidebar-foreground/73">No threads</p>
         ) : (
           <>
             <ShelfList

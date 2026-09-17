@@ -16,7 +16,7 @@ export function ProjectChecklist({ projects, hiddenIds, onVisibilityChange }: {
           type="button"
           aria-label={`Project options: ${visibleCount} of ${projects.length} shown`}
           title="Show in sidebar"
-          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
         >
           <Icon name="ListTodo" className="size-3.5" />
         </button>

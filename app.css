@@ -14,7 +14,8 @@
   }
   [data-project-sidebar-root] [data-thread-row] { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
   [data-project-sidebar-root] .ps-child-toggle,
-  [data-project-sidebar-root] .ps-project-new { display: none; }
+  [data-project-sidebar-root] .ps-project-new,
+  [data-project-sidebar-root] .ps-project-disclosure { display: none; }
   [data-project-sidebar-root] .ps-thread-title {
     white-space: normal; overflow-wrap: anywhere; display: -webkit-box;
     -webkit-box-orient: vertical; -webkit-line-clamp: 2;
@@ -26,7 +27,6 @@
     overflow: hidden; overflow-wrap: anywhere;
   }
   [data-project-sidebar-root] .ps-thread-location { display: none; }
-  [data-project-sidebar-root] .ps-mobile-status { display: none; }
   [data-project-sidebar-root] .ps-thread-time { display: flex; }
   [data-project-sidebar-root] .ps-gesture-row { touch-action: pan-y; -webkit-touch-callout: none; }
   [data-project-sidebar-root] .ps-gesture-row a,
@@ -91,12 +91,12 @@
   line-height: 1.15;
 }
 
-/* Chevrons are a short stroke; 2.25 matches Plus at the default 1.5. */
+/* Chevrons are a short stroke; 2.75 reads heavier than the 1.5 default. */
 [data-project-sidebar-root] svg[data-icon="ChevronDown"] path,
 [data-project-sidebar-root] svg[data-icon="ChevronRight"] path,
 [data-project-sidebar-root] svg[data-icon="ChevronLeft"] path,
 [data-project-sidebar-root] svg[data-icon="ChevronUp"] path {
-  stroke-width: 2.25;
+  stroke-width: 2.75;
 }
 
 /* Long titles fade into the timestamp at rest. On hover they reserve space
@@ -140,6 +140,58 @@
    the reduced-motion escape hatch and the transform channel hint. */
 .ps-drag-ghost {
   will-change: transform;
+}
+
+/* BB's own sidebar chrome — the nav rows and the top-bar controls (toggle,
+   back/forward) — is not rendered here, but it shares the column and should
+   shade like our rows. The colours derive from the theme's sidebar foreground,
+   never a literal, so they follow the active theme. Tune the two percentages
+   to change the shade; everything below reads them. */
+:root {
+  --ps-nav-shade: 87%;
+  --ps-nav-shade-emphasis: 100%;
+}
+[aria-label="Sidebar navigation"] :is(button, a),
+[data-testid="app-sidebar-trigger-overlay"] button,
+[data-testid="app-sidebar-top-reserve-row"] button {
+  color: color-mix(in oklab, var(--sidebar-foreground) var(--ps-nav-shade), transparent);
+}
+[aria-label="Sidebar navigation"] :is(button, a):hover,
+[aria-label="Sidebar navigation"] :is(button, a):focus-visible,
+[aria-label="Sidebar navigation"] :is(button, a)[aria-current="page"],
+[data-testid="app-sidebar-trigger-overlay"] button:hover,
+[data-testid="app-sidebar-trigger-overlay"] button:focus-visible,
+[data-testid="app-sidebar-top-reserve-row"] button:hover,
+[data-testid="app-sidebar-top-reserve-row"] button:focus-visible {
+  color: color-mix(in oklab, var(--sidebar-foreground) var(--ps-nav-shade-emphasis), transparent);
+}
+
+/* Heading icon buttons (view menu, new project, new thread, the date "+"):
+   BB's own chrome shows a state-hover square, sized to the row rather than the
+   glyph. The surface is a pseudo so it can sit larger than the 16px slot
+   without moving the heading; an unlayered reset beats our Tailwind layer, so
+   these colours are declared unlayered. */
+.ps-icon-btn {
+  position: relative;
+}
+.ps-icon-btn::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.ps-icon-btn > svg {
+  position: relative;
+  z-index: 1;
+}
+.ps-icon-btn:hover::after,
+.ps-icon-btn:focus-visible::after {
+  background-color: var(--state-hover);
+}
+.ps-icon-btn:active::after,
+.ps-icon-btn[data-state="open"]::after {
+  background-color: var(--state-active);
 }
 
 @media (prefers-reduced-motion: reduce) {

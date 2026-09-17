@@ -41,7 +41,6 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 import { PullRequestMark } from "./PullRequestMark";
 import { RowContextMenu } from "./RowContextMenu";
 import {
-  StatusOrTime,
   ThreadAge,
   ThreadLeadStatus,
 } from "./StatusSlot";
@@ -78,6 +77,24 @@ export interface TreeContext {
     section: ProjectSectionData,
     thread: PluginSidebarThread,
     shelf: ThreadShelf,
+  ) => void;
+  /** Touch long-press pick-up: engage a reorder drag for a pointer already down. */
+  onThreadDragPickUp: (
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+    section: ProjectSectionData,
+    thread: PluginSidebarThread,
+    shelf: ThreadShelf,
+  ) => void;
+  /** True when an automatic conversation order is off, so dragging may reorder. */
+  canReorderThreads: boolean;
+  /** Touch long-press pick-up for a project heading reorder. */
+  onProjectDragPickUp: (
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+    sectionId: string,
   ) => void;
   consumeSuppressedClick: (threadId: string) => boolean;
   /** The row the pointer is over during a drag, for the placement line. */
@@ -120,10 +137,21 @@ const ROW_PAD = 12;
 const SLOT = 16;
 const STEP = 16;
 const ELBOW = STEP;
+/** The row's flex gap (Tailwind `gap-1.5`); it offsets the first indent. */
+const ROW_GAP = 6;
 /** Centre of the depth-0 status slot. */
 export const TREE_RAIL_X = ROW_PAD + SLOT / 2;
 /** Depth-1 spacer before the status slot; also the project-child indent. */
 export const TREE_CHILD_INDENT = STEP;
+
+/**
+ * x of the rail dropping from a row at `level` to its children. It must sit on
+ * that row's disc column: the layout adds the flex gap once on top of the
+ * indent, so a plain `level * STEP` drifts a gap left from the second level on.
+ */
+export function treeRailX(level: number): number {
+  return TREE_RAIL_X + level * STEP + (level >= 1 ? ROW_GAP : 0);
+}
 
 export interface LiftedPin {
   section: ProjectSectionData;
@@ -322,8 +350,19 @@ export function ShelfList({
       const row = rows[i]!;
       const levels = new Set<number>();
       const own = row.depth - 1;
+      // An ancestor level is bright only along the segment that actually reaches
+      // the next node on the path. Past that node's row the line is the quiet
+      // run to the remaining siblings, so the active row never lights it.
       for (let level = 0; level < own; level += 1) {
-        if (level < depth && ancestorIndex[level]! < i && i <= activeIndex) levels.add(level);
+        const segmentEnd = ancestorIndex[level + 1];
+        if (
+          level < depth &&
+          ancestorIndex[level]! < i &&
+          segmentEnd !== undefined &&
+          i <= segmentEnd
+        ) {
+          levels.add(level);
+        }
       }
       if (own >= 0 && own < depth && ancestorIndex[own]! < i && i <= activeIndex) {
         levels.add(own);
@@ -434,7 +473,7 @@ export function ShelfList({
                 type="button"
                 aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, more.remaining)} more child threads`}
                 onClick={() => bumpChildPage(more.parentId)}
-                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
               >
                 <span className="truncate">{`Show more (${more.remaining})`}</span>
               </button>
@@ -572,7 +611,7 @@ export function ShelfList({
                     return next;
                   });
                 }}
-                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
               >
                 <span className="truncate">{`Show more (${paged.hiddenConversations})`}</span>
               </button>
@@ -641,13 +680,13 @@ export function ShelfList({
       {grouping && firstGroupTools !== undefined && !(groups.length > 0 && groups[0]!.label !== null) ? (
         <div data-empty-fallback="true" className="mt-2 first:mt-0">
           <div className="group/section flex min-h-7 items-center gap-1 py-1 pl-3 pr-1.5">
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground/55">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground/73">
               {section.name}
             </span>
             {firstGroupTools}
           </div>
           {rows.length === 0 ? (
-            <p className="px-3 py-1 text-xs text-muted-foreground/70">
+            <p className="px-3 py-1 text-xs text-sidebar-foreground/73">
               {viewHasActiveFilters(ctx.view) ? "No threads match the current filters." : "No threads"}
             </p>
           ) : null}
@@ -690,7 +729,7 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
             aria-label={name}
             aria-expanded={open}
             onClick={onToggle}
-            className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded py-1 text-xs font-medium text-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+            className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded py-1 text-xs font-medium text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
           >
             <Icon name={open ? "FolderOpen" : "Folder"} className="size-3.5 shrink-0" strokeWidth={2} />
             <span className="truncate">{name}</span>
@@ -698,7 +737,7 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
               name="ChevronRight"
               aria-hidden="true"
               className={cn(
-                "size-3.5 shrink-0 text-muted-foreground/55 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100",
+                "size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
                 open && "rotate-90",
               )}
             />
@@ -744,7 +783,7 @@ function ThreadRow({
   const { splitProps, layout } = useSidebarThreadSplit(row.thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
 
-  const { thread, depth, guides, opens } = row;
+  const { thread, depth, guides } = row;
   const isActive = thread.id === ctx.activeThreadId;
   const scope = scopeOf(section, thread.id);
   const title = threadDisplayTitle(thread);
@@ -839,7 +878,7 @@ function ThreadRow({
     ctx.onThreadDragStart(event, section, thread, shelf);
   };
 
-  const ownRail = TREE_RAIL_X + (depth - 1) * STEP;
+  const ownRail = treeRailX(depth - 1);
   const parentCarriesOn = guides[depth - 1] ?? false;
   const indent = depth * STEP;
   // Only the rails that carry the selected thread's path take the selection
@@ -866,7 +905,7 @@ function ThreadRow({
             ctx.onNavigate();
           }}
           aria-label={`Parent thread: ${threadDisplayTitle(detachedParent)}`}
-          className="flex max-w-full items-center gap-1 truncate py-1 pl-6 pr-2 text-xs leading-none text-muted-foreground/80 hover:text-foreground max-md:pointer-coarse:min-h-9"
+          className="flex max-w-full items-center gap-1 truncate py-1 pl-6 pr-2 text-xs leading-none text-sidebar-foreground/73 hover:text-sidebar-foreground/90 max-md:min-h-9 pointer-coarse:min-h-9"
         >
           <Icon name="CornerDownRight" className="size-3 shrink-0" />
           <span className="truncate">{threadDisplayTitle(detachedParent)}</span>
@@ -883,6 +922,14 @@ function ThreadRow({
         onRename={() => setIsRenaming(true)}
         onOpen={() => ctx.onNavigate()}
         swipeDisabled={isRenaming}
+        onReorderStart={
+          ctx.canReorderThreads
+            ? (pointerId, clientX, clientY) => {
+                ctx.onThreadDragPickUp(pointerId, clientX, clientY, section, thread, shelf);
+                return true;
+              }
+            : undefined
+        }
       >
         <div
           data-thread-row=""
@@ -894,15 +941,15 @@ function ThreadRow({
           className={cn(
             "group/row relative flex items-center gap-1.5 rounded-md py-1 pl-3 pr-1 transition-colors",
             secondary && "ps-workspace-row",
-            "min-h-7 max-md:pointer-coarse:min-h-11",
+            "min-h-7 max-md:min-h-11 pointer-coarse:min-h-11",
             isActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60",
+              : "text-sidebar-foreground/95 hover:bg-sidebar-accent/60",
             !isActive && layout !== null && "bg-sidebar-accent/30",
             ctx.childDropTarget === thread.id && "bg-primary/10 ring-1 ring-primary/60",
             shelf === "settled" &&
               !isActive &&
-              "text-muted-foreground/70 hover:bg-sidebar-accent/25 hover:text-muted-foreground",
+              "text-sidebar-foreground/73 hover:bg-sidebar-accent/25 hover:text-sidebar-foreground/73",
           )}
         >
           {isDropTarget ? (
@@ -946,23 +993,40 @@ function ThreadRow({
                     "pointer-events-none absolute top-0 -bottom-px w-px",
                     railClass(level),
                   )}
-                  style={{ left: TREE_RAIL_X + level * STEP }}
+                  style={{ left: treeRailX(level) }}
                 />
               ),
           )}
           {depth > 0 ? (
             <>
-              <span
-                aria-hidden
-                className={cn(
-                  "pointer-events-none absolute top-0 w-px",
-                  railClass(depth - 1),
-                )}
-                style={{
-                  left: ownRail,
-                  height: parentCarriesOn ? "calc(100% + 1px)" : "50%",
-                }}
-              />
+              {activeElbow === true && parentCarriesOn ? (
+                <>
+                  {/* Any row on the active path ends the highlighted run at its
+                      own dot; the branch to the remaining siblings stays quiet. */}
+                  <span
+                    aria-hidden
+                    className={cn("pointer-events-none absolute top-0 w-px", railClass(depth - 1))}
+                    style={{ left: ownRail, height: "50%" }}
+                  />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute w-px bg-sidebar-border"
+                    style={{ left: ownRail, top: "50%", bottom: "-1px" }}
+                  />
+                </>
+              ) : (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute top-0 w-px",
+                    railClass(depth - 1),
+                  )}
+                  style={{
+                    left: ownRail,
+                    height: parentCarriesOn ? "calc(100% + 1px)" : "50%",
+                  }}
+                />
+              )}
               <span
                 aria-hidden
                 className={cn("pointer-events-none absolute h-px", elbowClass)}
@@ -970,53 +1034,45 @@ function ThreadRow({
               />
             </>
           ) : null}
-          {opens ? (
-            <span
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute -bottom-px w-px",
-                railClass(depth),
-              )}
-              style={{ left: TREE_RAIL_X + depth * STEP, top: "50%" }}
-            />
-          ) : null}
-
           {indent > 0 ? <span aria-hidden style={{ width: indent }} className="shrink-0" /> : null}
 
-          {hasChildren ? (
-            <button
-              type="button"
-              aria-label={`${expanded ? "Hide" : "Show"} ${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
-              aria-expanded={expanded}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                ctx.onToggleChildren(thread.id);
-              }}
-              style={{ left: ROW_PAD + indent }}
-              className="ps-child-toggle absolute top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-muted-foreground opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:opacity-100"
+          <span className="ps-status-slot pointer-events-none relative flex w-4 shrink-0 items-center justify-center">
+            {/* Only the status glyph yields to the overlay chevron. The slot
+                itself stays put, so the chevron centres on the dot at any
+                depth instead of drifting left with the indent gap. */}
+            <span
+              className={cn(
+                "pointer-events-none flex",
+                hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0",
+              )}
             >
-              <Icon
-                name="ChevronRight"
-                className={cn(
-                  "size-3 transition-transform duration-150 ease-out motion-reduce:transition-none",
-                  expanded && "rotate-90",
-                )}
+              <ThreadLeadStatus
+                thread={statusThread}
+                exactStatus={exactStatus}
+                label={rowStatus.label}
               />
-            </button>
-          ) : null}
-
-          <span className={cn(
-            "ps-status-slot pointer-events-none relative flex w-4 shrink-0 items-center justify-center",
-            // Desktop hover yields the slot to the overlay chevron; on touch
-            // widths the chevron is hidden by app.css, so the status stays.
-            hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0",
-          )}>
-            <ThreadLeadStatus
-              thread={statusThread}
-              exactStatus={exactStatus}
-              label={rowStatus.label}
-            />
+            </span>
+            {hasChildren ? (
+              <button
+                type="button"
+                aria-label={`${expanded ? "Hide" : "Show"} ${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
+                aria-expanded={expanded}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  ctx.onToggleChildren(thread.id);
+                }}
+                className="ps-child-toggle pointer-events-auto absolute inset-0 z-10 flex items-center justify-center text-sidebar-foreground/73 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:opacity-100 pointer-coarse:opacity-100"
+              >
+                <Icon
+                  name="ChevronRight"
+                  className={cn(
+                    "size-3 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                    expanded && "rotate-90",
+                  )}
+                />
+              </button>
+            ) : null}
           </span>
 
           {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
@@ -1040,9 +1096,8 @@ function ThreadRow({
               thread.isUnread && "font-medium",
             )}
           />
-          {secondary ? <span className="ps-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-muted-foreground/55" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
-          {location && ctx.view.show.host ? <span className="ps-thread-location hidden text-xs text-muted-foreground">{location}</span> : null}
-          <span className="ps-mobile-status hidden text-xs text-muted-foreground"><StatusOrTime thread={statusThread} now={ctx.now} showTime={ctx.view.show.updated} /></span>
+          {secondary ? <span className="ps-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          {location && ctx.view.show.host ? <span className="ps-thread-location hidden text-xs text-sidebar-foreground/73">{location}</span> : null}
           </div>
 
           <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
@@ -1052,7 +1107,7 @@ function ThreadRow({
             <span className="relative flex items-center self-stretch">
               <span
                 data-thread-actions=""
-                className="absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100"
+                className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 focus-within:opacity-100"
               >
                 {pinnedCapable ? (
                   <button
@@ -1064,7 +1119,7 @@ function ThreadRow({
                       event.stopPropagation();
                       ctx.onTogglePin(thread.id, !rowPinned);
                     }}
-                    className="pointer-events-auto flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                    className="pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                   >
                     <Icon name={rowPinned ? "PinOff" : "Pin"} className="size-3.5" />
                   </button>
@@ -1078,14 +1133,14 @@ function ThreadRow({
                     event.stopPropagation();
                     void actions.archive(thread.id);
                   }}
-                  className="pointer-events-auto flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                  className="pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                 >
                   <Icon name="Archive" className="size-3.5" />
                 </button>
               </span>
               {hasChildren ? (
                 <span
-                  className="ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-muted-foreground/55 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0"
+                  className="ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-sidebar-foreground/73 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0"
                   title={`${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
                   aria-hidden="true"
                 >
@@ -1093,7 +1148,7 @@ function ThreadRow({
                 </span>
               ) : null}
             </span>
-            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-muted-foreground/80">
+            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-sidebar-foreground/73">
               {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
             </span>
           </div>

@@ -56,6 +56,26 @@ export interface ReorderDrag {
     movingId: string,
     label?: string,
   ) => void;
+  /** Touch long-press: engage a project drag for a pointer already down. */
+  startProjectPickUp: (
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+    ids: readonly string[],
+    movingId: string,
+    label?: string,
+  ) => void;
+  /** Touch long-press: engage a thread drag for a pointer already down. */
+  startThreadPickUp: (
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+    sectionId: string,
+    scope: string,
+    ids: readonly string[],
+    movingId: string,
+    label?: string,
+  ) => void;
 }
 
 /** A lifted copy of the dragged row that follows the pointer. It lives on
@@ -163,8 +183,14 @@ export function useReorderDrag(
       initial: Omit<ReorderDragState, "overId" | "placement" | "overTarget" | "parentTargetId">,
       matches: (element: HTMLElement) => boolean,
       label: string,
+      /**
+       * Touch long-press pick-up: the drag is already engaged when this runs,
+       * so the mouse-only guards are skipped and the row lifts immediately
+       * under the finger that is still down.
+       */
+      engageNow = false,
     ) => {
-      if (event.button !== 0 || event.pointerType === "touch") return;
+      if (!engageNow && (event.button !== 0 || event.pointerType === "touch")) return;
       activeCancel.current?.();
       const pointerId = event.pointerId;
       const startX = event.clientX;
@@ -409,6 +435,9 @@ export function useReorderDrag(
       window.addEventListener("pointercancel", onCancel);
       window.addEventListener("keydown", onKey);
       activeCancel.current = cancel;
+      // A touch pick-up is already engaged: lift the ghost and start tracking
+      // the pointer that is still down, with no movement threshold.
+      if (engageNow) engage();
     },
     [suppressNextClick],
   );
@@ -452,9 +481,87 @@ export function useReorderDrag(
     return true;
   }, []);
 
+  /**
+   * Touch long-press pick-up for a thread: the pointer is already down, so the
+   * drag engages at once from the row itself instead of an event target.
+   */
+  const startThreadPickUp = useCallback(
+    (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      sectionId: string,
+      scope: string,
+      ids: readonly string[],
+      movingId: string,
+      label = "",
+    ) => {
+      const row = document.querySelector<HTMLElement>(
+        `[data-thread-row-id="${CSS.escape(movingId)}"]`,
+      );
+      const event = {
+        button: 0,
+        pointerType: "touch",
+        pointerId,
+        clientX,
+        clientY,
+        target: (row ?? document.body) as EventTarget,
+      } as unknown as ReactPointerEvent<HTMLElement>;
+      begin(
+        event,
+        { kind: "thread", sectionId, scope, movingId, ids: [...ids] },
+        (element) =>
+          element.dataset.reorderKind === "thread" &&
+          element.dataset.reorderScope === scope,
+        label,
+        true,
+      );
+    },
+    [begin],
+  );
+
+  /** Touch long-press pick-up for a project heading, the same way. */
+  const startProjectPickUp = useCallback(
+    (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      ids: readonly string[],
+      movingId: string,
+      label = "",
+    ) => {
+      const heading = document.querySelector<HTMLElement>(
+        `[data-reorder-kind="project"][data-reorder-id="${CSS.escape(movingId)}"]`,
+      );
+      const event = {
+        button: 0,
+        pointerType: "touch",
+        pointerId,
+        clientX,
+        clientY,
+        target: (heading ?? document.body) as EventTarget,
+      } as unknown as ReactPointerEvent<HTMLElement>;
+      begin(
+        event,
+        { kind: "project", sectionId: "", scope: "", movingId, ids: [...ids] },
+        (element) => element.dataset.reorderKind === "project",
+        label,
+        true,
+      );
+    },
+    [begin],
+  );
+
   return useMemo(
-    () => ({ state, consumeSuppressedClick, startProject, startThread }),
-    [consumeSuppressedClick, startProject, startThread, state],
+    () => ({
+      state,
+      consumeSuppressedClick,
+      startProject,
+      startThread,
+      startProjectPickUp,
+      startThreadPickUp,
+    }),
+    [consumeSuppressedClick, startProject, startProjectPickUp, startThread, startThreadPickUp, state],
   );
 }
 

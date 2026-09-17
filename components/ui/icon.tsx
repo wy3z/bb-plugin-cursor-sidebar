@@ -191,8 +191,8 @@ const CHEVRON_ICON_NAMES: ReadonlySet<string> = new Set([
   "ChevronUp",
 ]);
 
-/** Chevron paths are a short stroke; 2.25 matches Plus at the default 1.5. */
-const CHEVRON_STROKE_WIDTH = 2.25;
+/** Chevron paths are a short stroke; 2.75 reads heavier than the 1.5 default. */
+const CHEVRON_STROKE_WIDTH = 2.75;
 
 export interface IconProps {
   name: IconName;

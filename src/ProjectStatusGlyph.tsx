@@ -78,7 +78,7 @@ export function ProjectStatusGlyph({
       <Icon
         name={name}
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-muted-foreground/55"
+        className="size-3.5 shrink-0 text-sidebar-foreground/73"
         strokeWidth={2}
       />
       {badge !== null ? <ProjectStatusBadge status={badge} /> : null}
@@ -101,7 +101,7 @@ function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
           name="Loading"
           aria-hidden="true"
           strokeWidth={1.5}
-          className="size-3 animate-spin text-muted-foreground"
+          className="size-3 animate-spin text-sidebar-foreground/73"
         />
       ) : (
         <span aria-hidden="true" className={cn("size-1.5 rounded-full", tone)} />

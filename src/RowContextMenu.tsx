@@ -15,6 +15,7 @@ export function RowContextMenu({
   isPinned,
   onRemoveFromFolder,
   swipeDisabled,
+  onReorderStart,
   children,
 }: {
   thread: PluginSidebarThread;
@@ -27,6 +28,8 @@ export function RowContextMenu({
   isPinned?: boolean;
   onRemoveFromFolder?: () => void;
   swipeDisabled?: boolean;
+  /** Touch long-press pick-up for a reorder drag; true means it took over. */
+  onReorderStart?: (pointerId: number, clientX: number, clientY: number) => boolean;
 }) {
   const native = useSidebarThreadActions();
   // Native order (Open, Rename / read + pin / Archive, Delete) with the
@@ -57,7 +60,7 @@ export function RowContextMenu({
       };
   const hold = swipeDisabled ? undefined : onToggleChildren;
   return (
-    <SidebarActions label={threadDisplayTitle(thread)} onHold={hold} actions={actions} swipe={swipe}>
+    <SidebarActions label={threadDisplayTitle(thread)} onHold={hold} onReorderStart={onReorderStart} actions={actions} swipe={swipe}>
       {children}
     </SidebarActions>
   );

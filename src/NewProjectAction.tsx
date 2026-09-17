@@ -27,7 +27,7 @@ export function NewProjectAction({
           type="button"
           aria-label={label}
           title={label}
-          className="ps-new-project flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+          className="ps-new-project flex size-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
         >
           <Icon name="MessageSquarePlus" className="size-3.5" />
         </button>
@@ -44,9 +44,9 @@ export function NewProjectAction({
           )}
         >
           <p className="px-2 py-1 text-xs font-medium">{label}</p>
-          <p className="px-2 pb-1 text-xs text-muted-foreground">{prompt}</p>
+          <p className="px-2 pb-1 text-xs text-sidebar-foreground/73">{prompt}</p>
           {projects.length === 0 ? (
-            <p className="px-2 py-2 text-xs text-muted-foreground">No working directories available</p>
+            <p className="px-2 py-2 text-xs text-sidebar-foreground/73">No working directories available</p>
           ) : (
             <div className="max-h-72 overflow-y-auto">
               {projects.map((project) => (
