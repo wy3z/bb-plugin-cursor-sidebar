@@ -31,6 +31,11 @@ export interface ReorderDragState {
   placement: DropPlacement | null;
   /** The folder or pin header under the pointer, for its highlight. */
   overTarget: string | null;
+  /**
+   * The thread under the pointer's center band: dropping there reparents the
+   * dragged thread under it. Null means a reorder or filing drop instead.
+   */
+  parentTargetId: string | null;
 }
 
 export interface ReorderDrag {
@@ -113,9 +118,12 @@ function moveDragGhost(ghost: HTMLDivElement, x: number, y: number): void {
 export function useReorderDrag(
   onCommit: (state: ReorderDragState) => void,
   canMove: (threadId: string) => boolean = () => false,
+  canNest: (targetId: string, movingId: string) => boolean = () => false,
 ): ReorderDrag {
   const canMoveRef = useRef(canMove);
   canMoveRef.current = canMove;
+  const canNestRef = useRef(canNest);
+  canNestRef.current = canNest;
   const [state, setState] = useState<ReorderDragState | null>(null);
   const stateRef = useRef<ReorderDragState | null>(null);
   stateRef.current = state;
@@ -152,7 +160,7 @@ export function useReorderDrag(
   const begin = useCallback(
     (
       event: ReactPointerEvent<HTMLElement>,
-      initial: Omit<ReorderDragState, "overId" | "placement" | "overTarget">,
+      initial: Omit<ReorderDragState, "overId" | "placement" | "overTarget" | "parentTargetId">,
       matches: (element: HTMLElement) => boolean,
       label: string,
     ) => {
@@ -177,6 +185,7 @@ export function useReorderDrag(
         overId: null,
         placement: null,
         overTarget: null,
+        parentTargetId: null,
       };
       let currentSig = signatureOf(current);
       let engaged = false;
@@ -258,6 +267,7 @@ export function useReorderDrag(
               overId: null,
               placement: null,
               overTarget: `folder:${key}`,
+              parentTargetId: null,
             });
             return;
           }
@@ -272,6 +282,7 @@ export function useReorderDrag(
               overId: null,
               placement: null,
               overTarget: `pin:${key}`,
+              parentTargetId: null,
             });
             return;
           }
@@ -280,21 +291,60 @@ export function useReorderDrag(
         if (current.kind === "thread" && destination && canMoveRef.current(current.movingId)) {
           const targetId = destination.dataset.membershipTarget;
           if (targetId && current.sectionId !== (targetId === "standalone" ? "standalone-chats" : `managed:${targetId}`)) {
-            commit({ ...current, moveToProject: targetId === "standalone" ? null : targetId, moveToSection: undefined, pin: undefined, overId: null, placement: null, overTarget: null });
+            commit({ ...current, moveToProject: targetId === "standalone" ? null : targetId, moveToSection: undefined, pin: undefined, overId: null, placement: null, overTarget: null, parentTargetId: null });
             return;
           }
         }
         if (current.moveToProject !== undefined) {
-          commit({ ...current, moveToProject: undefined });
+          commit({ ...current, moveToProject: undefined, parentTargetId: null });
+        }
+        // The center band of a thread row nests the dragged thread under it;
+        // the edges still reorder. A nest target may sit outside the reorder
+        // scope, so it is resolved before the sibling match.
+        const nestRow = hit.closest<HTMLElement>("[data-reorder-id]");
+        const nestTargetId =
+          nestRow !== null && nestRow.dataset.reorderKind === "thread"
+            ? nestRow.dataset.reorderId
+            : undefined;
+        if (
+          current.kind === "thread" &&
+          nestRow !== null &&
+          nestTargetId !== undefined &&
+          nestTargetId !== current.movingId &&
+          canNestRef.current(nestTargetId, current.movingId)
+        ) {
+          const nestRect = nestRow.getBoundingClientRect();
+          const ratio = (y - nestRect.top) / nestRect.height;
+          if (ratio > 0.3 && ratio < 0.7) {
+            commit({
+              ...current,
+              parentTargetId: nestTargetId,
+              overId: null,
+              placement: null,
+              overTarget: null,
+              moveToProject: undefined,
+              moveToSection: undefined,
+              pin: undefined,
+            });
+            return;
+          }
         }
         const target = hit.closest<HTMLElement>("[data-reorder-id]");
-        if (target === null || !matches(target)) return;
+        if (target === null || !matches(target)) {
+          if (current.parentTargetId !== null) {
+            commit({ ...current, parentTargetId: null });
+          }
+          return;
+        }
         const targetId = target.dataset.reorderId;
         if (
           targetId === undefined ||
           targetId === current.movingId ||
           !current.ids.includes(targetId)
         ) {
+          if (current.parentTargetId !== null) {
+            commit({ ...current, parentTargetId: null });
+          }
           return;
         }
         const rect = target.getBoundingClientRect();
@@ -310,6 +360,7 @@ export function useReorderDrag(
           moveToSection: undefined,
           pin: undefined,
           overTarget: null,
+          parentTargetId: null,
         });
       };
       function onMove(moveEvent: PointerEvent) {
@@ -343,7 +394,7 @@ export function useReorderDrag(
         if (!wasEngaged || committed === null) return;
         setState(null);
         suppressNextClick(committed.movingId);
-        if (committed.moveToProject !== undefined || committed.moveToSection !== undefined || committed.pin !== undefined || committed.ids.join("\0") !== initial.ids.join("\0")) {
+        if (committed.moveToProject !== undefined || committed.moveToSection !== undefined || committed.pin !== undefined || committed.parentTargetId !== null || committed.ids.join("\0") !== initial.ids.join("\0")) {
           onCommitRef.current(committed);
         }
       }
@@ -416,6 +467,7 @@ function signatureOf(state: ReorderDragState): string {
     state.overId ?? "\u0000n",
     state.placement ?? "\u0000n",
     state.overTarget ?? "\u0000n",
+    state.parentTargetId ?? "\u0000n",
     state.ids.join("\u0001"),
   ].join("\u0002");
 }
