@@ -110,6 +110,13 @@ function cssEscape(value: string): string {
 }
 
 /**
+ * How long a collapsed project holds the selected-path exception list after the
+ * selection clears, so auto-animate can play the row's removal instead of the
+ * list unmounting it instantaneously.
+ */
+const COLLAPSED_ROW_EXIT_MS = 220;
+
+/**
  * Project-grouped thread list. BB's projects are the only containers, the
  * native personal container is shown as Threads, and settled threads sit in
  * one collapsed section under the thread list rather than a shelf per project.
@@ -1489,6 +1496,23 @@ function ProjectSection({
     () => new Set(activePathIds(section, ctx.activeThreadId)),
     [section, ctx.activeThreadId],
   );
+  // Collapsing a project whose conversation is selected keeps just that
+  // selected path visible, without touching the stored expansion preference.
+  const exceptionIds = selectedPathIds;
+  const showCollapsedSelection = !sectionOpen && exceptionIds.size > 0;
+  // Hold the exception list mounted briefly after the selection clears so the
+  // row's removal is a childList mutation the list's auto-animate can play,
+  // rather than the whole list unmounting the row instantly.
+  const [keepException, setKeepException] = useState(false);
+  useEffect(() => {
+    if (showCollapsedSelection) {
+      setKeepException(true);
+      return;
+    }
+    if (!keepException) return;
+    const timeout = window.setTimeout(() => setKeepException(false), COLLAPSED_ROW_EXIT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [keepException, showCollapsedSelection]);
 
   const showMore =
     conversationPlan.hiddenConversations > 0 ? (
@@ -1518,10 +1542,6 @@ function ProjectSection({
     );
   }
   const displayState = glyphStateForStatus(status ?? "idle");
-  // Collapsing a project whose conversation is selected keeps just that
-  // selected path visible, without touching the stored expansion preference.
-  const exceptionIds = selectedPathIds;
-  const showCollapsedSelection = !sectionOpen && exceptionIds.size > 0;
   const activityLabel = statusLabel ?? ACTIVITY_LABELS[displayState];
   const disclosureLabel = sectionOpen
     ? `Collapse ${section.name}`
@@ -1637,17 +1657,27 @@ function ProjectSection({
       </SidebarActions>
 
       {(() => {
-        const interior = showCollapsedSelection ? (
-          <ShelfList
-            section={section}
-            shelf="active"
-            ctx={ctx}
-            grouped
-            omitPinned
-            keepIds={exceptionIds}
-            expandIds={exceptionIds}
-          />
-        ) : !sectionOpen ? null : isEmpty ? (
+        // The collapsed exception list stays mounted through the exit window so
+        // its own list animation can play the selected row out. Its keepIds go
+        // empty as soon as the selection clears; the row is a removed child,
+        // not an unmounted subtree.
+        if (showCollapsedSelection || (!sectionOpen && keepException)) {
+          return (
+            <div className="ps-project-children">
+              <ShelfList
+                section={section}
+                shelf="active"
+                ctx={ctx}
+                grouped
+                omitPinned
+                keepIds={exceptionIds}
+                expandIds={exceptionIds}
+              />
+            </div>
+          );
+        }
+        if (!sectionOpen) return null;
+        const interior = isEmpty ? (
           <p className="px-3 py-1 text-xs text-muted-foreground/70">No threads</p>
         ) : (
           <>
@@ -1662,7 +1692,6 @@ function ProjectSection({
             {showMore}
           </>
         );
-        if (interior === null) return interior;
         return <div className="ps-project-children">{interior}</div>;
       })()}
 
