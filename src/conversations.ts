@@ -6,11 +6,12 @@ import type { DisplayRow, ProjectSectionData } from "./forest";
  *
  * The budget keeps every conversation that is actually doing something —
  * executing, waiting on the user, selected, or pinned — and previews a page
- * of the remaining inactive ones, newest first. Each "Show more" reveals
- * another page. Sidebar filters and extra grouping (env/date/status) do not
- * apply inside a project. Nothing here archives, deletes or reorders: it
- * returns the ids a bounded render should show and the ids behind "N more
- * conversations", and the full native tree stays available when expanded.
+ * of the remaining inactive ones in the section's display order. Each "Show
+ * more" reveals another page. Sidebar filters and extra grouping (env/date/
+ * status) do not apply inside a project. Nothing here archives, deletes or
+ * reorders: it returns the ids a bounded render should show and the ids behind
+ * "N more conversations", and the full native tree stays available when
+ * expanded.
  */
 export const CONVERSATION_PAGE_SIZE = 10;
 export const DEFAULT_INACTIVE_CONVERSATIONS = CONVERSATION_PAGE_SIZE;
@@ -119,9 +120,11 @@ export function planConversations(
 }
 
 /**
- * Page one grouped bucket (Today, a status, an environment): newest families
- * first, then a hard page limit. The open chat is not injected on top, so
- * toggling a heading cannot make a bonus row appear.
+ * Page one grouped bucket (Today, a status, an environment): the caller's
+ * display order, then a hard page limit. Families keep the selected
+ * conversation order — manual reorder included — instead of being forced back
+ * to recency, so a drag inside a bucket survives. The open chat is not
+ * injected on top, so toggling a heading cannot make a bonus row appear.
  */
 export function pageGroupRows(
   rows: readonly DisplayRow[],
@@ -152,14 +155,6 @@ export function pageGroupRows(
       rootOrder.push(root);
     }
   }
-  const latestOf = (root: string): number => {
-    let latest = 0;
-    for (const member of family.get(root) ?? []) {
-      if (member.thread.updatedAt > latest) latest = member.thread.updatedAt;
-    }
-    return latest;
-  };
-  rootOrder.sort((left, right) => latestOf(right) - latestOf(left) || left.localeCompare(right));
   const keepRoots = new Set(rootOrder.slice(0, Math.max(0, limit)));
   const shown: DisplayRow[] = [];
   for (const root of rootOrder) {
