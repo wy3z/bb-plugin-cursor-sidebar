@@ -432,7 +432,7 @@ export function ShelfList({
                 type="button"
                 aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, more.remaining)} more child threads`}
                 onClick={() => bumpChildPage(more.parentId)}
-                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
               >
                 <span className="truncate">{`Show more (${more.remaining})`}</span>
               </button>
@@ -570,7 +570,7 @@ export function ShelfList({
                     return next;
                   });
                 }}
-                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-3 pr-2 text-left text-2xs text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
+                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:min-h-9"
               >
                 <span className="truncate">{`Show more (${paged.hiddenConversations})`}</span>
               </button>
