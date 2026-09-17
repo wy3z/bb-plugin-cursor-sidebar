@@ -1591,6 +1591,7 @@ function ProjectSection({
               open={sectionOpen}
               icon={icon}
               label={activityLabel}
+              status={status ?? "idle"}
             />
           </span>
           <button
