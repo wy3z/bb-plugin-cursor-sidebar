@@ -95,12 +95,13 @@ function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
         ? "bg-warning-text"
         : "bg-timeline-accent";
   return (
-    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center">
+    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center">
       {status === "working" ? (
         <Icon
           name="Loading"
           aria-hidden="true"
-          className="size-2.5 animate-spin text-muted-foreground/70"
+          strokeWidth={1.5}
+          className="size-3 animate-spin text-muted-foreground"
         />
       ) : (
         <span aria-hidden="true" className={cn("size-1.5 rounded-full", tone)} />
