@@ -1043,9 +1043,13 @@ function ThreadRow({
           </div>
 
           <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
+            {/* Anchored to the row's right edge, the actions sit over the
+                trailing meta (the parent mark and age) instead of trailing the
+                column, so a parent mark never slides them. The meta fades out
+                underneath while they are shown. */}
             <span
               data-thread-actions=""
-              className="absolute inset-y-0 right-full z-20 flex items-center gap-0.5 pr-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100"
+              className="absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100"
             >
               {pinnedCapable ? (
                 <button
@@ -1076,20 +1080,16 @@ function ThreadRow({
                 <Icon name="Archive" className="size-3.5" />
               </button>
             </span>
-            {/* The slot is always reserved: the hover actions sit at the
-                trailing column's left edge, so a parent mark that appears only
-                on some rows would slide them. */}
-            <span
-              className={cn(
-                "ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-muted-foreground/55",
-                !hasChildren && "opacity-0",
-              )}
-              title={hasChildren ? `${children.length} child ${children.length === 1 ? "thread" : "threads"}` : undefined}
-              aria-hidden="true"
-            >
-              {hasChildren ? <Icon name="User" className="size-3.5" /> : null}
-            </span>
-            <span className="ps-thread-time pointer-events-none min-w-7 text-right tabular-nums text-xs text-muted-foreground/80">
+            {hasChildren ? (
+              <span
+                className="ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-muted-foreground/55 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0"
+                title={`${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
+                aria-hidden="true"
+              >
+                <Icon name="User" className="size-3.5" />
+              </span>
+            ) : null}
+            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-muted-foreground/80 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0">
               {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
             </span>
           </div>
