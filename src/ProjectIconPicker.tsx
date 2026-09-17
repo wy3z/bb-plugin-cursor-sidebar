@@ -5,10 +5,15 @@ import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { PROJECT_ICON_CATEGORIES } from "./project-icons";
 
+const ICON_COLUMNS = 8;
+const ICON_ROW_HEIGHT = 30;
+
 /**
  * Anchored glyph palette for one native project. It is a popover rather than a
  * dialog so the heading stays visible while choosing, and it offers the curated
  * PROJECT_ICON_CATEGORIES as labelled sections that the filter narrows in place.
+ * At ~1200 glyphs each section mounts its buttons only once it nears the scroll
+ * viewport; the label always stays mounted so the list does not collapse.
  */
 export function ProjectIconPicker({
   open,
@@ -28,6 +33,7 @@ export function ProjectIconPicker({
 }) {
   const scope = usePortalScopeProps();
   const searchRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const anchorRef = useMemo(() => ({ current: anchor }), [anchor]);
 
@@ -54,7 +60,9 @@ export function ProjectIconPicker({
     [groups],
   );
 
-  // Roving-ish keyboard access: arrows walk the grid, Home/End jump the ends.
+  const searching = query.trim() !== "";
+
+  // Roving-ish keyboard access: arrows walk the mounted grid, Home/End jump the ends.
   const onGridKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     const keys = ["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"];
     if (!keys.includes(event.key)) return;
@@ -95,7 +103,7 @@ export function ProjectIconPicker({
             aria-label="Filter icons"
             className="mb-2 w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:py-2.5"
           />
-          <div className="max-h-64 overflow-y-auto">
+          <div ref={scrollRef} className="max-h-64 overflow-y-auto">
             <button
               type="button"
               onClick={() => onPick(null)}
@@ -110,34 +118,15 @@ export function ProjectIconPicker({
             </button>
             <div onKeyDown={onGridKeyDown}>
               {groups.map((group) => (
-                <section key={group.id} className="pb-1">
-                  <p className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                    {group.label}
-                  </p>
-                  <div
-                    role="group"
-                    aria-label={group.label}
-                    className="grid grid-cols-8 gap-0.5 max-md:pointer-coarse:grid-cols-6"
-                  >
-                    {group.icons.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        data-icon-choice=""
-                        aria-label={name}
-                        title={name}
-                        aria-pressed={current === name}
-                        onClick={() => onPick(name)}
-                        className={cn(
-                          "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:size-10",
-                          current === name && "bg-accent text-foreground",
-                        )}
-                      >
-                        <Icon name={name} aria-hidden="true" className="size-4 max-md:pointer-coarse:size-5" strokeWidth={2} />
-                      </button>
-                    ))}
-                  </div>
-                </section>
+                <IconSection
+                  key={group.id}
+                  label={group.label}
+                  icons={group.icons}
+                  current={current}
+                  onPick={onPick}
+                  forceMount={searching}
+                  scopeRoot={scrollRef}
+                />
               ))}
               {matchCount === 0 ? (
                 <p className="px-2 py-3 text-center text-xs text-muted-foreground">No icons match.</p>
@@ -147,5 +136,80 @@ export function ProjectIconPicker({
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+/** One category: label always mounted, buttons only once the section nears view. */
+function IconSection({
+  label,
+  icons,
+  current,
+  onPick,
+  forceMount,
+  scopeRoot,
+}: {
+  label: string;
+  icons: readonly IconName[];
+  current: IconName | null;
+  onPick: (icon: IconName) => void;
+  forceMount: boolean;
+  scopeRoot: { current: HTMLDivElement | null };
+}) {
+  const ref = useRef<HTMLElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (visible || forceMount) return;
+    const element = ref.current;
+    if (element === null) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setVisible(true);
+      },
+      { root: scopeRoot.current, rootMargin: "300px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible, forceMount, scopeRoot]);
+
+  const rows = Math.ceil(icons.length / ICON_COLUMNS);
+
+  return (
+    <section ref={ref} className="pb-1">
+      <p className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+        {label}
+      </p>
+      {visible || forceMount ? (
+        <div
+          role="group"
+          aria-label={label}
+          className="grid grid-cols-8 gap-0.5 max-md:pointer-coarse:grid-cols-6"
+        >
+          {icons.map((name) => (
+            <button
+              key={name}
+              type="button"
+              data-icon-choice=""
+              aria-label={name}
+              title={name}
+              aria-pressed={current === name}
+              onClick={() => onPick(name)}
+              className={cn(
+                "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:size-10",
+                current === name && "bg-accent text-foreground",
+              )}
+            >
+              <Icon name={name} aria-hidden="true" className="size-4 max-md:pointer-coarse:size-5" strokeWidth={2} />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div aria-hidden="true" style={{ height: rows * ICON_ROW_HEIGHT }} />
+      )}
+    </section>
   );
 }
