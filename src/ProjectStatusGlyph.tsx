@@ -1,6 +1,6 @@
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
-import { statusDrawsGlyph, type ThreadStatusKind } from "./status";
+import type { ThreadStatusKind } from "./status";
 
 /**
  * The Project heading's left slot. Always a folder in the same 16px box as
@@ -64,7 +64,7 @@ export function ProjectStatusGlyph({
   const name: IconName = icon ?? (open ? "FolderOpen" : "Folder");
   // A closed folder hides its rows, so an active status keeps a small badge on
   // the glyph's bottom-right. An open folder shows the status on the rows.
-  const badge = !open && statusDrawsGlyph(status) ? status : null;
+  const badge = !open && status !== "idle" ? status : null;
   const activity: ActivityState =
     status === "working" ? "working" : badge !== null ? "attention" : "inactive";
   return (
@@ -88,6 +88,12 @@ export function ProjectStatusGlyph({
 
 /** The mini status on a closed project: a spinner for work, a dot otherwise. */
 function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
+  const tone =
+    status === "failed"
+      ? "bg-destructive"
+      : status === "input"
+        ? "bg-warning-text"
+        : "bg-timeline-accent";
   return (
     <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center">
       {status === "working" ? (
@@ -97,13 +103,7 @@ function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
           className="size-2.5 animate-spin text-muted-foreground/70"
         />
       ) : (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "size-1.5 rounded-full",
-            status === "failed" ? "bg-destructive" : "bg-warning-text",
-          )}
-        />
+        <span aria-hidden="true" className={cn("size-1.5 rounded-full", tone)} />
       )}
     </span>
   );
