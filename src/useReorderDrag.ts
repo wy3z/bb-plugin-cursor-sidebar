@@ -41,6 +41,7 @@ export interface ReorderDrag {
     event: ReactPointerEvent<HTMLElement>,
     ids: readonly string[],
     movingId: string,
+    label?: string,
   ) => void;
   startThread: (
     event: ReactPointerEvent<HTMLElement>,
@@ -48,7 +49,50 @@ export interface ReorderDrag {
     scope: string,
     ids: readonly string[],
     movingId: string,
+    label?: string,
   ) => void;
+}
+
+/** A lifted copy of the dragged row that follows the pointer. It lives on
+ * document.body, outside the plugin's style scope, so every rule is inline. */
+function mountDragGhost(
+  label: string,
+  rect: DOMRect | null,
+  x: number,
+  y: number,
+): HTMLDivElement {
+  const ghost = document.createElement("div");
+  ghost.className = "ps-drag-ghost";
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.textContent = label;
+  const style = ghost.style;
+  style.position = "fixed";
+  style.top = "0";
+  style.left = "0";
+  style.boxSizing = "border-box";
+  style.width = `${Math.round(rect?.width ?? 220)}px`;
+  style.zIndex = "120";
+  style.pointerEvents = "none";
+  style.padding = "5px 12px";
+  style.borderRadius = "6px";
+  style.background = "var(--sidebar, #1c1c1f)";
+  style.border = "1px solid var(--border, rgba(255,255,255,0.14))";
+  style.boxShadow = "0 10px 30px rgba(0,0,0,0.4)";
+  style.color = "var(--sidebar-foreground, #e5e5e5)";
+  style.fontSize = "13px";
+  style.lineHeight = "1.4";
+  style.whiteSpace = "nowrap";
+  style.overflow = "hidden";
+  style.textOverflow = "ellipsis";
+  style.opacity = "0.97";
+  style.willChange = "transform";
+  document.body.appendChild(ghost);
+  moveDragGhost(ghost, x, y);
+  return ghost;
+}
+
+function moveDragGhost(ghost: HTMLDivElement, x: number, y: number): void {
+  ghost.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) scale(1.02)`;
 }
 
 /**
@@ -61,6 +105,10 @@ export interface ReorderDrag {
  * previous user-select value, suppresses the click that follows an engaged
  * drag (including Escape and a drag that returns to its start), and removes
  * every listener and timer on unmount.
+ *
+ * While engaged the dragged row is lifted into a floating ghost that follows
+ * the pointer; the live reorder moves the row's slot in flow, so siblings
+ * slide out of the way around it.
  */
 export function useReorderDrag(
   onCommit: (state: ReorderDragState) => void,
@@ -106,12 +154,23 @@ export function useReorderDrag(
       event: ReactPointerEvent<HTMLElement>,
       initial: Omit<ReorderDragState, "overId" | "placement" | "overTarget">,
       matches: (element: HTMLElement) => boolean,
+      label: string,
     ) => {
       if (event.button !== 0 || event.pointerType === "touch") return;
       activeCancel.current?.();
       const pointerId = event.pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
+      // The grabbed row's rect fixes the ghost's width and the grab point, so
+      // the lift tracks the pointer the way it left the list.
+      const grabbed = event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-reorder-id]")
+        : null;
+      const grabbedRect = grabbed?.getBoundingClientRect() ?? null;
+      const grabOffsetX = grabbedRect === null ? 0 : startX - grabbedRect.left;
+      const grabOffsetY = grabbedRect === null ? 0 : startY - grabbedRect.top;
+      let lastX = startX;
+      let lastY = startY;
       let current: ReorderDragState = {
         ...initial,
         ids: [...initial.ids],
@@ -119,11 +178,25 @@ export function useReorderDrag(
         placement: null,
         overTarget: null,
       };
+      let currentSig = signatureOf(current);
       let engaged = false;
       let finished = false;
       const previousUserSelect = document.body.style.userSelect;
       const previousCursor = document.body.style.cursor;
       let dragCursorStyle: HTMLStyleElement | null = null;
+      let ghost: HTMLDivElement | null = null;
+
+      // Reorder fires on many pointer moves; only a real change is a state
+      // update, so React (and the sibling list animation) is not restarted
+      // every frame.
+      const commit = (next: ReorderDragState) => {
+        const sig = signatureOf(next);
+        if (sig === currentSig) return;
+        currentSig = sig;
+        current = next;
+        stateRef.current = next;
+        setState(next);
+      };
 
       const cleanup = () => {
         window.removeEventListener("pointermove", onMove);
@@ -133,6 +206,8 @@ export function useReorderDrag(
         document.body.style.userSelect = previousUserSelect;
         if (engaged) document.body.style.cursor = previousCursor;
         dragCursorStyle?.remove();
+        ghost?.remove();
+        ghost = null;
         if (activeCancel.current === cancel) activeCancel.current = null;
       };
       const cancel = () => {
@@ -153,6 +228,12 @@ export function useReorderDrag(
         dragCursorStyle.dataset.projectSidebarDragCursor = "";
         dragCursorStyle.textContent = "* { cursor: grabbing !important; }";
         document.head.appendChild(dragCursorStyle);
+        ghost = mountDragGhost(
+          label,
+          grabbedRect,
+          lastX - grabOffsetX,
+          lastY - grabOffsetY,
+        );
         stateRef.current = current;
         setState(current);
       };
@@ -169,7 +250,7 @@ export function useReorderDrag(
           if (folderTarget?.dataset.folderTarget !== undefined) {
             const key = folderTarget.dataset.folderTarget;
             const sectionId = key === UNFILED_GROUP_KEY ? null : key;
-            current = {
+            commit({
               ...current,
               moveToSection: sectionId,
               pin: false,
@@ -177,13 +258,13 @@ export function useReorderDrag(
               overId: null,
               placement: null,
               overTarget: `folder:${key}`,
-            };
-            stateRef.current = current; setState(current); return;
+            });
+            return;
           }
           const pinTarget = hit.closest<HTMLElement>("[data-pin-target]");
           if (pinTarget?.dataset.pinTarget !== undefined) {
             const key = pinTarget.dataset.pinTarget;
-            current = {
+            commit({
               ...current,
               pin: key === "pin",
               moveToSection: undefined,
@@ -191,20 +272,20 @@ export function useReorderDrag(
               overId: null,
               placement: null,
               overTarget: `pin:${key}`,
-            };
-            stateRef.current = current; setState(current); return;
+            });
+            return;
           }
         }
         const destination = hit.closest<HTMLElement>("[data-membership-target]");
         if (current.kind === "thread" && destination && canMoveRef.current(current.movingId)) {
           const targetId = destination.dataset.membershipTarget;
           if (targetId && current.sectionId !== (targetId === "standalone" ? "standalone-chats" : `managed:${targetId}`)) {
-            current = { ...current, moveToProject: targetId === "standalone" ? null : targetId, moveToSection: undefined, pin: undefined, overId: null, placement: null, overTarget: null };
-            stateRef.current = current; setState(current); return;
+            commit({ ...current, moveToProject: targetId === "standalone" ? null : targetId, moveToSection: undefined, pin: undefined, overId: null, placement: null, overTarget: null });
+            return;
           }
         }
         if (current.moveToProject !== undefined) {
-          current = { ...current, moveToProject: undefined }; stateRef.current = current; setState(current);
+          commit({ ...current, moveToProject: undefined });
         }
         const target = hit.closest<HTMLElement>("[data-reorder-id]");
         if (target === null || !matches(target)) return;
@@ -219,15 +300,25 @@ export function useReorderDrag(
         const rect = target.getBoundingClientRect();
         const placement: DropPlacement =
           y < rect.top + rect.height / 2 ? "before" : "after";
-        const ids = moveId(current.ids, current.movingId, targetId, placement);
         // A same-cluster row owns the drop: folder and pin intent clear so a
         // reorder never also files or (un)pins.
-        current = { ...current, ids, overId: targetId, placement, moveToSection: undefined, pin: undefined, overTarget: null };
-        stateRef.current = current;
-        setState(current);
+        commit({
+          ...current,
+          ids: moveId(current.ids, current.movingId, targetId, placement),
+          overId: targetId,
+          placement,
+          moveToSection: undefined,
+          pin: undefined,
+          overTarget: null,
+        });
       };
       function onMove(moveEvent: PointerEvent) {
         if (finished || moveEvent.pointerId !== pointerId) return;
+        lastX = moveEvent.clientX;
+        lastY = moveEvent.clientY;
+        if (ghost !== null) {
+          moveDragGhost(ghost, lastX - grabOffsetX, lastY - grabOffsetY);
+        }
         const dx = moveEvent.clientX - startX;
         const dy = moveEvent.clientY - startY;
         if (!engaged) {
@@ -272,11 +363,12 @@ export function useReorderDrag(
   );
 
   const startProject = useCallback(
-    (event: ReactPointerEvent<HTMLElement>, ids: readonly string[], movingId: string) => {
+    (event: ReactPointerEvent<HTMLElement>, ids: readonly string[], movingId: string, label = "") => {
       begin(
         event,
         { kind: "project", sectionId: "", scope: "", movingId, ids: [...ids] },
         (element) => element.dataset.reorderKind === "project",
+        label,
       );
     },
     [begin],
@@ -289,13 +381,15 @@ export function useReorderDrag(
       scope: string,
       ids: readonly string[],
       movingId: string,
-      ) => {
+      label = "",
+    ) => {
       begin(
         event,
         { kind: "thread", sectionId, scope, movingId, ids: [...ids] },
         (element) =>
           element.dataset.reorderKind === "thread" &&
           element.dataset.reorderScope === scope,
+        label,
       );
     },
     [begin],
@@ -311,4 +405,17 @@ export function useReorderDrag(
     () => ({ state, consumeSuppressedClick, startProject, startThread }),
     [consumeSuppressedClick, startProject, startThread, state],
   );
+}
+
+/** A cheap identity for a drag state, so identical frames do not re-render. */
+function signatureOf(state: ReorderDragState): string {
+  return [
+    state.moveToProject ?? "\u0000u",
+    state.moveToSection ?? "\u0000u",
+    state.pin ?? "\u0000u",
+    state.overId ?? "\u0000n",
+    state.placement ?? "\u0000n",
+    state.overTarget ?? "\u0000n",
+    state.ids.join("\u0001"),
+  ].join("\u0002");
 }

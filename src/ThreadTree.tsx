@@ -693,9 +693,12 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
             <Icon name={open ? "FolderOpen" : "Folder"} className="size-3.5 shrink-0" strokeWidth={2} />
             <span className="truncate">{name}</span>
             <Icon
-              name={open ? "ChevronDown" : "ChevronRight"}
+              name="ChevronRight"
               aria-hidden="true"
-              className="size-3.5 shrink-0 text-muted-foreground/55 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100"
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground/55 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:pointer-coarse:opacity-100",
+                open && "rotate-90",
+              )}
             />
           </button>
         </div>
@@ -990,7 +993,13 @@ function ThreadRow({
               style={{ left: ROW_PAD + indent }}
               className="ps-child-toggle absolute top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-muted-foreground opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:opacity-100"
             >
-              <Icon name={expanded ? "ChevronDown" : "ChevronRight"} className="size-3" />
+              <Icon
+                name="ChevronRight"
+                className={cn(
+                  "size-3 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                  expanded && "rotate-90",
+                )}
+              />
             </button>
           ) : null}
 

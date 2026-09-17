@@ -1,5 +1,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Icon } from "@/components/ui/icon";
+import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
+import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 
 /**
@@ -36,7 +38,10 @@ export function NewProjectAction({
           aria-label={label}
           align="end"
           sideOffset={4}
-          className="ps-new-project-dialog z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
+          className={cn(
+            "ps-new-project-dialog z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md",
+            ANCHORED_OVERLAY_MOTION,
+          )}
         >
           <p className="px-2 py-1 text-xs font-medium">{label}</p>
           <p className="px-2 pb-1 text-xs text-muted-foreground">{prompt}</p>

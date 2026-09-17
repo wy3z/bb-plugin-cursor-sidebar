@@ -10,6 +10,8 @@ export const ROW_SWIPE_ACTIVATE_PX = 72;
 export const ROW_SWIPE_CLAMP_PX = 110;
 const ROW_SWIPE_LOCK_PX = 12;
 const ROW_SWIPE_VERTICAL_PX = 8;
+/** Release below the commit threshold eases back over this long. */
+const ROW_SWIPE_SETTLE_MS = 220;
 
 /** Touch swipe actions for one row. Present means the swipe is armed. */
 export interface RowSwipeBinding {
@@ -26,6 +28,10 @@ export interface RowSwipeBinding {
 export interface RowSwipeState {
   /** Current horizontal offset in px, clamped; 0 at rest. */
   offset: number;
+  /** True while the row is easing back to rest after an uncommitted release. */
+  settling: boolean;
+  /** Last non-zero side, kept through the settle so the reveal stays put. */
+  direction: -1 | 0 | 1;
 }
 
 /**
@@ -34,7 +40,8 @@ export interface RowSwipeState {
  * Touch hold owns expansion; scrolling always wins before recognition. A
  * locked horizontal swipe owns the touch instead: it reveals the bound
  * action under the row, commits past the activation threshold on release,
- * and never opens the menu, so hold and swipe cannot double-fire. Reorder
+ * and never opens the menu, so hold and swipe cannot double-fire. A release
+ * short of the threshold eases the row back instead of snapping it. Reorder
  * is untouched: it engages only on deliberate mouse drags, and swipe tracks
  * touch/pen pointers only. Desktop pointers change nothing.
  */
@@ -53,8 +60,21 @@ export function useRowGesture(
   const cancel = useRef<(() => void) | null>(null);
   const suppressUntil = useRef(0);
   const lastTouch = useRef(0);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  useEffect(() => () => cancel.current?.(), []);
+  const [swipeState, setSwipeState] = useState<RowSwipeState | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearSettle = () => {
+    if (settleTimer.current !== null) {
+      clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
+  };
+  useEffect(
+    () => () => {
+      cancel.current?.();
+      clearSettle();
+    },
+    [],
+  );
   return {
     gesture: {
       ...(swipe !== undefined ? { style: { touchAction: "pan-y" } } : {}),
@@ -84,22 +104,33 @@ export function useRowGesture(
           suppress();
           callbacks.current.onHold();
         }, 550);
-        const resetSwipe = () => {
+        const resetSwipe = (animate: boolean) => {
           swipeLocked = false;
-          setSwipeOffset(0);
+          clearSettle();
+          if (!animate) { setSwipeState(null); return; }
+          setSwipeState((prev) => ({
+            offset: 0,
+            settling: true,
+            direction: prev?.direction ?? 0,
+          }));
+          settleTimer.current = setTimeout(() => {
+            settleTimer.current = null;
+            setSwipeState((prev) =>
+              prev !== null && prev.settling ? { ...prev, settling: false } : prev,
+            );
+          }, ROW_SWIPE_SETTLE_MS);
         };
         const cleanup = () => {
           clearTimeout(timer);
-          resetSwipe();
           window.removeEventListener("pointermove", move);
           window.removeEventListener("pointerup", up);
           window.removeEventListener("pointercancel", abort);
           window.removeEventListener("pointerdown", additional);
           window.removeEventListener("scroll", scroll, true);
           window.removeEventListener("blur", scroll);
-          if (cancel.current === cleanup) cancel.current = null;
+          cancel.current = null;
         };
-        const scroll = () => { moved = true; suppress(); resetSwipe(); cleanup(); };
+        const scroll = () => { moved = true; suppress(); resetSwipe(false); cleanup(); };
         const additional = (e: PointerEvent) => { if (e.pointerId !== pointerId) scroll(); };
         const move = (e: PointerEvent) => {
           if (e.pointerId !== pointerId) return;
@@ -124,7 +155,12 @@ export function useRowGesture(
             dx = e.clientX - clientX; dy = e.clientY - clientY;
             clearTimeout(timer);
             suppress();
-            setSwipeOffset(Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx)));
+            const offset = Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx));
+            setSwipeState({
+              offset,
+              settling: false,
+              direction: offset < 0 ? -1 : offset > 0 ? 1 : 0,
+            });
             return;
           }
           if (Math.hypot(dx, dy) > 10) {
@@ -146,11 +182,16 @@ export function useRowGesture(
             const bindingNow = swipeRef.current;
             const offset = Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx));
             suppress();
-            resetSwipe();
             cleanup();
-            if (bindingNow !== undefined) {
-              if (offset <= -ROW_SWIPE_ACTIVATE_PX) bindingNow.onSwipeLeft();
-              else if (offset >= ROW_SWIPE_ACTIVATE_PX) bindingNow.onSwipeRight?.();
+            const commitLeft = offset <= -ROW_SWIPE_ACTIVATE_PX;
+            const commitRight = offset >= ROW_SWIPE_ACTIVATE_PX;
+            const commits = bindingNow !== undefined && (commitLeft || commitRight);
+            // A commit removes the row, so it leaves at once; anything short
+            // of it eases back under the finger.
+            resetSwipe(!commits);
+            if (commits && bindingNow !== undefined) {
+              if (commitLeft) bindingNow.onSwipeLeft();
+              else bindingNow.onSwipeRight?.();
             }
             return;
           }
@@ -165,7 +206,7 @@ export function useRowGesture(
         window.addEventListener("pointerdown", additional);
         window.addEventListener("scroll", scroll, true);
         window.addEventListener("blur", scroll);
-        cancel.current = cleanup;
+        cancel.current = () => { resetSwipe(false); cleanup(); };
       },
       onClickCapture(event) {
         if (event.detail !== 0 && Date.now() < suppressUntil.current) {
@@ -189,6 +230,6 @@ export function useRowGesture(
         }
       },
     },
-    swipeState: swipe === undefined ? null : { offset: swipeOffset },
+    swipeState: swipe === undefined ? null : swipeState,
   };
 }

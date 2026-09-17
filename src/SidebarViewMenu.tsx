@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Icon } from "@/components/ui/icon";
+import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import type { SidebarView } from "./server";
@@ -43,7 +44,7 @@ export interface SidebarViewMenuProps {
 }
 
 const CONTENT =
-  "ps-view-menu z-50 min-w-52 overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md";
+  `ps-view-menu z-50 min-w-52 overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${ANCHORED_OVERLAY_MOTION}`;
 const ITEM =
   "flex min-h-7 cursor-pointer select-none items-center gap-2 rounded px-2 py-1 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground";
 const OPTION =
