@@ -108,6 +108,8 @@ export interface TreeContext {
   statusOf: (threadId: string) => ThreadStatusKind | undefined;
   /** The folder or pin header under the pointer during a drag, if any. */
   folderDropTarget: string | null;
+  /** The thread under the pointer's center band: a nest drop is pending. */
+  childDropTarget: string | null;
 }
 
 // Tree coordinates are px from the row's left border. Headings and thread
@@ -897,6 +899,7 @@ function ThreadRow({
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60",
             !isActive && layout !== null && "bg-sidebar-accent/30",
+            ctx.childDropTarget === thread.id && "bg-primary/10 ring-1 ring-primary/60",
             shelf === "settled" &&
               !isActive &&
               "text-muted-foreground/70 hover:bg-sidebar-accent/25 hover:text-muted-foreground",

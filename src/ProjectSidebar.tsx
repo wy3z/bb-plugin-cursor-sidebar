@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
+  useRpc,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -73,6 +74,7 @@ import {
 } from "./collapse";
 import { useThreadSections } from "./useThreadSections";
 import { useSidebarView } from "./useSidebarView";
+import type { projectSidebarRpcContract } from "./server";
 import { SidebarViewMenu, SidebarViewSyncNotice } from "./SidebarViewMenu";
 import {
   environmentFilterOptions,
@@ -142,6 +144,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
   const actions = useSidebarThreadActions();
+  const rpc = useRpc<typeof projectSidebarRpcContract>();
   const projectIcons = useProjectIcons();
 
   // "Today +" opens BB's native composer with the personal project selected —
@@ -259,6 +262,23 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const applyFolderMoveRef = useRef<(threadId: string, sectionId: string | null) => Promise<FolderMoveResult>>(async () => {
     throw new Error("Standalone chats are unavailable.");
   });
+  // Nesting writes the native parent link; the drag commit reads it at drop time.
+  const setThreadParentRef = useRef<(threadId: string, parentThreadId: string) => void>(() => {});
+  const setThreadParent = useCallback(
+    (threadId: string, parentThreadId: string) => {
+      void (async () => {
+        try {
+          await rpc.call("setThreadParent", { threadId, parentThreadId });
+        } catch (cause) {
+          toast.error("Could not nest that chat", {
+            description: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      })();
+    },
+    [rpc],
+  );
+  setThreadParentRef.current = setThreadParent;
 
   const canPin = useCallback((threadId: string) => {
     const projected = projectedById.get(threadId);
@@ -275,6 +295,12 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   projectsRef.current = projects;
   const onDragCommit = useCallback(
     (committed: ReorderDragState) => {
+      // Nesting writes a native parent link, not an order, so it applies even
+      // under an automatic conversation order.
+      if (committed.kind === "thread" && committed.parentTargetId !== null) {
+        setThreadParentRef.current(committed.movingId, committed.parentTargetId);
+        return;
+      }
       if (
         committed.kind === "thread" &&
         committed.moveToSection === undefined &&
@@ -315,7 +341,21 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     },
     [],
   );
-  const drag = useReorderDrag(onDragCommit);
+  // A nest target must sit in the same project (so the tree can show it) and
+  // never inside the dragged thread's own subtree.
+  const canNest = useCallback(
+    (targetId: string, movingId: string) => {
+      if (targetId === movingId) return false;
+      const moving = rawById.get(movingId);
+      const target = rawById.get(targetId);
+      if (moving === undefined || target === undefined) return false;
+      if (moving.projectId !== target.projectId) return false;
+      const descendants = descendantsById.get(movingId);
+      return descendants === undefined || !descendants.some((thread) => thread.id === targetId);
+    },
+    [descendantsById, rawById],
+  );
+  const drag = useReorderDrag(onDragCommit, undefined, canNest);
 
   // Project order is a plugin overlay; native storage projects stay unchanged.
   const baseOrderedProjects = useMemo(
@@ -917,6 +957,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         overId: null,
         placement: null,
         overTarget: null,
+        parentTargetId: null,
       });
       setAnnouncement(
         `Moved project ${
@@ -1008,6 +1049,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         return worstThreadStatus([thread, ...(descendantsById.get(threadId) ?? [])]);
       },
       folderDropTarget: drag.state?.kind === "thread" ? drag.state.overTarget : null,
+      childDropTarget: drag.state?.kind === "thread" ? drag.state.parentTargetId : null,
     }),
     [
       rawById, workspacePaths, primaryHostId, nativeProjects,

@@ -240,6 +240,16 @@ export const projectSidebarRpcContract = defineRpcContract({
       failed: z.array(z.string()),
     }),
   },
+  setThreadParent: {
+    input: z.object({
+      threadId: z.string().trim().min(1),
+      parentThreadId: z.string().trim().min(1).nullable(),
+    }),
+    output: z.object({
+      threadId: z.string(),
+      parentThreadId: z.string().nullable(),
+    }),
+  },
 });
 
 export const LIFECYCLE_CHANNEL = "lifecycle";
@@ -572,6 +582,10 @@ export default function plugin(bb: BbPluginApi) {
         }
       }
       return { updated, failed };
+    },
+    async setThreadParent({ threadId, parentThreadId }) {
+      await bb.sdk.threads.update({ threadId, parentThreadId });
+      return { threadId, parentThreadId };
     },
   });
 
