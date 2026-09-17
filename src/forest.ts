@@ -212,7 +212,8 @@ function orderedMembers(
  * two unrelated unknown projects never share a heading.
  *
  * `orderingFor` resolves the sibling ordering per section. Native project
- * interiors stay newest-first; standalone chats keep stored sibling order.
+ * interiors stay newest-first; standalone chats take the selected automatic
+ * order, or keep stored sibling order when Manual is chosen.
  */
 export function buildSections(
   visible: readonly PluginSidebarThread[],

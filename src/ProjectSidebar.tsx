@@ -76,8 +76,11 @@ import { useSidebarView } from "./useSidebarView";
 import { SidebarViewMenu, SidebarViewSyncNotice } from "./SidebarViewMenu";
 import {
   environmentFilterOptions,
+  familyAwareComparator,
   filterOrdinaryThreads,
+  homeDisplayParentOf,
   ordinaryCollapsibleTargets,
+  ordinaryFamilyFacts,
   ordinaryFamilyGroupKeys,
   ordinaryThreadStatus,
   environmentIdentityOf,
@@ -355,7 +358,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // which supported metadata a row shows.
   const sidebarView = useSidebarView();
   const view = sidebarView.view;
-  manualOrderRef.current = true;
+  manualOrderRef.current = view.sortConversationsBy === "manual";
   const familyRootOfId = useCallback(
     (threadId: string) =>
       familyRootId((id) => rawById.get(id)?.parentThreadId ?? null, threadId),
@@ -404,6 +407,19 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     () => unreadOrdinaryThreadIds(visible),
     [visible],
   );
+  // Automatic ordering reads the same family facts the grouping shows, so a
+  // family sorts by the activity its divider shows. Facts come from the complete
+  // visible set with same-home display parents, before any fold or preview.
+  const siblingOrdering = useMemo<SiblingOrdering | undefined>(() => {
+    if (view.sortConversationsBy === "manual") return undefined;
+    const facts = ordinaryFamilyFacts(viewVisible, {
+      parentOf: homeDisplayParentOf(viewVisible),
+      statusOf: ordinaryThreadStatus,
+      environmentOf: environmentIdentityOf,
+    });
+    const compare = familyAwareComparator(view.sortConversationsBy, facts);
+    return compare === null ? undefined : { compare, manual: false };
+  }, [view.sortConversationsBy, viewVisible]);
   const recencyOrdering = useMemo<SiblingOrdering>(
     () => ({
       compare: (left, right) =>
@@ -412,14 +428,14 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     }),
     [],
   );
-  // Native projects stay newest-first. Standalone chats keep stored sibling
-  // order. The old Ordering menu is gone; leftover saved sorts are ignored.
+  // Native projects stay newest-first. Standalone chats take the selected
+  // automatic order, or keep their stored sibling order when Manual is chosen.
   const orderingFor = useCallback(
     (sectionId: string): SiblingOrdering | undefined => {
       if (homeKindOf(sectionId) === "project") return recencyOrdering;
-      return undefined;
+      return siblingOrdering;
     },
-    [recencyOrdering],
+    [recencyOrdering, siblingOrdering],
   );
 
   const sections = useMemo<ProjectSectionData[]>(
@@ -844,8 +860,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       const section = sectionsById.get(sectionId);
       if (section === undefined) return false;
       // Native projects stay recency-ordered, so they never take a manual
-      // sibling move.
+      // sibling move. An automatic conversation order disables manual moves in
+      // an ordinary home too.
       if (homeKindOf(section.id) === "project") return false;
+      if (view.sortConversationsBy !== "manual") return false;
       const scope = scopeOf(section, threadId);
       const memberById = shelf === "active"
         ? new Map(section.members.map((member) => [member.id, member]))
