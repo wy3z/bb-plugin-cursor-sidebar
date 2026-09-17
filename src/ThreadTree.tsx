@@ -1076,16 +1076,20 @@ function ThreadRow({
                 <Icon name="Archive" className="size-3.5" />
               </button>
             </span>
-            {hasChildren ? (
-              <span
-                className="ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-muted-foreground/55"
-                title={`${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
-                aria-hidden="true"
-              >
-                <Icon name="User" className="size-3.5" />
-              </span>
-            ) : null}
-            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-muted-foreground/80">
+            {/* The slot is always reserved: the hover actions sit at the
+                trailing column's left edge, so a parent mark that appears only
+                on some rows would slide them. */}
+            <span
+              className={cn(
+                "ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-muted-foreground/55",
+                !hasChildren && "opacity-0",
+              )}
+              title={hasChildren ? `${children.length} child ${children.length === 1 ? "thread" : "threads"}` : undefined}
+              aria-hidden="true"
+            >
+              {hasChildren ? <Icon name="User" className="size-3.5" /> : null}
+            </span>
+            <span className="ps-thread-time pointer-events-none min-w-7 text-right tabular-nums text-xs text-muted-foreground/80">
               {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
             </span>
           </div>
