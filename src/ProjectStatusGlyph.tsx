@@ -95,7 +95,7 @@ function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
         ? "bg-warning-text"
         : "bg-timeline-accent";
   return (
-    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center">
+    <span className="pointer-events-none absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-sidebar">
       {status === "working" ? (
         <Icon
           name="Loading"
