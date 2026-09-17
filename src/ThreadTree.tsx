@@ -467,7 +467,7 @@ export function ShelfList({
       return [{ key: shelf, label: null, rows }];
     }
     // Extra grouping wraps the pooled ordinary section. A per-home
-    // non-personal section stays a flat recency list, so ARCH / Today /
+    // non-personal section stays a flat list, so ARCH / Today /
     // status headings never split Cores or project folders.
     if (!section.personal) {
       return [{ key: `${shelf}:flat`, label: null, rows: partition.dated }];

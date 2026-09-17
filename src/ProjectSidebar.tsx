@@ -420,22 +420,12 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     const compare = familyAwareComparator(view.sortConversationsBy, facts);
     return compare === null ? undefined : { compare, manual: false };
   }, [view.sortConversationsBy, viewVisible]);
-  const recencyOrdering = useMemo<SiblingOrdering>(
-    () => ({
-      compare: (left, right) =>
-        right.updatedAt - left.updatedAt || left.id.localeCompare(right.id),
-      manual: false,
-    }),
-    [],
-  );
-  // Native projects stay newest-first. Standalone chats take the selected
-  // automatic order, or keep their stored sibling order when Manual is chosen.
+  // Every home takes the selected automatic order, or keeps its stored sibling
+  // order when Manual is chosen. Manual with no stored order still falls back to
+  // recency inside `orderedMembers`, so a freshly seen home starts newest-first.
   const orderingFor = useCallback(
-    (sectionId: string): SiblingOrdering | undefined => {
-      if (homeKindOf(sectionId) === "project") return recencyOrdering;
-      return siblingOrdering;
-    },
-    [recencyOrdering, siblingOrdering],
+    (): SiblingOrdering | undefined => siblingOrdering,
+    [siblingOrdering],
   );
 
   const sections = useMemo<ProjectSectionData[]>(
@@ -859,10 +849,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       if (sectionId === undefined) return false;
       const section = sectionsById.get(sectionId);
       if (section === undefined) return false;
-      // Native projects stay recency-ordered, so they never take a manual
-      // sibling move. An automatic conversation order disables manual moves in
-      // an ordinary home too.
-      if (homeKindOf(section.id) === "project") return false;
+      // Manual moves need the Manual conversation order; an automatic order
+      // owns every home, project interiors included.
       if (view.sortConversationsBy !== "manual") return false;
       const scope = scopeOf(section, threadId);
       const memberById = shelf === "active"

@@ -211,9 +211,9 @@ function orderedMembers(
  * thread whose project is unknown gets its own section keyed by that id, so
  * two unrelated unknown projects never share a heading.
  *
- * `orderingFor` resolves the sibling ordering per section. Native project
- * interiors stay newest-first; standalone chats take the selected automatic
- * order, or keep stored sibling order when Manual is chosen.
+ * `orderingFor` resolves the sibling ordering per section. Every home — native
+ * project interiors included — takes the selected automatic order, or its
+ * stored sibling order when Manual is chosen.
  */
 export function buildSections(
   visible: readonly PluginSidebarThread[],
