@@ -283,13 +283,32 @@ function target(el, child) {
  * @param el - The specific element to animate.
  */
 function animate(el) {
-    var _a, _b;
     const isMounted = el.isConnected;
     const preExisting = coords.has(el);
     if (isMounted && siblings.has(el))
         siblings.delete(el);
-    if (((_a = animations.get(el)) === null || _a === void 0 ? void 0 : _a.playState) !== "finished") {
-        (_b = animations.get(el)) === null || _b === void 0 ? void 0 : _b.cancel();
+    const running = animations.get(el);
+    if (running !== void 0 && running.playState !== "finished") {
+        // LOCAL PATCH (not upstream): a reorder that lands while this element is
+        // still sliding must carry on from where the element is on screen now,
+        // not from the position the cancelled animation was headed for. Upstream
+        // cancels and leaves the stored position at the old target, so every
+        // move during a drag snaps backwards to its last target before it sets
+        // off again. The live rect is the new layout plus the transform still
+        // on screen; the stored position is the layout the element had before
+        // this mutation, so adding the live offset continues the slide.
+        const live = getCoords(el);
+        running.cancel();
+        const landed = getCoords(el);
+        const stored = coords.get(el);
+        if (stored !== void 0) {
+            coords.set(el, {
+                top: stored.top + live.top - landed.top,
+                left: stored.left + live.left - landed.left,
+                width: landed.width,
+                height: landed.height,
+            });
+        }
     }
     if (NEW in el) {
         add(el);

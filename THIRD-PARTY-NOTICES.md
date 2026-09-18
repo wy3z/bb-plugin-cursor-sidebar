@@ -31,6 +31,13 @@ and types copied from Inbox Sidebar's existing dependency. It is distributed
 under the MIT License, copyright 2022 FormKit Inc.; the full license is in
 `src/vendor/auto-animate/LICENSE`. No package installation was needed.
 
+It carries one local patch, marked `LOCAL PATCH (not upstream)` in
+`index.mjs`: a move that interrupts an animation in flight continues from the
+position on screen instead of snapping back to the cancelled animation's
+target. Without it, a reorder drag that keeps crossing rows visibly rewinds
+before each move. Re-apply the patch if this file is ever refreshed from
+upstream.
+
 ## Inbox Sidebar MIT License
 
 Copyright (c) 2026 Michael Yong

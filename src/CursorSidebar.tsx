@@ -1300,7 +1300,12 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   tools={viewMenu}
                 />
                 <Drawer open={!topGroupCollapsed.ids.has("projects")}>
-                  {nativeSectionsVisible.map((section) => renderSection(section))}
+                  {/* The drawer body is not animated, so the projects need
+                      their own list: dragging a heading reorders these
+                      sections, and each one slides the rest out of the way. */}
+                  <AnimatedList as="div">
+                    {nativeSectionsVisible.map((section) => renderSection(section))}
+                  </AnimatedList>
                   <GroupHeading
                     label="Threads"
                     open={expandedThreads.ids.has("threads")}
