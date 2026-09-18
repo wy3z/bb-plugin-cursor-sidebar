@@ -5,7 +5,7 @@
   [data-project-sidebar-root] select,
   .ps-move-dialog button,
   .ps-move-dialog select { min-height: 44px; touch-action: manipulation; }
-  [data-project-sidebar-root] button:has(> svg:only-child) { min-width: 44px; }
+  [data-project-sidebar-root] button:has(> svg:only-child):not(.ps-icon-btn):not(.ps-new-project) { min-width: 44px; }
   [data-project-sidebar-root] button[aria-expanded] { opacity: 1; }
   [data-project-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
   [data-project-sidebar-root] .ps-project-glyph { width: 16px; height: 16px; }
@@ -192,6 +192,13 @@
 .ps-icon-btn:active::after,
 .ps-icon-btn[data-state="open"]::after {
   background-color: var(--state-active);
+}
+
+/* A bucket heading carries the view tools. The phone/touch layout adds a little
+   right padding above these rows, so pull the row flush with the top-bar
+   controls there; the desktop sidebar needs no change. */
+@media (max-width: 767px) and (pointer: coarse) {
+  [data-project-sidebar-root] .ps-section-divider { margin-right: -8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

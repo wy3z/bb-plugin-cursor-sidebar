@@ -45,7 +45,7 @@ export interface SidebarViewMenuProps {
 }
 
 const CONTENT =
-  `ps-view-menu z-50 min-w-52 overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${ANCHORED_OVERLAY_MOTION}`;
+  `ps-view-menu z-50 min-w-52 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${ANCHORED_OVERLAY_MOTION}`;
 const ITEM =
   "flex min-h-7 cursor-pointer select-none items-center gap-2 rounded px-2 py-1 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground";
 const OPTION =
@@ -278,7 +278,7 @@ export function SidebarViewMenu({
                   </>
                 ) : null}
                 {view.sortConversationsBy !== "manual" ? (
-                  <DropdownMenu.Label className="px-2 py-1 text-2xs leading-tight text-muted-foreground/60">
+                  <DropdownMenu.Label className="max-w-52 whitespace-normal px-2 py-1 text-2xs leading-tight text-muted-foreground/60">
                     Manual reorder is off while an automatic conversation order is selected.
                   </DropdownMenu.Label>
                 ) : null}
@@ -351,7 +351,7 @@ export function SidebarViewMenu({
                     ) : null}
                   </>
                 ) : null}
-                <DropdownMenu.Label className="px-2 py-1 text-2xs leading-tight text-muted-foreground/60">
+                <DropdownMenu.Label className="max-w-52 whitespace-normal px-2 py-1 text-2xs leading-tight text-muted-foreground/60">
                   Filters apply to standalone chats. Project interiors stay unfiltered. Pinned and the open chat stay visible; filters never change folders, pins or membership.
                 </DropdownMenu.Label>
               </DropdownMenu.SubContent>

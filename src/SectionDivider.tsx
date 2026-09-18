@@ -14,7 +14,7 @@ export function SectionDivider({ label, open, onToggle, onNewThread, shelfKey, t
   tools?: ReactNode;
 }) {
   return (
-    <div className="group/section flex items-center gap-1 pl-3 pr-1.5">
+    <div className="ps-section-divider group/section flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5">
       <button
         type="button"
         data-shelf-toggle={shelfKey}
@@ -39,7 +39,7 @@ export function SectionDivider({ label, open, onToggle, onNewThread, shelfKey, t
           type="button"
           aria-label={`New thread in ${label}`}
           onClick={onNewThread}
-          className="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9 max-md:opacity-100 pointer-coarse:opacity-100"
+          className="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9 max-md:opacity-100 pointer-coarse:opacity-100"
         ><Icon name="MessageSquarePlus" className="size-3.5" /></button>
       ) : null}
       {tools}

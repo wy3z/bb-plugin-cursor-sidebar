@@ -27,7 +27,7 @@ export function NewProjectAction({
           type="button"
           aria-label={label}
           title={label}
-          className="ps-new-project flex size-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
+          className="ps-new-project ml-3 flex size-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:ml-0 max-md:pointer-coarse:size-9"
         >
           <Icon name="MessageSquarePlus" className="size-3.5" />
         </button>

@@ -584,7 +584,11 @@ export function ShelfList({
                   ? () => ctx.onToggleAgeGroup(collapseKey)
                   : () => ctx.onToggleGroup(collapseKey)
               }
-              onNewThread={group.label === "Today" ? ctx.onNewThread : undefined}
+              onNewThread={
+                group.label === "Today" && firstGroupTools === undefined
+                  ? ctx.onNewThread
+                  : undefined
+              }
               shelfKey={collapseKey}
               tools={index === 0 ? firstGroupTools : undefined}
             />

@@ -1278,7 +1278,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       unreadOrdinaryCount={unreadOrdinary.length}
       markReadBusy={markReadBusy}
       onMarkAllRead={() => { void markAllRead(); }}
-      triggerClassName="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 data-[state=open]:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
+      triggerClassName="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 data-[state=open]:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
     />
   );
   const newChatAction = (
@@ -1489,7 +1489,7 @@ function GroupHeading({
   children?: ReactNode;
 }) {
   return (
-    <div className="group/section mt-3 first:mt-0 flex items-center gap-1 pl-3 pr-1.5 pt-1">
+    <div className="group/section mt-3 first:mt-0 flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5 pt-1">
       <button
         type="button"
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
@@ -1516,7 +1516,7 @@ function GroupHeading({
           aria-label={createLabel ?? `New ${label}`}
           title={createLabel ?? `New ${label}`}
           onClick={onCreate}
-          className="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
+          className="ml-3 flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:ml-0 max-md:pointer-coarse:size-9"
         >
           <Icon name="Plus" className="size-3.5" />
         </button>
@@ -1739,7 +1739,7 @@ function ProjectSection({
               onNewThread();
             }}
             className={cn(
-              "ps-project-new flex size-4 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "ps-project-new flex size-4 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
               "max-md:size-9 pointer-coarse:size-9",
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
