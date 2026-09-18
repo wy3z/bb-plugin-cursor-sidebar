@@ -338,6 +338,8 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const drag = useReorderDrag(onDragCommit, canNest);
 
   // Project order is a plugin overlay; native storage projects stay unchanged.
+  // A project drag holds the list still and commits on release, so there is no
+  // in-flight order to weave into the visible one here.
   const baseOrderedProjects = useMemo(
     () => orderByStoredIds(projects, threadOrders.orderForScope("managed-projects")),
     [threadOrders.orderForScope, projects],
@@ -350,10 +352,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () => baseOrderedProjects.filter((project) => !project.isPersonal && project.id.startsWith(NATIVE_PROJECT_PREFIX)).map((project) => project.id),
     [baseOrderedProjects],
   );
-  const liveProjectIds =
-    drag.state?.kind === "project"
-      ? mergeVisibleOrder(baseProjectIds, drag.state.ids)
-      : baseProjectIds;
   // One persisted SidebarView drives grouping, ordering, Show and the ordinary
   // filters. It never touches homes, folders, pin flags or manual order: it only
   // decides which ordinary rows render, how they are ordered and grouped, and
@@ -402,7 +400,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   // leaves every finished project to its alphabetical slot, so the one that
   // just ran a chat falls back down the list the moment it stops working.
   const orderedProjects = useMemo(() => {
-    const byStored = orderByStoredIds(projects, liveProjectIds);
+    const byStored = orderByStoredIds(projects, baseProjectIds);
     if (view.sortProjectsBy !== "status") return byStored;
     const factOf = (project: { id: string }) => projectOrderById.get(project.id);
     const statusRank = (project: { id: string }): number =>
@@ -415,7 +413,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         Number(left.isPersonal) - Number(right.isPersonal) ||
         left.name.localeCompare(right.name),
     );
-  }, [liveProjectIds, projectOrderById, projects, view.sortProjectsBy]);
+  }, [baseProjectIds, projectOrderById, projects, view.sortProjectsBy]);
   const displayProjects = useMemo(
     () =>
       orderedProjects.map((project) => ({

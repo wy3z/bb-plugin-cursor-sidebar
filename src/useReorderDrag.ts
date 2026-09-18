@@ -25,6 +25,8 @@ export interface ReorderDragState {
   /** The scope a thread drag is constrained to; empty for projects. */
   scope: string;
   movingId: string;
+  /** The order the drag would commit: the live order for a chat drag, the
+   * order it started in for a project drag, which only lands on release. */
   ids: string[];
   /** The row the pointer is over, for a visible placement indicator. */
   overId: string | null;
@@ -169,8 +171,11 @@ function moveDragGhost(ghost: HTMLDivElement, x: number, y: number): void {
  * every listener and timer on unmount.
  *
  * While engaged the dragged row is lifted into a floating ghost that follows
- * the pointer; the live reorder moves the row's slot in flow, so siblings
- * slide out of the way around it.
+ * the pointer. A chat drag reorders the list as it goes, so its siblings slide
+ * out of the way; a project drag holds the list still, leaving the dragged
+ * heading where it is and faded, with the placement line alone saying where it
+ * will drop. Either way the committed order is the one the pointer was showing
+ * when it was released.
  */
 export function useReorderDrag(
   onCommit: (state: ReorderDragState) => void,
@@ -421,7 +426,9 @@ export function useReorderDrag(
         // reorder never also files or (un)pins.
         commit({
           ...current,
-          ids: moveId(current.ids, current.movingId, targetId, placement),
+          ids: shufflesUnderPointer(current.kind)
+            ? moveId(current.ids, current.movingId, targetId, placement)
+            : current.ids,
           overId: targetId,
           placement,
           moveToSection: undefined,
@@ -455,12 +462,13 @@ export function useReorderDrag(
       function onUp(upEvent: PointerEvent) {
         if (finished || upEvent.pointerId !== pointerId) return;
         finished = true;
-        const committed = stateRef.current;
+        const released = stateRef.current;
         const wasEngaged = engaged;
         cleanup();
-        if (!wasEngaged || committed === null) return;
+        if (!wasEngaged || released === null) return;
         setState(null);
-        suppressNextClick(committed.movingId);
+        suppressNextClick(released.movingId);
+        const committed = { ...released, ids: releasedOrder(released) };
         if (committed.moveToSection !== undefined || committed.pin !== undefined || committed.parentTargetId !== null || committed.ids.join("\0") !== initial.ids.join("\0")) {
           onCommitRef.current(committed);
         }
@@ -608,6 +616,29 @@ export function useReorderDrag(
     }),
     [consumeSuppressedClick, startProject, startProjectPickUp, startThread, startThreadPickUp, state],
   );
+}
+
+/** Whether a drag shuffles the list under the pointer as it moves.
+ *
+ * A chat row does, so the row it will land beside is already out of the way.
+ * A project heading does not: the list holds still while it is dragged, and
+ * the placement line is the only thing that moves. */
+function shufflesUnderPointer(kind: ReorderDragState["kind"]): boolean {
+  return kind === "thread";
+}
+
+/** The order a released drag commits. A list that shuffled under the pointer
+ * already holds it; a still list takes it from the row and edge the placement
+ * line was showing. */
+function releasedOrder(state: ReorderDragState): string[] {
+  if (
+    shufflesUnderPointer(state.kind) ||
+    state.overId === null ||
+    state.placement === null
+  ) {
+    return state.ids;
+  }
+  return moveId(state.ids, state.movingId, state.overId, state.placement);
 }
 
 /** A cheap identity for a drag state, so identical frames do not re-render. */
