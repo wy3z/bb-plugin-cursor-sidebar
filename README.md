@@ -8,9 +8,14 @@ and standalone chats file into folders. The view settings live in the plugin's
 own database on the BB server, so uninstalling the plugin removes them and
 leaves your threads alone.
 
-## The view menu
+## Grouping
 
-![The view menu open over the sidebar: Grouping, Ordering, Show, Filters, Status and Environment](docs/screenshots/view-menu.png)
+![The same chats grouped by Projects, Updated, Status and Environment](docs/media/grouping-demo.webp)
+
+Sample chats, grouped four ways. The [mp4 is here](docs/media/grouping-demo.mp4)
+if your browser will not play the WebP.
+
+## The view menu
 
 | Control | What it changes |
 | --- | --- |
