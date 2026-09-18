@@ -10,9 +10,9 @@ export function normalizeDirectoryPath(path: string): string {
   return trimmed.length === 0 ? "/" : trimmed;
 }
 
-export function derivedProjectName(path: string, hostName?: string | null): string {
+export function derivedProjectName(path: string): string {
   const normalized = normalizeDirectoryPath(path);
   const base = normalized.split(/[\\/]/).filter((segment) => segment.length > 0).pop();
-  const candidate = (base ?? hostName ?? "Workspace").trim();
+  const candidate = (base ?? "Workspace").trim();
   return (candidate.length > 0 ? candidate : "Workspace").slice(0, MAX_DERIVED_NAME);
 }

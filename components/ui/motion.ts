@@ -1,9 +1,6 @@
 export const CONTROL_HOVER_TRANSITION =
   "transition-colors duration-150 hover:duration-0";
 
-export const LIST_HOVER_TRANSITION =
-  "transition-colors duration-150 ease-out";
-
 /**
  * Entrance/exit for Radix anchored surfaces (popovers, dropdowns, menus).
  * Anchored surfaces emerge from the trigger, so the pair animates opacity and

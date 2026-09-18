@@ -11,7 +11,6 @@ import { UNFILED_GROUP_KEY } from "./standalone-groups";
 
 export interface ReorderDragState {
   kind: "project" | "thread";
-  moveToProject?: string | null;
   /**
    * Standalone folder drop: a native section id to file the dragged family,
    * null to unfile it back to the dated chats. Undefined means no folder
@@ -137,11 +136,8 @@ function moveDragGhost(ghost: HTMLDivElement, x: number, y: number): void {
  */
 export function useReorderDrag(
   onCommit: (state: ReorderDragState) => void,
-  canMove: (threadId: string) => boolean = () => false,
   canNest: (targetId: string, movingId: string) => boolean = () => false,
 ): ReorderDrag {
-  const canMoveRef = useRef(canMove);
-  canMoveRef.current = canMove;
   const canNestRef = useRef(canNest);
   canNestRef.current = canNest;
   const [state, setState] = useState<ReorderDragState | null>(null);
@@ -289,7 +285,6 @@ export function useReorderDrag(
               ...current,
               moveToSection: sectionId,
               pin: false,
-              moveToProject: undefined,
               overId: null,
               placement: null,
               overTarget: `folder:${key}`,
@@ -304,7 +299,6 @@ export function useReorderDrag(
               ...current,
               pin: key === "pin",
               moveToSection: undefined,
-              moveToProject: undefined,
               overId: null,
               placement: null,
               overTarget: `pin:${key}`,
@@ -312,17 +306,6 @@ export function useReorderDrag(
             });
             return;
           }
-        }
-        const destination = hit.closest<HTMLElement>("[data-membership-target]");
-        if (current.kind === "thread" && destination && canMoveRef.current(current.movingId)) {
-          const targetId = destination.dataset.membershipTarget;
-          if (targetId && current.sectionId !== (targetId === "standalone" ? "standalone-chats" : `managed:${targetId}`)) {
-            commit({ ...current, moveToProject: targetId === "standalone" ? null : targetId, moveToSection: undefined, pin: undefined, overId: null, placement: null, overTarget: null, parentTargetId: null });
-            return;
-          }
-        }
-        if (current.moveToProject !== undefined) {
-          commit({ ...current, moveToProject: undefined, parentTargetId: null });
         }
         // The center band of a thread row nests the dragged thread under it;
         // the edges still reorder. A nest target may sit outside the reorder
@@ -348,7 +331,6 @@ export function useReorderDrag(
               overId: null,
               placement: null,
               overTarget: null,
-              moveToProject: undefined,
               moveToSection: undefined,
               pin: undefined,
             });
@@ -420,7 +402,7 @@ export function useReorderDrag(
         if (!wasEngaged || committed === null) return;
         setState(null);
         suppressNextClick(committed.movingId);
-        if (committed.moveToProject !== undefined || committed.moveToSection !== undefined || committed.pin !== undefined || committed.parentTargetId !== null || committed.ids.join("\0") !== initial.ids.join("\0")) {
+        if (committed.moveToSection !== undefined || committed.pin !== undefined || committed.parentTargetId !== null || committed.ids.join("\0") !== initial.ids.join("\0")) {
           onCommitRef.current(committed);
         }
       }
@@ -568,7 +550,6 @@ export function useReorderDrag(
 /** A cheap identity for a drag state, so identical frames do not re-render. */
 function signatureOf(state: ReorderDragState): string {
   return [
-    state.moveToProject ?? "\u0000u",
     state.moveToSection ?? "\u0000u",
     state.pin ?? "\u0000u",
     state.overId ?? "\u0000n",

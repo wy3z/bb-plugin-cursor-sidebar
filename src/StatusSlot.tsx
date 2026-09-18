@@ -1,73 +1,10 @@
-import type { ReactNode } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { StatusGlyph, isActivityIndicator, isTrailingStatusIndicator } from "./StatusGlyph";
+import { isActivityIndicator, isTrailingStatusIndicator } from "./StatusGlyph";
 import { relativeTimeLabel } from "./relative-time";
 import type { ThreadStatusKind } from "./status";
 import { isWorking } from "./activity";
-
-/**
- * The unread mark. A filled dot is an unread thread. Read chats draw nothing
- * here: Cursor's chat list does not use a hollow circle as a row icon, and
- * unread weight already lives on the title.
- */
-export function ReadDot({ unread, label }: { unread: boolean; label?: string }) {
-  const box = "flex size-3.5 shrink-0 items-center justify-center";
-  if (!unread) return null;
-  return (
-    <span role="img" aria-label={label ?? "Unread"} className={box}>
-      <span className="size-[5px] rounded-full bg-timeline-accent" />
-    </span>
-  );
-}
-
-/**
- * The row's left slot: live activity only. Idle chats keep the empty 16px box
- * so titles stay aligned with Project icons; unread weight lives on the
- * title, and attention marks trail on the right.
- */
-export function RowStatusSlot({ thread }: { thread: PluginSidebarThread }) {
-  return (
-    <span className="ps-status-slot pointer-events-none flex w-4 shrink-0 items-center justify-center">
-      {isActivityIndicator(thread.indicator) ? (
-        <StatusGlyph indicator={thread.indicator} label={thread.indicatorLabel} />
-      ) : null}
-    </span>
-  );
-}
-
-/** Status + last-updated time, always the row's trailing column. */
-export function TrailingMeta({
-  status,
-  updatedAt,
-  now,
-  showTime,
-}: {
-  status?: ReactNode;
-  updatedAt: number | null | undefined;
-  now: number;
-  showTime: boolean;
-}) {
-  const time = showTime && updatedAt != null && updatedAt > 0
-    ? relativeTimeLabel(updatedAt, now)
-    : null;
-  if (!status && time === null) return null;
-  return (
-    <span className="ps-thread-meta pointer-events-none flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
-      {status}
-      {time !== null ? (
-        <span className="ps-thread-time tabular-nums text-xs text-sidebar-foreground/73">
-          {time}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-export function trailingStatusKind(status: ThreadStatusKind | undefined): boolean {
-  return status === "input" || status === "failed";
-}
 
 export function activityStatusKind(status: ThreadStatusKind | undefined): boolean {
   return status === "working";
@@ -132,30 +69,4 @@ export function ThreadAge({ thread, now }: { thread: PluginSidebarThread; now: n
       {relativeTimeLabel(thread.updatedAt, now)}
     </span>
   );
-}
-
-/**
- * The left slot for a row whose computed status is stronger than the native
- * indicator. Draws only the attention-bearing kinds; `idle` and `unread` fall
- * back to the read dot the caller renders.
- */
-export function StatusFromKind({
-  status,
-  label,
-}: {
-  status: ThreadStatusKind;
-  label: string | null;
-}) {
-  const shared = "size-3.5 shrink-0";
-  const aria = label ?? undefined;
-  switch (status) {
-    case "failed":
-      return <Icon name="CircleX" aria-label={aria} className={cn(shared, "text-destructive")} />;
-    case "input":
-      return <Icon name="CircleQuestion" aria-label={aria} className={cn(shared, "text-sidebar-foreground/73")} />;
-    case "working":
-      return <Icon name="Loading" aria-label={aria} className={cn("size-4 shrink-0 animate-spin text-sidebar-foreground/73")} />;
-    default:
-      return null;
-  }
 }

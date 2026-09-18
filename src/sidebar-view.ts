@@ -27,7 +27,6 @@ export const VIEW_CONVERSATION_ORDER = ["manual", "updated", "status"] as const;
 export type ViewConversationOrder = (typeof VIEW_CONVERSATION_ORDER)[number];
 
 export const VIEW_GROUP_ORDER = ["manual", "updated"] as const;
-export type ViewGroupOrder = (typeof VIEW_GROUP_ORDER)[number];
 
 export const VIEW_STATUS_FILTERS = ["input", "failed", "working", "unread", "idle"] as const;
 export type ViewStatusFilter = (typeof VIEW_STATUS_FILTERS)[number];
@@ -226,7 +225,7 @@ export function environmentIdentityOf(
  * use a raw `thr_`/`env_` id as the environment name; that is never grouped as
  * a heading.
  */
-function usableEnvironmentLabel(value: string | null | undefined): string | null {
+export function usableEnvironmentLabel(value: string | null | undefined): string | null {
   const trimmed = value?.trim() || "";
   if (trimmed === "" || /^(thr|env)_[a-z0-9]+$/i.test(trimmed)) return null;
   return trimmed;
@@ -258,26 +257,6 @@ export function environmentGroupOf(thread: PluginSidebarThread): EnvironmentIden
 }
 
 export const NO_ENVIRONMENT_KEY = "__none__";
-
-/**
- * The conversation comparator for the two automatic orderings. `manual` has no
- * comparator: the caller keeps the stored sibling order and its recency
- * fallback. Ties are updated-desc then stable id, matching the shared status
- * precedence rule.
- */
-export function conversationComparator(
-  order: ViewConversationOrder,
-): ((left: PluginSidebarThread, right: PluginSidebarThread) => number) | null {
-  if (order === "manual") return null;
-  if (order === "updated") {
-    return (left, right) =>
-      right.updatedAt - left.updatedAt || left.id.localeCompare(right.id);
-  }
-  return (left, right) =>
-    ordinaryStatusRank(left) - ordinaryStatusRank(right) ||
-    right.updatedAt - left.updatedAt ||
-    left.id.localeCompare(right.id);
-}
 
 /**
  * The authoritative display parent within one ordinary home. A parent that

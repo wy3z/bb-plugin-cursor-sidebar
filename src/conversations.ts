@@ -1,5 +1,6 @@
 import { isWorking, needsAttention } from "./activity";
 import type { DisplayRow, ProjectSectionData } from "./forest";
+import { familyRootId } from "./standalone-groups";
 
 /**
  * Presentation-only conversation budget for one project.
@@ -31,24 +32,6 @@ export interface ConversationPlanOptions {
   limit?: number;
 }
 
-/** The topmost ancestor: the conversation this thread belongs to. */
-function conversationRootOf(
-  section: ProjectSectionData,
-  threadId: string,
-  memberIds: ReadonlySet<string>,
-): string {
-  let root = threadId;
-  let cursor = threadId;
-  const guard = memberIds.size + 1;
-  for (let step = 0; step < guard; step += 1) {
-    const parent = section.forest.parent.get(cursor) ?? null;
-    if (parent === null || !memberIds.has(parent)) break;
-    root = parent;
-    cursor = parent;
-  }
-  return root;
-}
-
 /**
  * Partition a project's active members into the bounded preview and the
  * remainder behind "N more conversations". Order follows the section's own
@@ -62,10 +45,15 @@ export function planConversations(
   const limit = options.limit ?? DEFAULT_INACTIVE_CONVERSATIONS;
   const memberIds = new Set(section.members.map((thread) => thread.id));
   const byId = new Map(section.members.map((thread) => [thread.id, thread]));
+  const parentOf = (threadId: string): string | null => {
+    const parent = section.forest.parent.get(threadId) ?? null;
+    if (parent === null || !memberIds.has(parent)) return null;
+    return parent;
+  };
 
   const rootOf = new Map<string, string>();
   for (const thread of section.members) {
-    rootOf.set(thread.id, conversationRootOf(section, thread.id, memberIds));
+    rootOf.set(thread.id, familyRootId(parentOf, thread.id));
   }
 
   // Group visible members into conversation families in the section's display
@@ -134,20 +122,15 @@ export function pageGroupRows(
   if (rows.length === 0) return { shown: [], hiddenConversations: 0 };
   const limit = options.limit ?? DEFAULT_INACTIVE_CONVERSATIONS;
   const ids = new Set(rows.map((row) => row.thread.id));
-  const rootOf = (threadId: string): string => {
-    let cursor = threadId;
-    const guard = ids.size + 1;
-    for (let step = 0; step < guard; step += 1) {
-      const parent = parentOf(cursor);
-      if (parent === null || !ids.has(parent)) return cursor;
-      cursor = parent;
-    }
-    return cursor;
+  const boundedParentOf = (threadId: string): string | null => {
+    const parent = parentOf(threadId);
+    if (parent === null || !ids.has(parent)) return null;
+    return parent;
   };
   const family = new Map<string, DisplayRow[]>();
   const rootOrder: string[] = [];
   for (const row of rows) {
-    const root = rootOf(row.thread.id);
+    const root = familyRootId(boundedParentOf, row.thread.id);
     const members = family.get(root);
     if (members) members.push(row);
     else {

@@ -51,7 +51,6 @@ import {
 import { useSyncExternalStore } from "react";
 import { cn } from "../../lib/utils";
 import {
-  EXTENDED_ICON_NAMES,
   type ExtendedIconName,
   getExtendedIcons,
   subscribeExtendedIcons,
@@ -157,13 +156,6 @@ const CORE_ICON_MAP = {
 type CoreIconName = keyof typeof CORE_ICON_MAP;
 
 export type IconName = CoreIconName | ExtendedIconName;
-
-const CORE_ICON_NAMES = Object.keys(CORE_ICON_MAP) as readonly CoreIconName[];
-
-export const ICON_NAMES: readonly IconName[] = [
-  ...CORE_ICON_NAMES,
-  ...EXTENDED_ICON_NAMES,
-];
 
 const CORE_ICON_LOOKUP: Readonly<Record<string, IconSvgElement | undefined>> =
   CORE_ICON_MAP;

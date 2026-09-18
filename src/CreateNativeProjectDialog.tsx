@@ -154,7 +154,7 @@ export function DeleteProjectDialog({ project, chatCount, onClose, onDeleted }: 
   const [error, setError] = useState<string | null>(null);
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-      <DialogContent className="ps-delete-dialog">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete project</DialogTitle>
           <DialogDescription>

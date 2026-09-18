@@ -1,4 +1,4 @@
-// bb-plugin-project-sidebar backend — settled store, order overlay, view prefs.
+// bb-plugin-project-sidebar backend — order overlay, view prefs, project icons.
 //
 // This state lives in the plugin's own SQLite database, never on a BB thread.
 // Uninstalling the plugin removes it. Native BB projects, threads, pins and
@@ -9,16 +9,6 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { derivedProjectName, normalizeDirectoryPath } from "./project-name";
-
-export interface StoredLifecycleRow {
-  threadId: string;
-  settledAt: number | null;
-}
-
-interface LifecycleDbRow {
-  thread_id: string;
-  settled_at: number | null;
-}
 
 const migrations = [
   // `snoozed_*` are kept only so an existing store migrates without a table
@@ -59,7 +49,6 @@ const migrations = [
    )`,
 ];
 
-const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
 const scopeSchema = z.string().trim().min(1).max(400);
 
 // The overlay only guarantees a non-empty string; glyph names are validated in
@@ -131,18 +120,6 @@ export const projectSidebarRpcContract = defineRpcContract({
     input: z.object({ hostId: z.string().trim().min(1) }),
     output: z.object({ path: z.string().nullable() }),
   },
-  projectVisibility: {
-    input: z.object({}),
-    output: z.object({ hiddenIds: z.array(z.string()) }),
-  },
-  setProjectVisibility: {
-    input: z.object({ projectId: z.string().trim().min(1), hidden: z.boolean() }),
-    output: z.object({ hiddenIds: z.array(z.string()) }),
-  },
-  mergeProjectVisibility: {
-    input: z.object({ hiddenIds: z.array(z.string().trim().min(1)).max(10_000) }),
-    output: z.object({ hiddenIds: z.array(z.string()) }),
-  },
   listProjectIcons: {
     input: z.object({}),
     output: z.object({ icons: z.array(projectIconRowSchema) }),
@@ -162,19 +139,6 @@ export const projectSidebarRpcContract = defineRpcContract({
     input: z.object({ view: sidebarViewSchema }),
     output: z.object({ view: sidebarViewSchema }),
   },
-  listLifecycle: {
-    input: z.object({}),
-    output: z.object({
-      rows: z.array(
-        z.object({
-          threadId: z.string(),
-          settledAt: z.number().nullable(),
-        }),
-      ),
-    }),
-  },
-  settle: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
-  unsettle: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   listThreadOrders: {
     input: z.object({}),
     output: z.object({
@@ -201,23 +165,11 @@ export const projectSidebarRpcContract = defineRpcContract({
       applied: z.boolean(),
     }),
   },
-  reorderProjects: {
-    input: z.object({
-      projectId: z.string().trim().min(1),
-      previousProjectId: z.string().trim().min(1).nullable(),
-      nextProjectId: z.string().trim().min(1).nullable(),
-    }),
-    output: z.object({ ok: z.boolean() }),
-  },
   listThreadSections: {
     input: z.object({}),
     output: z.object({
       sections: z.array(z.object({ id: z.string(), name: z.string() })),
     }),
-  },
-  createThreadSection: {
-    input: z.object({ name: z.string().trim().min(1).max(200) }),
-    output: z.object({ section: z.object({ id: z.string(), name: z.string() }) }),
   },
   renameThreadSection: {
     input: z.object({
@@ -252,10 +204,7 @@ export const projectSidebarRpcContract = defineRpcContract({
   },
 });
 
-export const LIFECYCLE_CHANNEL = "lifecycle";
 export const THREAD_ORDER_CHANNEL = "thread-order";
-export const PROJECT_ORDER_CHANNEL = "project-order";
-export const VISIBILITY_CHANNEL = "project-visibility";
 export const PROJECT_ICON_CHANNEL = "project-icon";
 export const SIDEBAR_VIEW_CHANNEL = "sidebar-view";
 export const THREAD_SECTIONS_CHANNEL = "thread-sections";
@@ -265,66 +214,6 @@ const inflightProjects = new Map<string, Promise<{ id: string; name: string }>>(
 export default function plugin(bb: BbPluginApi) {
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
-
-  db.prepare(
-    `UPDATE thread_lifecycle
-        SET snoozed_until = NULL, snoozed_at = NULL
-      WHERE snoozed_until IS NOT NULL OR snoozed_at IS NOT NULL`,
-  ).run();
-
-  const readAll = (): StoredLifecycleRow[] =>
-    (
-      db
-        .prepare(`SELECT thread_id, settled_at FROM thread_lifecycle`)
-        .all() as LifecycleDbRow[]
-    ).map((row) => ({ threadId: row.thread_id, settledAt: row.settled_at }));
-
-  const writeSettled = (threadId: string, settledAt: number | null): void => {
-    db.prepare(
-      `INSERT INTO thread_lifecycle
-         (thread_id, settled_at, snoozed_until, snoozed_at)
-       VALUES (?, ?, NULL, NULL)
-       ON CONFLICT(thread_id) DO UPDATE SET
-         settled_at = excluded.settled_at`,
-    ).run(threadId, settledAt);
-    bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId });
-  };
-
-  const clearSettled = (threadId: string): void => {
-    db.prepare(`DELETE FROM thread_lifecycle WHERE thread_id = ?`).run(threadId);
-    bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId });
-  };
-
-  const readVisibility = (): string[] =>
-    (
-      db
-        .prepare(`SELECT project_id FROM project_visibility WHERE hidden = 1 ORDER BY project_id`)
-        .all() as Array<{ project_id: string }>
-    ).map((row) => row.project_id);
-
-  const writeVisibility = (projectId: string, hidden: boolean): void => {
-    if (hidden) {
-      db.prepare(
-        `INSERT INTO project_visibility (project_id, hidden, updated_at)
-         VALUES (?, 1, ?)
-         ON CONFLICT(project_id) DO UPDATE SET hidden = 1, updated_at = excluded.updated_at`,
-      ).run(projectId, Date.now());
-    } else {
-      db.prepare(`DELETE FROM project_visibility WHERE project_id = ?`).run(projectId);
-    }
-  };
-
-  const mergeVisibility = (ids: readonly string[]): void => {
-    const insert = db.prepare(
-      `INSERT INTO project_visibility (project_id, hidden, updated_at)
-       VALUES (?, 1, ?)
-       ON CONFLICT(project_id) DO UPDATE SET hidden = 1, updated_at = excluded.updated_at`,
-    );
-    const now = Date.now();
-    db.transaction((values: readonly string[]) => {
-      for (const id of values) insert.run(id, now);
-    })([...new Set(ids)]);
-  };
 
   const readIcons = (): Array<{ projectId: string; icon: string }> =>
     (
@@ -405,8 +294,7 @@ export default function plugin(bb: BbPluginApi) {
         );
         if (match) return { id: project.id, name: project.name };
       }
-      const host = await bb.sdk.hosts.get({ hostId }).catch(() => null);
-      const name = derivedProjectName(normalized) || host?.name || "Workspace";
+      const name = derivedProjectName(normalized);
       const created = await bb.sdk.projects.create({
         name,
         source: { hostId, type: "local_path", path: normalized },
@@ -443,13 +331,10 @@ export default function plugin(bb: BbPluginApi) {
       return { hostId: config.primaryHostId };
     },
     async createNativeProject({ hostId, path }) {
-      const project = await ensureNativeProject(hostId, path);
-      bb.realtime.publish(PROJECT_ORDER_CHANNEL, {});
-      return project;
+      return ensureNativeProject(hostId, path);
     },
     async deleteNativeProject({ projectId }) {
       await bb.sdk.projects.delete({ projectId });
-      bb.realtime.publish(PROJECT_ORDER_CHANNEL, { projectId });
       return { ok: true as const };
     },
     async listHosts() {
@@ -461,19 +346,6 @@ export default function plugin(bb: BbPluginApi) {
     async pickFolder({ hostId }) {
       const result = await bb.sdk.hosts.pickFolder({ hostId, clientHostId: hostId });
       return { path: result.path };
-    },
-    projectVisibility() {
-      return { hiddenIds: readVisibility() };
-    },
-    setProjectVisibility({ projectId, hidden }) {
-      writeVisibility(projectId, hidden);
-      bb.realtime.publish(VISIBILITY_CHANNEL, { projectId });
-      return { hiddenIds: readVisibility() };
-    },
-    mergeProjectVisibility({ hiddenIds }) {
-      mergeVisibility(hiddenIds);
-      bb.realtime.publish(VISIBILITY_CHANNEL, {});
-      return { hiddenIds: readVisibility() };
     },
     listProjectIcons() {
       return { icons: readIcons() };
@@ -490,17 +362,6 @@ export default function plugin(bb: BbPluginApi) {
       writeSidebarView(view);
       bb.realtime.publish(SIDEBAR_VIEW_CHANNEL, {});
       return { view };
-    },
-    async listLifecycle() {
-      return { rows: readAll() };
-    },
-    async settle({ threadId }) {
-      writeSettled(threadId, Date.now());
-      return { ok: true };
-    },
-    async unsettle({ threadId }) {
-      clearSettled(threadId);
-      return { ok: true };
     },
     async listThreadOrders() {
       return { orders: readOrders() };
@@ -537,15 +398,6 @@ export default function plugin(bb: BbPluginApi) {
         applied: false,
       };
     },
-    async reorderProjects({ projectId, previousProjectId, nextProjectId }) {
-      await bb.sdk.projects.reorder({
-        projectId,
-        previousProjectId,
-        nextProjectId,
-      });
-      bb.realtime.publish(PROJECT_ORDER_CHANNEL, { projectId });
-      return { ok: true };
-    },
     async listThreadSections() {
       try {
         const sections = await bb.sdk.threadSections.list();
@@ -553,11 +405,6 @@ export default function plugin(bb: BbPluginApi) {
       } catch {
         throw new Error("Thread sections are unavailable on this host.");
       }
-    },
-    async createThreadSection({ name }) {
-      const section = await bb.sdk.threadSections.create({ name });
-      bb.realtime.publish(THREAD_SECTIONS_CHANNEL, { id: section.id });
-      return { section: { id: section.id, name: section.name } };
     },
     async renameThreadSection({ id, name }) {
       const section = await bb.sdk.threadSections.update({ id, name });
@@ -590,7 +437,6 @@ export default function plugin(bb: BbPluginApi) {
   });
 
   bb.events.on("thread.deleted", ({ thread }) => {
-    clearSettled(thread.id);
     db.prepare(`DELETE FROM thread_order WHERE thread_id = ?`).run(thread.id);
   });
 }

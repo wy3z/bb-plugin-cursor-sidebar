@@ -28,6 +28,7 @@ import {
   environmentIdentityOf,
   groupOrdinaryRows,
   ordinaryThreadStatus,
+  usableEnvironmentLabel,
   viewHasActiveFilters,
   type OrdinaryGroup,
 } from "./sidebar-view";
@@ -50,6 +51,7 @@ import {
   DEFAULT_INACTIVE_CONVERSATIONS,
   pageGroupRows,
 } from "./conversations";
+import { ShowMoreButton } from "./ShowMoreButton";
 import { statusSourceForGroup, threadDisplayTitle } from "./inbox";
 import { resolveRowStatus, type ThreadStatusKind } from "./status";
 
@@ -67,11 +69,9 @@ export interface TreeContext {
   workspacePaths: ReadonlyMap<string, string | null>;
   /** The host bb runs on; a row only names its host when it differs. */
   primaryHostId: string | null;
-  nativeProjects: readonly { id: string; name: string; isPersonal: boolean }[];
   now: number;
   onNavigate: () => void;
   onToggleChildren: (threadId: string) => void;
-  focusThread: (threadId: string, fallbackKey: string | null) => void;
   onThreadDragStart: (
     event: ReactPointerEvent<HTMLElement>,
     section: ProjectSectionData,
@@ -230,28 +230,6 @@ export function PinnedList({ items, ctx }: { items: readonly LiftedPin[]; ctx: T
   );
 }
 
-/**
- * The final tree sibling for a bounded conversation preview. It draws the
- * closing elbow at the conversation level so the rail ends at "Show more (n)"
- * instead of trailing off after the last row.
- */
-export function TrailingTreeRow({ children }: { children: ReactNode }) {
-  return (
-    <li className="relative list-none">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute top-0 h-1/2 w-px bg-sidebar-border"
-        style={{ left: TREE_RAIL_X }}
-      />
-      <span
-        aria-hidden
-        className="pointer-events-none absolute h-px bg-sidebar-border"
-        style={{ left: TREE_RAIL_X + 1, top: "50%", width: ELBOW - 2 }}
-      />
-      {children}
-    </li>
-  );
-}
 
 /** One shelf's rows, flattened with connector data. */
 export function ShelfList({
@@ -260,7 +238,6 @@ export function ShelfList({
   ctx,
   keepIds,
   expandIds,
-  trailing,
   grouped,
   omitPinned = false,
   firstGroupTools,
@@ -272,8 +249,6 @@ export function ShelfList({
   keepIds?: ReadonlySet<string>;
   /** Threads force-opened for this render only (a revealed collapsed path). */
   expandIds?: ReadonlySet<string>;
-  /** Final tree sibling drawn by the caller (the "Show more" control). */
-  trailing?: ReactNode;
   /**
    * Pinned/folder/date grouping applies to an ordinary home (a native Project
    * or Chats).
@@ -284,7 +259,6 @@ export function ShelfList({
   /** Tools on the first bucket heading, or a static fallback heading when no bucket renders. */
   firstGroupTools?: ReactNode;
 }) {
-  const hasTrailing = trailing !== undefined && !section.personal;
   const [childPages, setChildPages] = useState<ReadonlyMap<string, number>>(() => new Map());
   const childLimitOf = useCallback(
     (threadId: string) => {
@@ -302,7 +276,6 @@ export function ShelfList({
           ctx.expandedParents.has(id) ||
           (expandIds !== undefined && expandIds.has(id)),
         keepIds === undefined ? undefined : (id) => keepIds.has(id),
-        undefined,
         childLimitOf,
       ).filter(
         (row) => keepIds === undefined || keepIds.has(row.thread.id),
@@ -469,14 +442,11 @@ export function ShelfList({
           />
           {more ? (
             <li className="relative list-none">
-              <button
-                type="button"
-                aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, more.remaining)} more child threads`}
-                onClick={() => bumpChildPage(more.parentId)}
-                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
-              >
-                <span className="truncate">{`Show more (${more.remaining})`}</span>
-              </button>
+              <ShowMoreButton
+                hiddenConversations={more.remaining}
+                onShowMore={() => bumpChildPage(more.parentId)}
+                ariaLabel={`Show ${Math.min(CONVERSATION_PAGE_SIZE, more.remaining)} more child threads`}
+              />
             </li>
           ) : null}
         </Fragment>
@@ -601,10 +571,9 @@ export function ShelfList({
                 ctx.view.groupBy === "environment" ? group.label : null,
             })}
             {paged.hiddenConversations > 0 ? (
-              <button
-                type="button"
-                aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, paged.hiddenConversations)} more conversations`}
-                onClick={() => {
+              <ShowMoreButton
+                hiddenConversations={paged.hiddenConversations}
+                onShowMore={() => {
                   setGroupPages((current) => {
                     const next = new Map(current);
                     next.set(
@@ -615,12 +584,8 @@ export function ShelfList({
                     return next;
                   });
                 }}
-                className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
-              >
-                <span className="truncate">{`Show more (${paged.hiddenConversations})`}</span>
-              </button>
+              />
             ) : null}
-            {hasTrailing && isLast ? <TrailingTreeRow>{trailing}</TrailingTreeRow> : null}
           </AnimatedList>
         ) : null}
       </div>
@@ -798,13 +763,11 @@ function ThreadRow({
   // id as that segment; an id is never a directory name, so it is dropped and
   // the machine stands in below instead. The label is always shown, even when
   // it repeats the project heading, so a row never reads as blank.
-  const usableLabel = (value: string | null): string | null =>
-    value !== null && value !== "" && !/^(thr|env)_[a-z0-9]+$/i.test(value) ? value : null;
   const nameLabel = native.environment?.name?.trim() || null;
   const pathLabel = workspacePath
     ? workspacePath.split(/[\\/]/).filter(Boolean).at(-1)?.trim() ?? null
     : null;
-  const workspace = usableLabel(nameLabel) ?? usableLabel(pathLabel);
+  const workspace = usableEnvironmentLabel(nameLabel) ?? usableEnvironmentLabel(pathLabel);
   const branch = native.environment?.branchName?.trim() || null;
   const hostName = native.host?.name?.trim() || null;
   // Name the machine when a thread has no workspace or branch (a personal chat,
@@ -1101,7 +1064,6 @@ function ThreadRow({
             )}
           />
           {secondary ? <span className="ps-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
-          {location && ctx.view.show.host ? <span className="ps-thread-location hidden text-xs text-sidebar-foreground/73">{location}</span> : null}
           </div>
 
           <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
@@ -1144,7 +1106,7 @@ function ThreadRow({
               </span>
               {hasChildren ? (
                 <span
-                  className="ps-parent-mark pointer-events-none flex size-4 shrink-0 items-center justify-center text-sidebar-foreground/73 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0"
+                  className="pointer-events-none flex size-4 shrink-0 items-center justify-center text-sidebar-foreground/73 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0"
                   title={`${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
                   aria-hidden="true"
                 >

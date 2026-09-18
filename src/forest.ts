@@ -36,8 +36,6 @@ export interface DisplayRow {
    * line at the elbow.
    */
   guides: boolean[];
-  /** This row opens a rail of its own for the rows under it. */
-  opens: boolean;
 }
 
 /**
@@ -295,17 +293,12 @@ export function buildSections(
  * excluded grouping row such as a Project Manager is still walked as a parent,
  * so its kept children keep their real depth and rails instead of collapsing to
  * roots, while excluded subtrees contribute nothing (no dangling rails).
- *
- * `hasTrailingSibling` marks a grouping row as having one more sibling that the
- * renderer draws itself (the bounded preview's "Show more" row). Its last child
- * then keeps its rail open so the final branch reaches that row.
  */
 export function flattenShelf(
   section: ProjectSectionData,
   shelf: ThreadShelf,
   isExpanded: (threadId: string) => boolean = () => true,
   includes: (threadId: string) => boolean = () => true,
-  hasTrailingSibling: (threadId: string) => boolean = () => false,
   childLimit: (threadId: string) => number = () => Number.POSITIVE_INFINITY,
 ): DisplayRow[] {
   const inShelf = new Set(section.byShelf[shelf].map((thread) => thread.id));
@@ -327,18 +320,15 @@ export function flattenShelf(
           .slice(0, Math.max(0, childLimit(thread.id)))
       : [];
     const row: DisplayRow | null = includes(thread.id)
-      ? { thread, depth, guides, opens: false }
+      ? { thread, depth, guides }
       : null;
     if (row !== null) rows.push(row);
-    const before = rows.length;
-    const trailing = hasTrailingSibling(thread.id) ? 1 : 0;
     children.forEach((child, index) =>
       walk(child, depth + 1, [
         ...guides,
-        index < children.length - 1 + trailing,
+        index < children.length - 1,
       ]),
     );
-    if (row !== null) row.opens = rows.length > before;
   };
 
   for (const root of roots) walk(root, 0, []);

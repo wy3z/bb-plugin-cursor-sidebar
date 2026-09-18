@@ -61,7 +61,7 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
         </div>
         <button ref={trigger} type="button" data-row-action="" aria-label={`Actions for ${label}`}
           aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}
-          className="ps-accessible-actions sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:right-0 focus-visible:top-0 focus-visible:z-20 focus-visible:rounded focus-visible:bg-popover focus-visible:px-3 focus-visible:py-2 focus-visible:ring-1 focus-visible:ring-ring">
+          className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:right-0 focus-visible:top-0 focus-visible:z-20 focus-visible:rounded focus-visible:bg-popover focus-visible:px-3 focus-visible:py-2 focus-visible:ring-1 focus-visible:ring-ring">
           Actions
         </button>
       </div>

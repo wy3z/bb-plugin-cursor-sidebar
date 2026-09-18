@@ -42,7 +42,3 @@ export function projectThreadView(
   });
 }
 
-/** Folders Chats may render or file into. */
-export function chatsFolderRegistry<T extends { id: string }>(folders: readonly T[]): T[] {
-  return [...folders];
-}

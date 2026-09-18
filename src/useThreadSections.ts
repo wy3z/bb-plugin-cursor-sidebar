@@ -13,7 +13,6 @@ export interface ThreadSectionsStore {
   /** False when the host has no section support or the list failed. */
   available: boolean;
   refresh: () => Promise<void>;
-  create: (name: string) => Promise<ThreadSectionInfo | null>;
   rename: (id: string, name: string) => Promise<boolean>;
   remove: (id: string) => Promise<number | null>;
   /**
@@ -63,24 +62,6 @@ export function useThreadSections(): ThreadSectionsStore {
   useRealtime(THREAD_SECTIONS_CHANNEL, () => {
     void refresh();
   });
-
-  const create = useCallback(
-    async (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) return null;
-      try {
-        const result = await rpc.call("createThreadSection", { name: trimmed });
-        await refresh();
-        return result.section;
-      } catch (cause) {
-        toast.error("Could not create the folder", {
-          description: cause instanceof Error ? cause.message : String(cause),
-        });
-        return null;
-      }
-    },
-    [refresh, rpc],
-  );
 
   const rename = useCallback(
     async (id: string, name: string) => {
@@ -144,7 +125,7 @@ export function useThreadSections(): ThreadSectionsStore {
   );
 
   return useMemo(
-    () => ({ sections, available, refresh, create, rename, remove, setFamily }),
-    [available, create, refresh, remove, rename, sections, setFamily],
+    () => ({ sections, available, refresh, rename, remove, setFamily }),
+    [available, refresh, remove, rename, sections, setFamily],
   );
 }

@@ -3,23 +3,15 @@
  * pure and SDK-free so the exact writes a toggle performs, and the label the
  * menu shows, are exercised directly against the production functions.
  */
-export type PinHomeKind = "project" | "chats";
 
 export interface PinWrite {
   threadId: string;
   pinned: boolean;
 }
 
-/**
- * Whether a row may be pinned. An archived row never pins.
- */
-export function pinAllowed(
-  _homeKind: PinHomeKind,
-  archived: boolean,
-  crossedProtected: boolean,
-): boolean {
-  if (archived) return false;
-  return !crossedProtected;
+/** Whether a row may be pinned. An archived row never pins. */
+export function pinAllowed(archived: boolean): boolean {
+  return !archived;
 }
 
 /**
@@ -29,15 +21,11 @@ export function pinAllowed(
  * every pinned member so a child pin that lifted the family is undone.
  */
 export function planPinWrites(input: {
-  homeKind: PinHomeKind;
-  threadId: string;
   rootId: string;
   familyIds: readonly string[];
   pinnedMemberIds: readonly string[];
   pinned: boolean;
 }): readonly PinWrite[] {
-  void input.homeKind;
-  void input.threadId;
   if (input.pinned) {
     return [{ threadId: input.rootId, pinned: true }];
   }

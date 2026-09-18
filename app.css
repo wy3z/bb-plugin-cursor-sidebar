@@ -26,7 +26,6 @@
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
     overflow: hidden; overflow-wrap: anywhere;
   }
-  [data-project-sidebar-root] .ps-thread-location { display: none; }
   [data-project-sidebar-root] .ps-thread-time { display: flex; }
   [data-project-sidebar-root] .ps-gesture-row { touch-action: pan-y; -webkit-touch-callout: none; }
   [data-project-sidebar-root] .ps-gesture-row a,
@@ -40,17 +39,13 @@
 }
 
 @media (max-width: 767px), (pointer: coarse) {
-  .ps-project-checklist label { min-height: 44px; touch-action: manipulation; }
-  .ps-project-checklist label span { white-space: normal; overflow-wrap: anywhere; }
-  .ps-project-checklist select { min-height: 44px; width: 100%; max-width: 100%; font-size: 16px; }
-  .ps-project-checklist input { width: 20px; height: 20px; }
   .ps-create-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
   .ps-create-dialog h2 { overflow-wrap: anywhere; }
 }
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
    left of the name (with a gap before the label). Native projects always use
-   a folder; live work is drawn on thread rows, never here. */}
+   a folder; live work is drawn on thread rows, never here. */
 .ps-project-glyph {
   display: inline-flex;
   box-sizing: border-box;

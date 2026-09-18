@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -34,7 +33,6 @@ import {
 import { ShelfList, PinnedList, collectLiftedPins, type TreeContext } from "./ThreadTree";
 import { descendantsOf, resolveThreadDisplayTitles, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import {
-  chatsFolderRegistry,
   homeKindOf,
   nativeProjectSectionId,
   NATIVE_PROJECT_PREFIX,
@@ -100,16 +98,12 @@ import {
   type FolderMoveResult,
 } from "./standalone-groups";
 import type { ThreadShelf } from "./lifecycle";
-import { ageGroupKey, personalAgeGroups, type AgeGroup } from "./age-groups";
+import { ageGroupKey, type AgeGroup } from "./age-groups";
 import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus } from "./ProjectStatusGlyph";
 import { AnimatedList } from "./AnimatedList";
+import { ICON_BTN } from "./icon-btn";
+import { ShowMoreButton } from "./ShowMoreButton";
 
-function cssEscape(value: string): string {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-    return CSS.escape(value);
-  }
-  return value.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
-}
 
 /**
  * How long a collapsed project holds the selected-path exception list after the
@@ -211,13 +205,9 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const topGroupCollapsed = usePersistentIds("bb-plugin-project-sidebar:collapsed-top-groups:v1");
   const expandedThreads = usePersistentIds(EXPANDED_THREADS_KEY);
   const folderStore = useThreadSections();
-  const chatFolders = useMemo(
-    () => chatsFolderRegistry(folderStore.sections),
-    [folderStore.sections],
-  );
   const knownFolderIds = useMemo(
-    () => new Set(chatFolders.map((folder) => folder.id)),
-    [chatFolders],
+    () => new Set(folderStore.sections.map((folder) => folder.id)),
+    [folderStore.sections],
   );
   const folderNameOf = useCallback(
     (sectionId: string): string | null =>
@@ -283,7 +273,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const canPin = useCallback((threadId: string) => {
     const projected = projectedById.get(threadId);
     if (!projected) return false;
-    return pinAllowed(homeKindOf(projected.projectId), projected.isArchived, false);
+    return pinAllowed(projected.isArchived);
   }, [projectedById]);
 
   // Commit a released drag into the persistent stores.
@@ -353,7 +343,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     },
     [descendantsById, rawById],
   );
-  const drag = useReorderDrag(onDragCommit, undefined, canNest);
+  const drag = useReorderDrag(onDragCommit, canNest);
 
   // Project order is a plugin overlay; native storage projects stay unchanged.
   const baseOrderedProjects = useMemo(
@@ -600,11 +590,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     const root = section
       ? familyRootId((id) => section.forest.parent.get(id) ?? null, threadId)
       : threadId;
-    const homeKind = section ? homeKindOf(section.id) : "project";
     if (pinned) {
       const writes = planPinWrites({
-        homeKind,
-        threadId,
         rootId: root,
         familyIds: ids,
         pinnedMemberIds: [],
@@ -614,8 +601,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       return { failed: [] };
     }
     const writes = planPinWrites({
-      homeKind,
-      threadId,
       rootId: root,
       familyIds: ids,
       pinnedMemberIds: ids.filter((id) => rawById.get(id)?.isPinned ?? false),
@@ -778,75 +763,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     },
     [displayProjects, drag, reorderableProjectIds],
   );
-
-  // Connected focus after a row moves.
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const lastFocusedThread = useRef<string | null>(null);
-  const handleFocusCapture = useCallback(
-    (event: ReactFocusEvent<HTMLDivElement>) => {
-      const row = (event.target as HTMLElement).closest<HTMLElement>(
-        "[data-thread-focus-id]",
-      );
-      const id = row?.getAttribute("data-thread-focus-id");
-      if (id) lastFocusedThread.current = id;
-    },
-    [],
-  );
-  const focusThread = useCallback((threadId: string, fallbackKey: string | null) => {
-    const attempt = (triesLeft: number) => {
-      const container = listRef.current;
-      if (container === null) return;
-      const row = container.querySelector<HTMLElement>(
-        `[data-thread-focus-id="${cssEscape(threadId)}"]`,
-      );
-      if (row !== null) {
-        row.focus();
-        return;
-      }
-      if (fallbackKey !== null) {
-        const toggle = container.querySelector<HTMLElement>(
-          `[data-shelf-toggle="${cssEscape(fallbackKey)}"]`,
-        );
-        if (toggle !== null) {
-          toggle.focus();
-          return;
-        }
-      }
-      // Restoring an unassigned thread may move it into a folded date range.
-      // A project thread falls back to the pooled section when pooled.
-      if (fallbackKey === null) {
-        const section = sectionsRef.current.find((candidate) => candidate.personal && candidate.shelfById.get(threadId) === "active")
-          ?? (pooledSectionRef.current.shelfById.get(threadId) === "active" ? pooledSectionRef.current : undefined);
-        const group = section && personalAgeGroups(section, Date.now()).get(threadId);
-        if (section && group) {
-          const toggle = container.querySelector<HTMLElement>(
-            `[data-shelf-toggle="${cssEscape(ageGroupKey(section.id, group))}"]`,
-          );
-          if (toggle) {
-            toggle.focus();
-            return;
-          }
-        }
-      }
-      const previousId = lastFocusedThread.current;
-      const previous =
-        previousId === null
-          ? null
-          : container.querySelector<HTMLElement>(
-              `[data-thread-focus-id="${cssEscape(previousId)}"]`,
-            );
-      if (previous !== null) {
-        previous.focus();
-        return;
-      }
-      if (triesLeft > 0) {
-        requestAnimationFrame(() => attempt(triesLeft - 1));
-        return;
-      }
-      container.querySelector<HTMLElement>("[data-thread-focus-id]")?.focus();
-    };
-    requestAnimationFrame(() => attempt(2));
-  }, []);
 
   // The active thread's display position, for a one-shot reveal.
   const reveal = useMemo(() => {
@@ -1043,7 +959,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       rawById,
       workspacePaths,
       primaryHostId,
-      nativeProjects,
       visibleById,
       descendantsById,
       activeThreadId,
@@ -1054,7 +969,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       now,
       onNavigate,
       onToggleChildren: toggleChildren,
-      focusThread,
       onThreadDragStart,
       onThreadDragPickUp,
       onProjectDragPickUp,
@@ -1065,7 +979,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         drag.state?.kind === "thread" && drag.state.overId !== null
           ? { id: drag.state.overId, placement: drag.state.placement ?? "after" }
           : null,
-      threadSections: chatFolders,
+      threadSections: folderStore.sections,
       collapsedGroups: collapsedGroups.ids,
       onToggleGroup: collapsedGroups.toggle,
       onRemoveFromFolder: (threadId: string) => {
@@ -1091,7 +1005,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       childDropTarget: drag.state?.kind === "thread" ? drag.state.parentTargetId : null,
     }),
     [
-      rawById, workspacePaths, primaryHostId, nativeProjects,
+      rawById, workspacePaths, primaryHostId,
       activeThreadId,
       canPin,
       collapsedGroups,
@@ -1101,9 +1015,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       drag.consumeSuppressedClick,
       drag.state,
       expandedParents,
-      focusThread,
-      folderStore.available,
-      chatFolders,
+      folderStore.sections,
       now,
       onNavigate,
       onNewThread,
@@ -1278,7 +1190,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       unreadOrdinaryCount={unreadOrdinary.length}
       markReadBusy={markReadBusy}
       onMarkAllRead={() => { void markAllRead(); }}
-      triggerClassName="flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 data-[state=open]:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:size-9"
+      triggerClassName={`${ICON_BTN} data-[state=open]:text-sidebar-foreground/90`}
     />
   );
   const newChatAction = (
@@ -1339,22 +1251,20 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   return (
     <div data-project-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
-      <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} className="ps-view-sync-notice" />
+      <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
 
       {viewFiltersActive ? (
         <p
           role="status"
-          className="ps-filter-note px-3 pb-1 text-2xs leading-tight text-sidebar-foreground/73"
+          className="px-3 pb-1 text-2xs leading-tight text-sidebar-foreground/73"
         >
           Pinned and the open chat ignore the status and environment filters. Folders, pins and membership are unchanged.
         </p>
       ) : null}
 
       <div
-        ref={listRef}
         onScroll={handleScroll}
         data-scrolling={scrolling}
-        onFocusCapture={handleFocusCapture}
         onKeyDown={handleListKeyDown}
         className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:auto] [scrollbar-color:auto] [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-foreground/20 data-[scrolling=true]:[&::-webkit-scrollbar-thumb]:bg-foreground/20 [&::-webkit-scrollbar-thumb:hover]:bg-foreground/40"
       >
@@ -1516,7 +1426,7 @@ function GroupHeading({
           aria-label={createLabel ?? `New ${label}`}
           title={createLabel ?? `New ${label}`}
           onClick={onCreate}
-          className="ml-3 flex size-4 shrink-0 ps-icon-btn items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:ml-0 max-md:pointer-coarse:size-9"
+          className={`ml-3 ${ICON_BTN} max-md:pointer-coarse:ml-0`}
         >
           <Icon name="Plus" className="size-3.5" />
         </button>
@@ -1597,17 +1507,12 @@ function ProjectSection({
     return () => window.clearTimeout(timeout);
   }, [keepException, showCollapsedSelection]);
 
-  const showMore =
-    conversationPlan.hiddenConversations > 0 ? (
-      <button
-        type="button"
-        aria-label={`Show ${Math.min(CONVERSATION_PAGE_SIZE, conversationPlan.hiddenConversations)} more conversations`}
-        onClick={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
-        className="ps-more-conversations flex min-h-8 w-full items-center rounded py-1 pl-6 pr-2 text-left text-2xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
-      >
-        <span className="truncate">{`Show more (${conversationPlan.hiddenConversations})`}</span>
-      </button>
-    ) : null;
+  const showMore = (
+    <ShowMoreButton
+      hiddenConversations={conversationPlan.hiddenConversations}
+      onShowMore={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
+    />
+  );
 
   if (section.personal) {
     return (
@@ -1680,7 +1585,7 @@ function ProjectSection({
           />
         ) : null}
         <span className="ps-status-slot relative flex w-4 shrink-0 items-center justify-center">
-          <span className="ps-heading-lead flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
+          <span className="flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
             <ProjectStatusGlyph
               open={sectionOpen}
               icon={icon}
@@ -1758,7 +1663,7 @@ function ProjectSection({
         // not an unmounted subtree.
         if (showCollapsedSelection || (!sectionOpen && keepException)) {
           return (
-            <div className="ps-project-children">
+            <div>
               <ShelfList
                 section={section}
                 shelf="active"
@@ -1787,7 +1692,7 @@ function ProjectSection({
             {showMore}
           </>
         );
-        return <div className="ps-project-children">{interior}</div>;
+        return <div>{interior}</div>;
       })()}
 
     </section>

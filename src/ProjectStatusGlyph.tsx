@@ -17,18 +17,6 @@ export const ACTIVITY_LABELS: Record<ActivityState, string> = {
   attention: "Needs your input",
 };
 
-/** Precedence: a pending interaction outranks live work, which outranks history. */
-export function activityStateFor(
-  attention: boolean,
-  working: boolean,
-  complete: boolean,
-): ActivityState {
-  if (attention) return "attention";
-  if (working) return "working";
-  if (complete) return "complete";
-  return "inactive";
-}
-
 /** Map the resolved status precedence onto the glyph's resting states. */
 export function glyphStateForStatus(status: ThreadStatusKind): ActivityState {
   switch (status) {

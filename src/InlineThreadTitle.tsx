@@ -25,7 +25,6 @@ export function InlineThreadTitle({
   className,
   onClick,
   onPointerDown,
-  onDoubleClick,
 }: {
   thread: PluginSidebarThread;
   editing: boolean;
@@ -33,7 +32,6 @@ export function InlineThreadTitle({
   className?: string;
   onClick?: MouseEventHandler<HTMLElement>;
   onPointerDown?: PointerEventHandler<HTMLElement>;
-  onDoubleClick?: MouseEventHandler<HTMLElement>;
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
@@ -65,7 +63,6 @@ export function InlineThreadTitle({
           event.preventDefault();
           event.stopPropagation();
           if (matchMedia("(pointer: coarse)").matches) return;
-          onDoubleClick?.(event);
           onEditingChange(true);
         }}
       >

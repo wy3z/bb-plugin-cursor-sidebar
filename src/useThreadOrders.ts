@@ -15,7 +15,6 @@ interface StoredOrder {
 export interface ThreadOrderStore {
   /** The stored order for one sibling scope, or null when none is stored. */
   orderForScope: (scope: string) => readonly string[] | null;
-  isPending: (scope: string) => boolean;
   /** Persist a whole sibling scope, returning whether the write applied. */
   reorder: (scope: string, nextIds: readonly string[]) => Promise<boolean>;
 }
@@ -33,7 +32,6 @@ export function useThreadOrders(): ThreadOrderStore {
     () => new Map(),
   );
   const pendingRef = useRef<Set<string>>(new Set());
-  const [, setPendingVersion] = useState(0);
   const requestSeq = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -71,7 +69,6 @@ export function useThreadOrders(): ThreadOrderStore {
       // authoritative and supersedes any reconnect/realtime read.
       ++requestSeq.current;
       pendingRef.current.add(scope);
-      setPendingVersion((version) => version + 1);
       setOrders((current) =>
         new Map(current).set(scope, { ids: [...nextIds], revision: expectedRevision }),
       );
@@ -107,7 +104,6 @@ export function useThreadOrders(): ThreadOrderStore {
         return false;
       } finally {
         pendingRef.current.delete(scope);
-        setPendingVersion((version) => version + 1);
       }
     },
     [orders, refresh, rpc],
@@ -117,13 +113,9 @@ export function useThreadOrders(): ThreadOrderStore {
     (scope: string) => orders.get(scope)?.ids ?? null,
     [orders],
   );
-  const isPending = useCallback(
-    (scope: string) => pendingRef.current.has(scope),
-    [],
-  );
 
   return useMemo(
-    () => ({ orderForScope, isPending, reorder }),
-    [isPending, orderForScope, reorder],
+    () => ({ orderForScope, reorder }),
+    [orderForScope, reorder],
   );
 }
