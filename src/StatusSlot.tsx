@@ -1,7 +1,7 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { isActivityIndicator, isTrailingStatusIndicator } from "./StatusGlyph";
+import { isActivityIndicator } from "./StatusGlyph";
 import { relativeTimeLabel } from "./relative-time";
 import type { ThreadStatusKind } from "./status";
 import { isWorking } from "./activity";

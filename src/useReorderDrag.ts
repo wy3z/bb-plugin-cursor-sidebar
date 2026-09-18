@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { moveId, type DropPlacement } from "./thread-order";
+import { holdListScroll, releaseListScroll } from "./scroll-lock";
 import { UNFILED_GROUP_KEY } from "./standalone-groups";
 
 export interface ReorderDragState {
@@ -234,6 +235,11 @@ export function useReorderDrag(
         ? event.target.closest<HTMLElement>("[data-reorder-id]")
         : null;
       const grabbedRect = grabbed?.getBoundingClientRect() ?? null;
+      // A touch drag keeps the list still for its whole life, from the moment
+      // the row gesture hands the touch over to the drop.
+      const scrollHeld = event.pointerType === "mouse"
+        ? false
+        : holdListScroll(grabbed ?? (event.target as HTMLElement | null));
       const grabOffsetX = grabbedRect === null ? 0 : startX - grabbedRect.left;
       const grabOffsetY = grabbedRect === null ? 0 : startY - grabbedRect.top;
       let lastX = startX;
@@ -284,6 +290,7 @@ export function useReorderDrag(
         window.removeEventListener("blur", cancel);
         document.removeEventListener("visibilitychange", cancel);
         window.removeEventListener("touchmove", preventTouchScroll);
+        if (scrollHeld) releaseListScroll();
         document.body.style.userSelect = previousUserSelect;
         if (engaged) document.body.style.cursor = previousCursor;
         dragCursorStyle?.remove();

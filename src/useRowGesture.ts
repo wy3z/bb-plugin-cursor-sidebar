@@ -1,40 +1,53 @@
 import { useEffect, useRef, useState, type HTMLAttributes } from "react";
+import type { IconName } from "@/components/ui/icon";
+import { holdListScroll, releaseListScroll } from "./scroll-lock";
 
 /**
- * Touch swipe thresholds reused from the Inbox sidebar card: a horizontal
- * lock past 12px, commit at 72px, clamp at 110px, so the gesture feels
- * identical across sidebars. Only the bound actions differ (Pin/Archive
- * here; never Inbox Settle/Snooze).
+ * Touch swipe thresholds reused from the Inbox sidebar card: commit at 72px,
+ * clamp at 110px, so the gesture feels identical across sidebars. Only the
+ * bound actions differ (Pin/Archive here; never Inbox Settle/Snooze).
  */
 export const ROW_SWIPE_ACTIVATE_PX = 72;
 export const ROW_SWIPE_CLAMP_PX = 110;
 /**
- * One slop for the whole touch. Past it the gesture is a scroll or a swipe and
- * the hold is cancelled in the same breath, so there is no zone where the hold
- * dies and nothing takes over. It doubles as the hold's drift tolerance: a
- * still finger holds, a moving one swipes.
+ * The dead zone before the axis is decided, and the lead a vertical move needs
+ * before it is treated as a scroll. A thumb never travels straight, so a bare
+ * "whichever grew faster" test on the first few pixels turns a swipe into a
+ * scroll; the swipe takes any lead at all, and only a clearly vertical move
+ * gets the touch for the list.
  */
+const ROW_AXIS_LOCK_PX = 10;
+const ROW_SCROLL_RATIO = 1.4;
+/** Past this drift a lifted finger is dragging rather than holding. */
 const ROW_TOUCH_SLOP_PX = 8;
 /** Release below the commit threshold eases back over this long. */
 const ROW_SWIPE_SETTLE_MS = 220;
 /**
- * Two-stage touch hold. A short hold arms a reorder, so holding then dragging
- * moves the row; only a long hold with no movement opens the menu. Kept well
- * apart so a paused drag never turns into a menu.
+ * Two-stage touch hold. A short hold lifts the row, so holding then dragging
+ * moves it; `ROW_MENU_HOLD_MS` only serves rows that cannot be dragged at all,
+ * because a lifted row waits for the release instead of firing its menu while
+ * the finger is still deciding.
  */
-const ROW_REORDER_ARM_MS = 250;
+const ROW_REORDER_ARM_MS = 300;
 const ROW_MENU_HOLD_MS = 650;
+/** The click that follows a gesture is swallowed for this long. */
+const ROW_SUPPRESS_MS = 600;
+
+/** One side of a row swipe: what it says, what it draws, what it runs. */
+export interface RowSwipeSide {
+  label: string;
+  icon: IconName;
+  /** Removes something, so it reads in the destructive tone. */
+  destructive?: boolean;
+  run: () => void;
+}
 
 /** Touch swipe actions for one row. Present means the swipe is armed. */
 export interface RowSwipeBinding {
-  /** Label revealed under a left swipe (Archive on thread rows). */
-  leftLabel: string;
-  /** Runs on a committed left swipe; the same call as the menu action. */
-  onSwipeLeft: () => void;
-  /** Label revealed under a right swipe (Pin or Unpin); omitted arms left only. */
-  rightLabel?: string;
-  /** Runs on a committed right swipe; the same call as the menu action. */
-  onSwipeRight?: () => void;
+  /** Revealed by a swipe towards the end of the row. */
+  left?: RowSwipeSide;
+  /** Revealed by a swipe the other way. */
+  right?: RowSwipeSide;
 }
 
 export interface RowSwipeState {
@@ -50,25 +63,28 @@ export interface RowSwipeState {
  * One gesture state for touch hold, swipe, and menu on a sidebar row.
  *
  * Touch hold owns expansion; scrolling always wins before recognition. A
- * locked horizontal swipe owns the touch instead: it reveals the bound
- * action under the row, commits past the activation threshold on release,
- * and never opens the menu, so hold and swipe cannot double-fire. A release
- * short of the threshold eases the row back instead of snapping it. Reorder
- * is untouched: it engages only on deliberate mouse drags, and swipe tracks
- * touch/pen pointers only. Desktop pointers change nothing.
+ * locked horizontal swipe owns the touch instead: it reveals the bound action
+ * under the row, commits past the activation threshold on release, and never
+ * opens the menu, so hold and swipe cannot double-fire. A release short of the
+ * threshold eases the row back instead of snapping it. Reorder is untouched: it
+ * engages only on deliberate mouse drags, and swipe tracks touch/pen pointers
+ * only. Desktop pointers change nothing.
  */
 export function useRowGesture(
   onHold: () => void,
   onMenu: () => void,
   swipe?: RowSwipeBinding,
   /**
-   * Touch long-press reorder. It is offered after a short hold, and only takes
-   * the touch once the finger moves; a still long-press keeps its menu.
+   * Touch long-press reorder. A hold lifts the row; the finger then either
+   * moves, which hands it to the drag, or comes up, which keeps the hold's own
+   * meaning. Returns nothing, so a drag can only start when one is offered.
    */
   onReorderStart?: (pointerId: number, clientX: number, clientY: number) => boolean,
 ): {
   gesture: HTMLAttributes<HTMLElement>;
   swipeState: RowSwipeState | null;
+  /** True while a touch hold has lifted the row for a drag. */
+  reorderArmed: boolean;
 } {
   const callbacks = useRef({ onHold, onMenu });
   callbacks.current = { onHold, onMenu };
@@ -78,6 +94,7 @@ export function useRowGesture(
   const suppressUntil = useRef(0);
   const lastTouch = useRef(0);
   const [swipeState, setSwipeState] = useState<RowSwipeState | null>(null);
+  const [reorderArmed, setReorderArmed] = useState(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearSettle = () => {
     if (settleTimer.current !== null) {
@@ -98,7 +115,7 @@ export function useRowGesture(
       onPointerDown(event) {
         if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
         cancel.current?.();
-        if (!event.isPrimary) { suppressUntil.current = Date.now() + 1200; return; }
+        if (!event.isPrimary) { suppressUntil.current = Date.now() + ROW_SUPPRESS_MS; return; }
         if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable=true], [data-row-action]")) return;
         event.stopPropagation(); // Keep native split/drawer drags from also claiming this row.
         suppressUntil.current = 0;
@@ -110,26 +127,34 @@ export function useRowGesture(
           binding !== undefined &&
           !(event.target as HTMLElement).closest("button");
         const { pointerId, clientX, clientY } = event;
+        // The scroller is found from the row while the row is still where the
+        // finger left it, so a drag can hold the list still from here on.
+        const surface = event.currentTarget as HTMLElement;
+        let scrollHeld = false;
         let recognized = false;
         let moved = false;
+        let lifted = false;
         let dx = 0;
         let dy = 0;
         let swipeLocked = false;
-        const suppress = () => { suppressUntil.current = Date.now() + 1200; };
+        const suppress = () => { suppressUntil.current = Date.now() + ROW_SUPPRESS_MS; };
         let curX = clientX;
         let curY = clientY;
-        // A shorter hold than the menu only ARMS a reorder. If the finger then
-        // moves, the reorder takes the touch; if it stays still, the hold below
-        // still opens the menu, so a long-press never loses its menu.
-        let reorderArmed = false;
         const armTimer = onReorderStart === undefined ? null : setTimeout(() => {
           if (recognized || moved || swipeLocked) return;
-          reorderArmed = true;
+          lifted = true;
+          setReorderArmed(true);
+          // Nothing may pan while the row is lifted, or the drag is over before
+          // the finger has moved anywhere.
+          if (!scrollHeld) scrollHeld = holdListScroll(surface);
+          // The lift is the whole signal that the press became a drag; a short
+          // buzz is the same signal on a device that cannot show it well.
+          navigator.vibrate?.(10);
         }, ROW_REORDER_ARM_MS);
         const timer = setTimeout(() => {
-          // Only a still finger holds: if the touch has already started to
-          // move or swipe, the hold must not fire and open the menu.
-          if (moved || swipeLocked) return;
+          // Only a still finger holds, and only where no lift was offered: a
+          // lifted row has already told the finger it can be moved.
+          if (moved || swipeLocked || lifted) return;
           recognized = true;
           suppress();
           callbacks.current.onHold();
@@ -159,83 +184,131 @@ export function useRowGesture(
           window.removeEventListener("pointerdown", additional);
           window.removeEventListener("scroll", scroll, true);
           window.removeEventListener("blur", scroll);
-          window.removeEventListener("touchmove", keepForDrag);
+          window.removeEventListener("touchmove", touchMove);
+          if (scrollHeld) { scrollHeld = false; releaseListScroll(); }
+          setReorderArmed(false);
           cancel.current = null;
         };
+        const clampOffset = (value: number) =>
+          Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, value));
+        const showSwipe = (offset: number) => {
+          const direction = offset < 0 ? -1 : offset > 0 ? 1 : 0;
+          // Past the clamp the offset stops changing, so keep the same state
+          // object and skip the render.
+          setSwipeState((prev) =>
+            prev !== null && prev.offset === offset && !prev.settling &&
+            prev.direction === direction
+              ? prev
+              : { offset, settling: false, direction },
+          );
+        };
         /**
-         * Once the short hold has armed a reorder, a vertical move belongs to
-         * the drag, not the scroller. `pointermove` cannot cancel a scroll, so
-         * the touch move itself is claimed here; without it the browser pans
-         * the list first and the drag never gets a chance to start.
+         * One sample of the finger, taken from the pointer stream and from the
+         * raw touch stream. Deciding the axis here, and claiming the touch with
+         * `preventDefault` the moment it becomes a swipe or a drag, is what
+         * stops the browser panning the list out from under the gesture and
+         * cancelling the pointer with it.
          */
-        const keepForDrag = (touchEvent: TouchEvent) => {
-          if (!reorderArmed || recognized) return;
+        const sample = (x: number, y: number, touchEvent?: TouchEvent) => {
+          if (recognized) return;
+          curX = x;
+          curY = y;
+          dx = x - clientX;
+          dy = y - clientY;
+          const distance = Math.hypot(dx, dy);
+          if (swipeLocked) {
+            touchEvent?.preventDefault();
+            suppress();
+            showSwipe(clampOffset(dx));
+            return;
+          }
+          // A lifted row takes any real movement, in any direction: the finger
+          // was told it could move, and a heading has no swipe to lose.
+          if (lifted && distance >= ROW_TOUCH_SLOP_PX) {
+            touchEvent?.preventDefault();
+            recognized = true;
+            suppress();
+            // The drag takes its own hold on the scroll before this one lets
+            // go, so the list is never briefly pannable mid-gesture.
+            onReorderStart?.(pointerId, curX, curY);
+            cleanup();
+            return;
+          }
+          // Inside the dead zone the press is still a hold and its drift is
+          // tolerated, so a steady finger keeps its menu.
+          if (distance < ROW_AXIS_LOCK_PX) return;
+          clearTimeout(timer);
+          const horizontal = Math.abs(dx);
+          const vertical = Math.abs(dy);
+          // The swipe is the gesture with no second chance: once the list takes
+          // the touch, that touch cannot be swiped any more. So the swipe takes
+          // any horizontal lead, and only a clearly vertical move scrolls.
+          const leading = horizontal >= vertical
+            ? "swipe"
+            : vertical >= horizontal * ROW_SCROLL_RATIO
+              ? "scroll"
+              : null;
+          // A thumb that stays in between has not decided; take the dominant
+          // axis once it has travelled far enough to mean something.
+          const axis = leading ?? (distance >= ROW_AXIS_LOCK_PX * 2
+            ? (horizontal >= vertical ? "swipe" : "scroll")
+            : null);
+          if (axis === null) return;
+          // Past the dead zone the hold dies in the same breath as the
+          // decision, so no movement leaves the gesture dead.
+          if (axis === "scroll") {
+            moved = true;
+            suppress();
+            resetSwipe(false);
+            cleanup();
+            return;
+          }
+          if (!swipeArmed) {
+            moved = true;
+            suppress();
+            return;
+          }
+          // A side with nothing bound is not a swipe: the row stays where it is
+          // rather than sliding to reveal an action that does not exist.
+          if ((dx < 0 ? binding?.left : binding?.right) === undefined) {
+            moved = true;
+            suppress();
+            return;
+          }
+          swipeLocked = true;
+          touchEvent?.preventDefault();
+          if (!scrollHeld) scrollHeld = holdListScroll(surface);
+          suppress();
+          clearSettle();
+          showSwipe(clampOffset(dx));
+        };
+        /**
+         * The touch stream, not the pointer stream: `pointermove` cannot cancel
+         * a scroll, so this is the listener that can claim the touch before the
+         * browser turns it into a pan.
+         */
+        const touchMove = (touchEvent: TouchEvent) => {
           const touch = touchEvent.touches[0];
           if (touch === undefined) return;
-          const touchDx = touch.clientX - clientX;
-          const touchDy = touch.clientY - clientY;
-          if (Math.hypot(touchDx, touchDy) < ROW_TOUCH_SLOP_PX) return;
-          if (Math.abs(touchDy) > Math.abs(touchDx)) touchEvent.preventDefault();
-          else reorderArmed = false;
+          sample(touch.clientX, touch.clientY, touchEvent);
         };
         const scroll = () => { moved = true; suppress(); resetSwipe(false); cleanup(); };
         const additional = (e: PointerEvent) => { if (e.pointerId !== pointerId) scroll(); };
         const move = (e: PointerEvent) => {
           if (e.pointerId !== pointerId) return;
-          curX = e.clientX;
-          curY = e.clientY;
-          // A recognized hold owns the gesture: later movement can neither
-          // arm a swipe nor reopen the menu, so hold and swipe never combine.
-          if (recognized) return;
-          dx = e.clientX - clientX; dy = e.clientY - clientY;
-          // Armed by the short hold: a vertical move hands the touch to the
-          // reorder, while a horizontal one is still the swipe, so a slow swipe
-          // never turns into a reorder.
-          if (reorderArmed && Math.hypot(dx, dy) >= ROW_TOUCH_SLOP_PX) {
-            if (Math.abs(dy) > Math.abs(dx)) {
-              reorderArmed = false;
-              recognized = true;
-              suppress();
-              onReorderStart?.(pointerId, curX, curY);
-              cleanup();
-              return;
-            }
-            reorderArmed = false;
-          }
-          if (!swipeLocked) {
-            // Below the slop the finger is still a candidate hold. Its tiny
-            // drift is tolerated so a steady hold can open the menu.
-            if (Math.hypot(dx, dy) < ROW_TOUCH_SLOP_PX) return;
-            // Past the slop the touch is a scroll or a swipe; the hold dies
-            // here, so no movement leaves the gesture dead.
-            clearTimeout(timer);
-            if (Math.abs(dy) >= Math.abs(dx)) {
-              scroll();
-              return;
-            }
-            if (!swipeArmed) {
-              moved = true;
-              suppress();
-              return;
-            }
-            swipeLocked = true;
-          }
-          if (swipeLocked) {
-            suppress();
-            const offset = Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx));
-            const direction = offset < 0 ? -1 : offset > 0 ? 1 : 0;
-            // Past the clamp the offset stops changing, so keep the same state
-            // object and skip the render.
-            setSwipeState((prev) =>
-              prev !== null && prev.offset === offset && !prev.settling &&
-              prev.direction === direction
-                ? prev
-                : { offset, settling: false, direction },
-            );
-          }
+          sample(e.clientX, e.clientY);
         };
         const up = (e: PointerEvent) => {
           if (e.pointerId !== pointerId) return;
+          // The row was lifted and the finger never moved, so the press keeps
+          // its hold meaning: fold a project, expand a family, or open the
+          // actions menu where there is no hold action.
+          if (lifted && !recognized && !moved && !swipeLocked) {
+            suppress();
+            cleanup();
+            callbacks.current.onHold();
+            return;
+          }
           // The hold already fired: consume the release with no swipe and
           // no menu, and suppress the tap that follows it.
           if (recognized) {
@@ -245,33 +318,42 @@ export function useRowGesture(
           }
           if (swipeLocked) {
             const bindingNow = swipeRef.current;
-            const offset = Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx));
+            const offset = clampOffset(dx);
             suppress();
             cleanup();
-            const commitLeft = offset <= -ROW_SWIPE_ACTIVATE_PX;
-            const commitRight = offset >= ROW_SWIPE_ACTIVATE_PX;
-            const commits = bindingNow !== undefined && (commitLeft || commitRight);
-            // A commit removes the row, so it leaves at once; anything short
-            // of it eases back under the finger.
-            resetSwipe(!commits);
-            if (commits && bindingNow !== undefined) {
-              if (commitLeft) bindingNow.onSwipeLeft();
-              else bindingNow.onSwipeRight?.();
-            }
+            const side = offset <= -ROW_SWIPE_ACTIVATE_PX
+              ? bindingNow?.left
+              : offset >= ROW_SWIPE_ACTIVATE_PX
+                ? bindingNow?.right
+                : undefined;
+            // A commit removes or moves the row, so it leaves at once; anything
+            // short of the threshold eases back under the finger.
+            resetSwipe(side === undefined);
+            side?.run();
             return;
           }
           if (recognized || moved) suppress();
           cleanup();
           if (!recognized && dx < -48 && Math.abs(dx) > Math.abs(dy) * 1.5) callbacks.current.onMenu();
         };
-        const abort = (e: PointerEvent) => { if (e.pointerId === pointerId) scroll(); };
+        /**
+         * A cancelled pointer is the browser taking the touch for a pan. Mid
+         * swipe that is not a reason to snap the row back: the finger is still
+         * down and the release is still to come, so the swipe keeps its offset
+         * and commits or eases back from here.
+         */
+        const abort = (e: PointerEvent) => {
+          if (e.pointerId !== pointerId) return;
+          if (swipeLocked) { up(e); return; }
+          scroll();
+        };
         window.addEventListener("pointermove", move, { passive: true });
         window.addEventListener("pointerup", up);
         window.addEventListener("pointercancel", abort);
         window.addEventListener("pointerdown", additional);
         window.addEventListener("scroll", scroll, true);
         window.addEventListener("blur", scroll);
-        window.addEventListener("touchmove", keepForDrag, { passive: false });
+        window.addEventListener("touchmove", touchMove, { passive: false });
         cancel.current = () => { resetSwipe(false); cleanup(); };
       },
       onClickCapture(event) {
@@ -297,5 +379,6 @@ export function useRowGesture(
       },
     },
     swipeState: swipe === undefined ? null : swipeState,
+    reorderArmed,
   };
 }

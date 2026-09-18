@@ -20,7 +20,7 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const scope = usePortalScopeProps();
-  const { gesture, swipeState } = useRowGesture(onHold ?? (() => setOpen(true)), () => setOpen(true), swipe, onReorderStart);
+  const { gesture, swipeState, reorderArmed } = useRowGesture(onHold ?? (() => setOpen(true)), () => setOpen(true), swipe, onReorderStart);
   const reducedMotion = usePrefersReducedMotion();
   const offset = swipeState?.offset ?? 0;
   const settling = swipeState?.settling ?? false;
@@ -28,26 +28,30 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
   const revealed = swiping || settling;
   const direction = swiping ? Math.sign(offset) : (swipeState?.direction ?? 0);
   const armed = Math.abs(offset) >= ROW_SWIPE_ACTIVATE_PX;
+  // The side the finger has travelled towards, so its own label, glyph and
+  // tone are what the row reveals.
+  const side = direction < 0 ? swipe?.left : direction > 0 ? swipe?.right : undefined;
   return <Popover.Root open={open} onOpenChange={setOpen} modal>
     <Popover.Anchor asChild>
       <div
-        className={cn("cs-gesture-row relative", revealed && "overflow-hidden rounded-md")}
+        className={cn("cs-gesture-row relative", reorderArmed && "cs-drag-armed", revealed && "overflow-hidden rounded-md")}
         data-no-sidebar-swipe={swipe !== undefined ? "" : undefined}
         {...gesture}
       >
-        {swipe !== undefined && revealed ? (
+        {side !== undefined && revealed ? (
           <div
             aria-hidden="true"
             className={cn(
               "pointer-events-none absolute inset-0 flex items-center gap-1.5 px-3 text-xs font-medium transition-opacity duration-200 ease-out motion-reduce:transition-none",
-              direction < 0
-                ? "justify-end bg-destructive/10 text-destructive"
-                : "justify-start bg-sidebar-accent text-foreground",
+              direction < 0 ? "justify-end" : "justify-start",
+              side.destructive
+                ? "bg-destructive/10 text-destructive"
+                : "bg-sidebar-accent text-foreground",
               settling ? "opacity-0" : armed ? "opacity-100" : "opacity-50",
             )}
           >
-            <Icon name={direction < 0 ? "Archive" : "Pin"} className="size-4" />
-            {direction < 0 ? swipe.leftLabel : (swipe.rightLabel ?? "")}
+            <Icon name={side.icon} className="size-4" />
+            {side.label}
           </div>
         ) : null}
         <div

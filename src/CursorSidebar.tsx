@@ -374,11 +374,12 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     }
     return roots;
   }, [familyRootOfId, visible]);
-  // Each project's aggregate status, read from the same visible feed the project
-  // glyphs use, so a status ordering never disagrees with the heading. A family
-  // lifted into the Pinned block belongs there, not to its home, so it is
-  // skipped here exactly as the heading aggregate skips it.
-  const projectStatusById = useMemo(() => {
+  // One fact per project for the status ordering, from the same visible feed
+  // the project glyphs use: the worst status among its chats, and when the
+  // project last had any activity. A family lifted into the Pinned block
+  // belongs there, not to its home, so it is skipped here exactly as the
+  // heading aggregate skips it, and an archived chat raises neither fact.
+  const projectOrderById = useMemo(() => {
     const members = new Map<string, PluginSidebarThread[]>();
     for (const thread of visible) {
       if (pinnedFamilyRoots.has(familyRootOfId(thread.id))) continue;
@@ -386,24 +387,35 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       if (group === undefined) members.set(thread.projectId, [thread]);
       else group.push(thread);
     }
-    const status = new Map<string, ThreadStatusKind>();
+    const facts = new Map<string, { status: ThreadStatusKind; lastActiveAt: number }>();
     for (const [projectId, group] of members) {
-      status.set(projectId, aggregateSectionStatus(group).status);
+      let lastActiveAt = 0;
+      for (const thread of group) {
+        if (thread.isArchived) continue;
+        lastActiveAt = Math.max(lastActiveAt, thread.updatedAt);
+      }
+      facts.set(projectId, { status: aggregateSectionStatus(group).status, lastActiveAt });
     }
-    return status;
+    return facts;
   }, [familyRootOfId, pinnedFamilyRoots, visible]);
+  // Worst status first, then the project used most recently. Status alone
+  // leaves every finished project to its alphabetical slot, so the one that
+  // just ran a chat falls back down the list the moment it stops working.
   const orderedProjects = useMemo(() => {
     const byStored = orderByStoredIds(projects, liveProjectIds);
     if (view.sortProjectsBy !== "status") return byStored;
-    const rank = (project: { id: string }): number =>
-      THREAD_STATUS_RANK[projectStatusById.get(project.id) ?? "idle"];
+    const factOf = (project: { id: string }) => projectOrderById.get(project.id);
+    const statusRank = (project: { id: string }): number =>
+      THREAD_STATUS_RANK[factOf(project)?.status ?? "idle"];
+    const lastActive = (project: { id: string }): number => factOf(project)?.lastActiveAt ?? 0;
     return [...byStored].sort(
       (left, right) =>
-        rank(left) - rank(right) ||
+        statusRank(left) - statusRank(right) ||
+        lastActive(right) - lastActive(left) ||
         Number(left.isPersonal) - Number(right.isPersonal) ||
         left.name.localeCompare(right.name),
     );
-  }, [liveProjectIds, projectStatusById, projects, view.sortProjectsBy]);
+  }, [liveProjectIds, projectOrderById, projects, view.sortProjectsBy]);
   const displayProjects = useMemo(
     () =>
       orderedProjects.map((project) => ({
@@ -1173,6 +1185,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             : undefined
         }
         canDragProject={kind === "project" && section.known && view.sortProjectsBy === "manual"}
+        onMoveProject={
+          kind === "project" && section.known && view.sortProjectsBy === "manual"
+            ? (offset) => { moveProjectWithinNative(section.id, offset); }
+            : undefined
+        }
         isDragging={drag.state?.kind === "project" && drag.state.movingId === section.id}
         dropPlacement={
           drag.state?.kind === "project" && drag.state.overId === section.id
@@ -1380,6 +1397,7 @@ function ProjectSection({
   icon,
   onSetIcon,
   canDragProject,
+  onMoveProject,
   isDragging,
   dropPlacement,
   onHeadingDragStart,
@@ -1397,6 +1415,8 @@ function ProjectSection({
   icon?: IconName | null;
   onSetIcon?: ((anchor: HTMLElement) => void) | undefined;
   canDragProject: boolean;
+  /** Hand-order the project one place, the same write the drag commits. */
+  onMoveProject?: ((offset: -1 | 1) => void) | undefined;
   isDragging: boolean;
   dropPlacement: DropPlacement | null;
   onHeadingDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -1481,7 +1501,6 @@ function ProjectSection({
     >
       <SidebarActions
         label={section.name}
-        onHold={onToggleProject}
         onReorderStart={
           canDragProject
             ? (pointerId, clientX, clientY) => {
@@ -1497,6 +1516,15 @@ function ProjectSection({
           const anchor = headingRef.current;
           if (anchor !== null) onSetIcon(anchor);
         } }] : []),
+        // A hold already owns the drag on touch, and a drag that has to beat
+        // the list's own scrolling does not always win. Moving by hand is the
+        // same write with no gesture to lose.
+        ...(onMoveProject
+          ? [
+              { label: "Move up", run: () => onMoveProject(-1), separatorBefore: true },
+              { label: "Move down", run: () => onMoveProject(1) },
+            ]
+          : []),
         ...(onDeleteProject ? [{ label: "Delete project", run: onDeleteProject, destructive: true, separatorBefore: true }] : []),
       ]}>
       <div

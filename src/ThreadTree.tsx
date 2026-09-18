@@ -951,7 +951,7 @@ function ThreadRow({
             aria-label={`${title}${isActive ? ", selected" : ""}`}
             aria-current={isActive ? "true" : undefined}
             aria-expanded={hasChildren ? expanded : undefined}
-            aria-description={hasChildren ? "Hold to expand or collapse children. Swipe left to archive, swipe right to pin, or use the Actions control or Shift+F10." : "Swipe left to archive, swipe right to pin. Hold for more actions, or use the Actions control or Shift+F10."}
+            aria-description="Swipe left to pin, swipe right to archive. Hold to open the actions menu, or use the Actions control or Shift+F10."
             {...splitProps}
             draggable={false}
             onPointerDown={handlePointerDown}

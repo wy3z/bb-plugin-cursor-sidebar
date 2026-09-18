@@ -1,11 +1,11 @@
 /* Scoped phone/touch affordances; fine-pointer desktop density is unchanged. */
 @media (max-width: 767px), (pointer: coarse) {
   [data-cursor-sidebar-root] { min-width: 0; overflow-x: clip; }
-  [data-cursor-sidebar-root] button,
+  [data-cursor-sidebar-root] button:not(.cs-row-action),
   [data-cursor-sidebar-root] select,
   .cs-move-dialog button,
   .cs-move-dialog select { min-height: 44px; touch-action: manipulation; }
-  [data-cursor-sidebar-root] button:has(> svg:only-child):not(.cs-icon-btn):not(.cs-new-project) { min-width: 44px; }
+  [data-cursor-sidebar-root] button:has(> svg:only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action) { min-width: 44px; }
   [data-cursor-sidebar-root] button[aria-expanded] { opacity: 1; }
   [data-cursor-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
   [data-cursor-sidebar-root] .cs-project-glyph { width: 16px; height: 16px; }
@@ -32,6 +32,16 @@
   [data-cursor-sidebar-root] .cs-gesture-row button,
   [data-cursor-sidebar-root] .cs-thread-title { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
   [data-cursor-sidebar-root] .cs-gesture-row input { user-select: text; -webkit-user-select: text; }
+  /* A lifted row: the hold has become a drag, and the finger is told so before
+     anything moves. Applies to the row inside, never to the wrapper, so the
+     swipe offset and the lift cannot fight over one transform. */
+  [data-cursor-sidebar-root] .cs-drag-armed [data-thread-row],
+  [data-cursor-sidebar-root] .cs-drag-armed [data-reorder-kind="project"] {
+    border-radius: 6px;
+    background-color: var(--sidebar-accent);
+    box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
+    transform: scale(1.02);
+  }
   .cs-context-actions { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
   .cs-context-actions button { min-height: 44px; touch-action: manipulation; }
   .cs-move-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
@@ -41,6 +51,16 @@
 @media (max-width: 767px), (pointer: coarse) {
   .cs-create-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
   .cs-create-dialog h2 { overflow-wrap: anywhere; }
+}
+
+/* The row's pin/archive controls are a hover affordance. A touch pointer has no
+   hover to reveal them, and the 44px targets above would stack them over the
+   timestamp, so a swipe or the hold menu acts on the row instead. A narrow
+   window on a mouse still gets them, which is why this is not in the block
+   above. */
+@media (pointer: coarse) {
+  [data-cursor-sidebar-root] .cs-row-actions,
+  [data-cursor-sidebar-root] .cs-row-action { display: none; }
 }
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box

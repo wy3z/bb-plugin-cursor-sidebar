@@ -1,5 +1,4 @@
 import type { PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk/app";
-import { cn } from "@/lib/utils";
 
 /**
  * This plugin's status glyphs, matching bb's own sidebar: the red circle-x

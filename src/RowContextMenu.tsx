@@ -46,21 +46,33 @@ export function RowContextMenu({
   if (onRemoveFromFolder) actions.push({ label: "Remove family from folder", run: onRemoveFromFolder });
   actions.push({ label: "Archive", run: () => native.archive(thread.id), separatorBefore: true });
   actions.push({ label: "Delete", run: () => native.requestDelete(thread.id), destructive: true });
+  // Pin towards the end of the row, archive the other way: pinning is
+  // reversible and worth keeping, archiving takes the row away.
   const swipe: RowSwipeBinding | undefined = swipeDisabled
     ? undefined
     : {
-        leftLabel: "Archive",
-        onSwipeLeft: () => native.archive(thread.id),
         ...(onTogglePin !== undefined
           ? {
-              rightLabel: pinActionLabel(isPinned ?? false),
-              onSwipeRight: onTogglePin,
+              left: {
+                label: pinActionLabel(isPinned ?? false),
+                icon: isPinned ? "PinOff" : "Pin",
+                run: onTogglePin,
+              },
             }
           : {}),
+        right: {
+          label: "Archive",
+          icon: "Archive",
+          destructive: true,
+          run: () => native.archive(thread.id),
+        },
       };
-  const hold = swipeDisabled ? undefined : onToggleChildren;
+  // No hold action: on touch a hold opens this menu, and the menu carries the
+  // children toggle. A row with children used to spend its hold on expanding
+  // them, which left rename, read, pin, archive and delete out of reach on a
+  // phone.
   return (
-    <SidebarActions label={threadDisplayTitle(thread)} onHold={hold} onReorderStart={onReorderStart} actions={actions} swipe={swipe}>
+    <SidebarActions label={threadDisplayTitle(thread)} onReorderStart={onReorderStart} actions={actions} swipe={swipe}>
       {children}
     </SidebarActions>
   );
