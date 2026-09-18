@@ -1119,6 +1119,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
 
   const renderSection = (section: ProjectSectionData) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
+    const sectionOpen = expandedProjects.ids.has(section.id);
     // Pinned rows are lifted into the global Pinned block, so their activity
     // must not also light the home they came from: a working pinned thread
     // would otherwise put a spinner on a closed project that is already
@@ -1128,7 +1129,18 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         thread.projectId === section.id &&
         !pinnedFamilyRoots.has(familyRootOfId(thread.id)),
     );
-    const aggregate = summarizeSection(section.name, sectionThreads);
+    // A collapsed project keeps the selected path on screen, so that row is
+    // already drawing its own activity; the heading speaks only for the rows
+    // the fold actually hides, or a working selection spins twice.
+    const onScreen = sectionOpen
+      ? null
+      : new Set(activePathIds(section, ctx.activeThreadId));
+    const aggregate = summarizeSection(
+      section.name,
+      onScreen === null
+        ? sectionThreads
+        : sectionThreads.filter((thread) => !onScreen.has(thread.id)),
+    );
     const nativeId = section.id.startsWith(NATIVE_PROJECT_PREFIX)
       ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
       : null;
@@ -1147,7 +1159,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               }
             : undefined
         }
-        sectionOpen={expandedProjects.ids.has(section.id)}
+        sectionOpen={sectionOpen}
         onToggleProject={() => expandedProjects.toggle(section.id)}
         icon={nativeId !== null ? projectIcons.iconFor(nativeId) : null}
         onSetIcon={
