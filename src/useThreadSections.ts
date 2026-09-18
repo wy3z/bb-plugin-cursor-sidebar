@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { THREAD_SECTIONS_CHANNEL, type projectSidebarRpcContract } from "./server";
+import { THREAD_SECTIONS_CHANNEL, type cursorSidebarRpcContract } from "./server";
 
 export interface ThreadSectionInfo {
   id: string;
@@ -10,8 +10,6 @@ export interface ThreadSectionInfo {
 
 export interface ThreadSectionsStore {
   sections: readonly ThreadSectionInfo[];
-  /** False when the host has no section support or the list failed. */
-  available: boolean;
   refresh: () => Promise<void>;
   rename: (id: string, name: string) => Promise<boolean>;
   remove: (id: string) => Promise<number | null>;
@@ -31,10 +29,9 @@ export interface ThreadSectionsStore {
  * with rollback; assignment writes await the host and report failures.
  */
 export function useThreadSections(): ThreadSectionsStore {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const realtimeState = useRealtimeConnectionState();
   const [sections, setSections] = useState<readonly ThreadSectionInfo[]>([]);
-  const [available, setAvailable] = useState(true);
   const requestSeq = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -43,12 +40,9 @@ export function useThreadSections(): ThreadSectionsStore {
       const result = await rpc.call("listThreadSections", {});
       if (seq !== requestSeq.current) return;
       setSections(result.sections);
-      setAvailable(true);
     } catch {
-      // Folders and their moves stay hidden; pins, recency and reorder keep
-      // working on the native feed alone.
-      if (seq !== requestSeq.current) return;
-      setAvailable(false);
+      // Keep the last known folders; pins, recency and reorder still work on
+      // the native feed alone.
     }
   }, [rpc]);
 
@@ -67,7 +61,7 @@ export function useThreadSections(): ThreadSectionsStore {
     async (id: string, name: string) => {
       const trimmed = name.trim();
       if (!trimmed) return false;
-      const previous = sections;
+      const previousName = sections.find((section) => section.id === id)?.name ?? null;
       setSections((current) =>
         current.map((section) => (section.id === id ? { ...section, name: trimmed } : section)),
       );
@@ -78,7 +72,14 @@ export function useThreadSections(): ThreadSectionsStore {
         );
         return true;
       } catch (cause) {
-        setSections(previous);
+        // Restore only this row, so a concurrent refresh is not rolled back.
+        if (previousName !== null) {
+          setSections((current) =>
+            current.map((section) =>
+              section.id === id ? { ...section, name: previousName } : section,
+            ),
+          );
+        }
         toast.error("Could not rename the folder", {
           description: cause instanceof Error ? cause.message : String(cause),
         });
@@ -90,14 +91,18 @@ export function useThreadSections(): ThreadSectionsStore {
 
   const remove = useCallback(
     async (id: string) => {
-      const previous = sections;
+      const previous = sections.find((section) => section.id === id);
       setSections((current) => current.filter((section) => section.id !== id));
       try {
         const result = await rpc.call("deleteThreadSection", { id });
         await refresh();
         return result.updatedThreadCount;
       } catch (cause) {
-        setSections(previous);
+        if (previous !== undefined) {
+          setSections((current) =>
+            current.some((section) => section.id === id) ? current : [...current, previous],
+          );
+        }
         toast.error("Could not delete the folder", {
           description: cause instanceof Error ? cause.message : String(cause),
         });
@@ -125,7 +130,7 @@ export function useThreadSections(): ThreadSectionsStore {
   );
 
   return useMemo(
-    () => ({ sections, available, refresh, rename, remove, setFamily }),
-    [available, refresh, remove, rename, sections, setFamily],
+    () => ({ sections, refresh, rename, remove, setFamily }),
+    [refresh, remove, rename, sections, setFamily],
   );
 }

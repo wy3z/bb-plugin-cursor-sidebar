@@ -77,18 +77,37 @@ export interface ReorderDrag {
   ) => void;
 }
 
-/** A lifted copy of the dragged row that follows the pointer. It lives on
- * document.body, outside the plugin's style scope, so every rule is inline. */
+/** Identifiers the lifted clone must not carry: a second copy in the document
+ * would double every query and reorder lookup that keys off them. */
+const GHOST_STRIPPED_ATTRS = [
+  "id",
+  "data-reorder-id",
+  "data-reorder-kind",
+  "data-reorder-scope",
+  "data-thread-row-id",
+  "data-thread-shelf",
+  "data-sidebar-thread-id",
+  "data-sidebar-thread-shortcut-target",
+  "data-thread-focus-id",
+];
+
+/**
+ * A lifted copy of the dragged row that follows the pointer. The clone keeps
+ * the row's own markup and classes, so it reads exactly like the row that was
+ * picked up. It stays inside the plugin root because the utility classes are
+ * scoped to that subtree, and the root has no transformed ancestor, so a fixed
+ * position still tracks the viewport.
+ */
 function mountDragGhost(
+  source: HTMLElement | null,
   label: string,
   rect: DOMRect | null,
   x: number,
   y: number,
 ): HTMLDivElement {
   const ghost = document.createElement("div");
-  ghost.className = "ps-drag-ghost";
+  ghost.className = "cs-drag-ghost";
   ghost.setAttribute("aria-hidden", "true");
-  ghost.textContent = label;
   const style = ghost.style;
   style.position = "fixed";
   style.top = "0";
@@ -97,26 +116,44 @@ function mountDragGhost(
   style.width = `${Math.round(rect?.width ?? 220)}px`;
   style.zIndex = "120";
   style.pointerEvents = "none";
-  style.padding = "5px 12px";
-  style.borderRadius = "6px";
-  style.background = "var(--sidebar, #1c1c1f)";
-  style.border = "1px solid var(--border, rgba(255,255,255,0.14))";
-  style.boxShadow = "0 10px 30px rgba(0,0,0,0.4)";
-  style.color = "var(--sidebar-foreground, #e5e5e5)";
-  style.fontSize = "13px";
-  style.lineHeight = "1.4";
-  style.whiteSpace = "nowrap";
-  style.overflow = "hidden";
-  style.textOverflow = "ellipsis";
-  style.opacity = "0.97";
   style.willChange = "transform";
-  document.body.appendChild(ghost);
+
+  if (source === null) {
+    ghost.textContent = label;
+    style.padding = "5px 12px";
+    style.borderRadius = "6px";
+    style.background = "var(--sidebar, #1c1c1f)";
+    style.border = "1px solid var(--border, rgba(255,255,255,0.14))";
+    style.boxShadow = "0 10px 30px rgba(0,0,0,0.4)";
+    style.color = "var(--sidebar-foreground, #e5e5e5)";
+    style.fontSize = "13px";
+    style.lineHeight = "1.4";
+    style.whiteSpace = "nowrap";
+    style.overflow = "hidden";
+    style.textOverflow = "ellipsis";
+  } else {
+    const clone = source.cloneNode(true) as HTMLElement;
+    for (const node of [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))]) {
+      for (const name of GHOST_STRIPPED_ATTRS) node.removeAttribute(name);
+    }
+    clone.style.width = "100%";
+    ghost.appendChild(clone);
+    // The row itself is transparent, so the lifted copy carries the list's own
+    // surface; without it the rows underneath would show through the clone.
+    ghost.style.background = "var(--sidebar, #1c1c1f)";
+    ghost.style.borderRadius = "6px";
+    ghost.style.opacity = "0.97";
+    ghost.style.filter = "drop-shadow(0 10px 22px rgba(0,0,0,0.4))";
+  }
+
+  const host = source?.closest<HTMLElement>("[data-cursor-sidebar-root]") ?? document.body;
+  host.appendChild(ghost);
   moveDragGhost(ghost, x, y);
   return ghost;
 }
 
 function moveDragGhost(ghost: HTMLDivElement, x: number, y: number): void {
-  ghost.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) scale(1.02)`;
+  ghost.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
 }
 
 /**
@@ -186,7 +223,7 @@ export function useReorderDrag(
        */
       engageNow = false,
     ) => {
-      if (!engageNow && (event.button !== 0 || event.pointerType === "touch")) return;
+      if (!engageNow && (event.button !== 0 || event.pointerType !== "mouse")) return;
       activeCancel.current?.();
       const pointerId = event.pointerId;
       const startX = event.clientX;
@@ -217,6 +254,16 @@ export function useReorderDrag(
       let dragCursorStyle: HTMLStyleElement | null = null;
       let ghost: HTMLDivElement | null = null;
 
+      /**
+       * A touch drag must hold the list still. `pointermove` cannot cancel a
+       * scroll, so the touch moves themselves are swallowed for the drag's
+       * lifetime; without this the browser pans the list and then cancels the
+       * pointer, which ends the drag the moment it starts.
+       */
+      const preventTouchScroll = (touchEvent: TouchEvent) => {
+        touchEvent.preventDefault();
+      };
+
       // Reorder fires on many pointer moves; only a real change is a state
       // update, so React (and the sibling list animation) is not restarted
       // every frame.
@@ -234,6 +281,9 @@ export function useReorderDrag(
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKey);
+        window.removeEventListener("blur", cancel);
+        document.removeEventListener("visibilitychange", cancel);
+        window.removeEventListener("touchmove", preventTouchScroll);
         document.body.style.userSelect = previousUserSelect;
         if (engaged) document.body.style.cursor = previousCursor;
         dragCursorStyle?.remove();
@@ -256,10 +306,12 @@ export function useReorderDrag(
         document.body.style.cursor = "grabbing";
         // Inbox's grabbing cursor must win over links and inline-title cursors.
         dragCursorStyle = document.createElement("style");
-        dragCursorStyle.dataset.projectSidebarDragCursor = "";
+        dragCursorStyle.dataset.cursorSidebarDragCursor = "";
         dragCursorStyle.textContent = "* { cursor: grabbing !important; }";
         document.head.appendChild(dragCursorStyle);
+        window.addEventListener("touchmove", preventTouchScroll, { passive: false });
         ghost = mountDragGhost(
+          grabbed,
           label,
           grabbedRect,
           lastX - grabOffsetX,
@@ -416,6 +468,10 @@ export function useReorderDrag(
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
       window.addEventListener("keydown", onKey);
+      // Losing the window or hiding the tab loses the pointerup, so end the
+      // drag here instead of leaving a ghost and a grabbing cursor behind.
+      window.addEventListener("blur", cancel);
+      document.addEventListener("visibilitychange", cancel);
       activeCancel.current = cancel;
       // A touch pick-up is already engaged: lift the ghost and start tracking
       // the pointer that is still down, with no movement threshold.
@@ -550,7 +606,7 @@ export function useReorderDrag(
 /** A cheap identity for a drag state, so identical frames do not re-render. */
 function signatureOf(state: ReorderDragState): string {
   return [
-    state.moveToSection ?? "\u0000u",
+    state.moveToSection === null ? "\u0000x" : (state.moveToSection ?? "\u0000u"),
     state.pin ?? "\u0000u",
     state.overId ?? "\u0000n",
     state.placement ?? "\u0000n",

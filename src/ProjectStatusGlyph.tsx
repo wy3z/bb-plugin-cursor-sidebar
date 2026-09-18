@@ -61,7 +61,7 @@ export function ProjectStatusGlyph({
       aria-label={label}
       data-activity={activity}
       data-heading-kind="project"
-      className={cn("ps-project-glyph relative", className)}
+      className={cn("cs-project-glyph relative", className)}
     >
       <Icon
         name={name}

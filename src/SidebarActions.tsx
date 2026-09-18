@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { Icon } from "@/components/ui/icon";
+import { usePrefersReducedMotion } from "@/components/ui/hooks/use-media-query";
 import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +21,7 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
   const trigger = useRef<HTMLButtonElement>(null);
   const scope = usePortalScopeProps();
   const { gesture, swipeState } = useRowGesture(onHold ?? (() => setOpen(true)), () => setOpen(true), swipe, onReorderStart);
+  const reducedMotion = usePrefersReducedMotion();
   const offset = swipeState?.offset ?? 0;
   const settling = swipeState?.settling ?? false;
   const swiping = offset !== 0;
@@ -29,7 +31,7 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
   return <Popover.Root open={open} onOpenChange={setOpen} modal>
     <Popover.Anchor asChild>
       <div
-        className={cn("ps-gesture-row relative", revealed && "overflow-hidden rounded-md")}
+        className={cn("cs-gesture-row relative", revealed && "overflow-hidden rounded-md")}
         data-no-sidebar-swipe={swipe !== undefined ? "" : undefined}
         {...gesture}
       >
@@ -52,7 +54,7 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
           className={revealed ? "relative rounded-md bg-sidebar" : undefined}
           style={revealed ? {
             transform: `translateX(${offset}px)`,
-            transition: settling && !swiping
+            transition: settling && !swiping && !reducedMotion
               ? "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)"
               : "none",
           } : undefined}
@@ -74,10 +76,12 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
         // restoration must not yank it back to the trigger and blur-commit.
         const active = document.activeElement;
         if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
-        trigger.current?.focus({ preventScroll: true });
+        // An action may have removed the row; focusing a detached node would
+        // strand focus on <body>.
+        if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true });
       }}
       className={cn(
-        "ps-context-actions z-50 grid w-auto min-w-48 max-w-[calc(100vw-2rem)] gap-0.5 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-md",
+        "cs-context-actions z-50 grid w-auto min-w-48 max-w-[calc(100vw-2rem)] gap-0.5 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-md",
         ANCHORED_OVERLAY_MOTION,
       )}>
       {actions.flatMap(action => [

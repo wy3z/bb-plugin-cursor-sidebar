@@ -5,7 +5,7 @@ import {
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import type { projectSidebarRpcContract } from "./server";
+import { THREAD_ORDER_CHANNEL, type cursorSidebarRpcContract } from "./server";
 
 interface StoredOrder {
   ids: readonly string[];
@@ -26,7 +26,7 @@ export interface ThreadOrderStore {
  * revision, and every write refreshes instead of trusting the realtime echo.
  */
 export function useThreadOrders(): ThreadOrderStore {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const realtimeState = useRealtimeConnectionState();
   const [orders, setOrders] = useState<ReadonlyMap<string, StoredOrder>>(
     () => new Map(),
@@ -56,7 +56,7 @@ export function useThreadOrders(): ThreadOrderStore {
     void refresh();
   }, [refresh, realtimeState]);
 
-  useRealtime("thread-order", () => {
+  useRealtime(THREAD_ORDER_CHANNEL, () => {
     void refresh();
   });
 
@@ -101,6 +101,9 @@ export function useThreadOrders(): ThreadOrderStore {
         toast.error("Could not save the new order", {
           description: cause instanceof Error ? cause.message : String(cause),
         });
+        // The write failed after invalidating in-flight reads, so reconcile
+        // with the server rather than trusting the stale local snapshot.
+        void refresh();
         return false;
       } finally {
         pendingRef.current.delete(scope);

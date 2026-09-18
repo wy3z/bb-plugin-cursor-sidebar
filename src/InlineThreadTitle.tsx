@@ -39,9 +39,14 @@ export function InlineThreadTitle({
   const [draft, setDraft] = useState(editableTitle);
   const finished = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wasEditing = useRef(false);
 
   useEffect(() => {
-    if (!editing) return;
+    const entering = editing && !wasEditing.current;
+    wasEditing.current = editing;
+    // Seed the draft and take focus only on the transition into editing. A
+    // realtime title echo mid-rename must not clobber what is being typed.
+    if (!entering) return;
     setDraft(editableTitle);
     finished.current = false;
     // Commit-time autoFocus loses to the closing menu's focus restoration in
@@ -54,7 +59,7 @@ export function InlineThreadTitle({
       <span
         title={title}
         className={cn(
-          "pointer-events-auto relative z-10 cursor-text",
+          "pointer-events-auto relative z-10",
           className,
         )}
         onClick={onClick}

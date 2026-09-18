@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
-import type { projectSidebarRpcContract } from "./server";
+import type { cursorSidebarRpcContract } from "./server";
 import { SIDEBAR_VIEW_CHANNEL } from "./server";
 import type { SidebarViewStore } from "./sidebar-view";
 import { createSidebarViewController } from "./sidebar-view-controller";
@@ -12,7 +12,7 @@ import { createSidebarViewController } from "./sidebar-view-controller";
  * controller, so this hook stays a subscription over it.
  */
 export function useSidebarView(): SidebarViewStore {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const connection = useRealtimeConnectionState();
   const [, setVersion] = useState(0);
   const controller = useMemo(
@@ -37,7 +37,6 @@ export function useSidebarView(): SidebarViewStore {
   return {
     view: controller.getView(),
     update: controller.update,
-    reset: controller.reset,
     sync: controller.getSync(),
     retry: controller.retry,
   };

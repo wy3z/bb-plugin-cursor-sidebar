@@ -12,7 +12,7 @@ export function FolderNameDialog({ folder, onClose, onRename }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-    <DialogContent className="ps-move-dialog">
+    <DialogContent className="cs-move-dialog">
       <DialogHeader><DialogTitle>Rename folder</DialogTitle>
         <DialogDescription>Renaming “{folder.name}” changes the label only.</DialogDescription>
       </DialogHeader>
@@ -50,7 +50,7 @@ export function DeleteFolderDialog({ folder, chatCount, onClose, onDelete }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-    <DialogContent className="ps-move-dialog">
+    <DialogContent className="cs-move-dialog">
       <DialogHeader><DialogTitle>Delete folder</DialogTitle>
         <DialogDescription>Delete “{folder.name}”? {chatCount === 0
           ? "It holds no standalone chats."

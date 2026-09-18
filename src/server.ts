@@ -1,4 +1,4 @@
-// bb-plugin-project-sidebar backend — order overlay, view prefs, project icons.
+// bb-plugin-cursor-sidebar backend — order overlay, view prefs, project icons.
 //
 // This state lives in the plugin's own SQLite database, never on a BB thread.
 // Uninstalling the plugin removes it. Native BB projects, threads, pins and
@@ -9,6 +9,7 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { derivedProjectName, normalizeDirectoryPath } from "./project-name";
+import { coerceSidebarView } from "./sidebar-view";
 
 const migrations = [
   // `snoozed_*` are kept only so an existing store migrates without a table
@@ -59,14 +60,17 @@ const projectIconRowSchema = z.object({
 });
 
 const viewGroupBySchema = z.enum(["workspace", "updated", "status", "environment"]);
-const viewConversationOrderSchema = z.enum(["manual", "updated", "status"]);
+const viewConversationOrderSchema = z.enum(["updated", "status"]);
 const viewGroupOrderSchema = z.enum(["manual", "updated"]);
+/** How the project list is arranged: by hand, or by each project's worst status. */
+const viewProjectOrderSchema = z.enum(["manual", "status"]);
 const viewStatusFilterSchema = z.enum(["input", "failed", "working", "unread", "idle"]);
 const sidebarViewSchema = z
   .object({
     groupBy: viewGroupBySchema,
     sortConversationsBy: viewConversationOrderSchema,
     sortGroupsBy: viewGroupOrderSchema,
+    sortProjectsBy: viewProjectOrderSchema.default("manual"),
     statusFilter: z.array(viewStatusFilterSchema).max(5),
     environmentFilter: z.array(z.string().trim().min(1).max(200)).max(200).nullable(),
     show: z.object({
@@ -81,7 +85,7 @@ const sidebarViewSchema = z
 export type SidebarView = z.infer<typeof sidebarViewSchema>;
 export { sidebarViewSchema };
 
-export const projectSidebarRpcContract = defineRpcContract({
+export const cursorSidebarRpcContract = defineRpcContract({
   listWorkspaces: {
     input: z.object({ environmentIds: z.array(z.string().min(1)).max(100) }),
     output: z.object({
@@ -241,7 +245,11 @@ export default function plugin(bb: BbPluginApi) {
     if (row === undefined) return null;
     try {
       const parsed = sidebarViewSchema.safeParse(JSON.parse(row.json));
-      return parsed.success ? parsed.data : null;
+      if (parsed.success) return parsed.data;
+      // A row written by an older client can carry a value this version no
+      // longer accepts (a removed enum, a stale shape). Coerce it the same way
+      // the app does rather than discarding every stored choice.
+      return coerceSidebarView(JSON.parse(row.json));
     } catch {
       return null;
     }
@@ -266,6 +274,9 @@ export default function plugin(bb: BbPluginApi) {
       ).map((row) => [row.scope, row.revision]),
     );
     const grouped = new Map<string, string[]>();
+    // Seed from the revisions so a scope whose ids were all removed still
+    // reports its revision, instead of looking like revision 0 to a client.
+    for (const scope of revisions.keys()) grouped.set(scope, []);
     for (const row of rows) {
       const held = grouped.get(row.scope);
       if (held) held.push(row.thread_id);
@@ -307,7 +318,7 @@ export default function plugin(bb: BbPluginApi) {
     return promise;
   }
 
-  bb.rpc.register(projectSidebarRpcContract, {
+  bb.rpc.register(cursorSidebarRpcContract, {
     async listWorkspaces({ environmentIds }) {
       const workspaces = await Promise.all(
         [...new Set(environmentIds)].map(async (environmentId) => {
@@ -335,6 +346,7 @@ export default function plugin(bb: BbPluginApi) {
     },
     async deleteNativeProject({ projectId }) {
       await bb.sdk.projects.delete({ projectId });
+      db.prepare(`DELETE FROM project_icon WHERE project_id = ?`).run(projectId);
       return { ok: true as const };
     },
     async listHosts() {
@@ -344,6 +356,12 @@ export default function plugin(bb: BbPluginApi) {
       };
     },
     async pickFolder({ hostId }) {
+      const config = await bb.sdk.system.config();
+      if (config.primaryHostId !== hostId) {
+        throw new Error(
+          "Only this machine can open its folder picker. Type the path for a remote host.",
+        );
+      }
       const result = await bb.sdk.hosts.pickFolder({ hostId, clientHostId: hostId });
       return { path: result.path };
     },
@@ -437,6 +455,27 @@ export default function plugin(bb: BbPluginApi) {
   });
 
   bb.events.on("thread.deleted", ({ thread }) => {
-    db.prepare(`DELETE FROM thread_order WHERE thread_id = ?`).run(thread.id);
+    try {
+      const scopes = (
+        db
+          .prepare(`SELECT DISTINCT scope FROM thread_order WHERE thread_id = ?`)
+          .all(thread.id) as Array<{ scope: string }>
+      ).map((row) => row.scope);
+      if (scopes.length === 0) return;
+      // Removing an id changes the authoritative set, so the revision must
+      // move too; otherwise a client holding the old revision could pass its
+      // compare-and-set and write the deleted id back.
+      db.transaction(() => {
+        db.prepare(`DELETE FROM thread_order WHERE thread_id = ?`).run(thread.id);
+        const bump = db.prepare(
+          `INSERT INTO thread_order_revision (scope, revision) VALUES (?, 1)
+           ON CONFLICT(scope) DO UPDATE SET revision = revision + 1`,
+        );
+        for (const scope of scopes) bump.run(scope);
+      })();
+      for (const scope of scopes) bb.realtime.publish(THREAD_ORDER_CHANNEL, { scope });
+    } catch {
+      // The store is closing during shutdown; its rows go with it.
+    }
   });
 }

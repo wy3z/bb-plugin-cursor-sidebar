@@ -92,9 +92,14 @@ export function ProjectIconPicker({
           side="bottom"
           align="start"
           sideOffset={4}
-          onCloseAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => {
+            // There is no Popover.Trigger to restore, so a preventDefault with
+            // nothing else would drop focus to <body>; hand it to the heading.
+            event.preventDefault();
+            if (anchor?.isConnected) anchor.focus({ preventScroll: true });
+          }}
           className={cn(
-            "ps-project-icon-picker z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md",
+            "cs-project-icon-picker z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md",
             ANCHORED_OVERLAY_MOTION,
           )}
         >

@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * database: which projects the user folded. Device layout stays separate from
  * shared plugin state and never touches a thread's lifecycle.
  */
-export const EXPANDED_AGES_KEY = "bb-plugin-project-sidebar:expanded-ages:v1";
+export const EXPANDED_AGES_KEY = "bb-plugin-cursor-sidebar:expanded-ages:v1";
 /** Pinned and folder groups default open; this set holds the collapsed ones. */
-export const COLLAPSED_GROUPS_KEY = "bb-plugin-project-sidebar:collapsed-groups:v1";
+export const COLLAPSED_GROUPS_KEY = "bb-plugin-cursor-sidebar:collapsed-groups:v1";
 /** Loose Threads under Projects grouping default collapsed; this set holds the open one. */
-export const EXPANDED_THREADS_KEY = "bb-plugin-project-sidebar:expanded-threads:v1";
+export const EXPANDED_THREADS_KEY = "bb-plugin-cursor-sidebar:expanded-threads:v1";
 
 function loadIds(key: string): string[] {
   try {

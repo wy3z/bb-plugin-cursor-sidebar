@@ -27,7 +27,6 @@ export interface SidebarViewController {
   getSync: () => SidebarViewSync;
   subscribe: (listener: () => void) => () => void;
   update: (patch: Partial<SidebarView>) => void;
-  reset: () => void;
   /** Re-attempt the unsaved change, or the failed read, once. */
   retry: () => void;
   /** Read the shared value; a pending local change stays on top of it. */
@@ -147,9 +146,6 @@ export function createSidebarViewController(
     },
     update: (patch) => {
       request({ ...view, ...patch });
-    },
-    reset: () => {
-      request(DEFAULT_SIDEBAR_VIEW);
     },
     retry: () => {
       if (failure === "save") {

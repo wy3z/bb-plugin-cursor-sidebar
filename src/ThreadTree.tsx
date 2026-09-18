@@ -25,7 +25,6 @@ import {
   partitionStandaloneRows,
 } from "./standalone-groups";
 import {
-  environmentIdentityOf,
   groupOrdinaryRows,
   ordinaryThreadStatus,
   usableEnvironmentLabel,
@@ -36,6 +35,7 @@ import type { SidebarView } from "./server";
 import { SectionDivider } from "./SectionDivider";
 import { SidebarActions } from "./SidebarActions";
 import { AnimatedList } from "./AnimatedList";
+import { Drawer } from "./Drawer";
 import type { ThreadShelf } from "./lifecycle";
 import type { DropPlacement } from "./thread-order";
 import { InlineThreadTitle } from "./InlineThreadTitle";
@@ -88,7 +88,7 @@ export interface TreeContext {
     shelf: ThreadShelf,
   ) => void;
   /** True when an automatic conversation order is off, so dragging may reorder. */
-  canReorderThreads: boolean;
+  canDragThreads: boolean;
   /** Touch long-press pick-up for a project heading reorder. */
   onProjectDragPickUp: (
     pointerId: number,
@@ -97,6 +97,8 @@ export interface TreeContext {
     sectionId: string,
   ) => void;
   consumeSuppressedClick: (threadId: string) => boolean;
+  /** Digit that opens each thread while BB's keybind guide is up, by thread id. */
+  shortcutKeys: ReadonlyMap<string, string> | null;
   /** The row the pointer is over during a drag, for the placement line. */
   dropTarget: { id: string; placement: DropPlacement } | null;
   draggingThreadId: string | null;
@@ -130,19 +132,17 @@ export interface TreeContext {
 }
 
 // Tree coordinates are px from the row's left border. Headings and thread
-// rows share `pl-3` (12px) then a 16px status slot; rails run through that
+// rows share `pl-2` (8px) then a 16px status slot; rails run through that
 // slot's centre so a parent disc, its hover chevron, and the line to its
 // children occupy one column. Each nested level steps by one slot.
-const ROW_PAD = 12;
+const ROW_PAD = 8;
 const SLOT = 16;
 const STEP = 16;
-const ELBOW = STEP;
 /** The row's flex gap (Tailwind `gap-1.5`); it offsets the first indent. */
 const ROW_GAP = 6;
 /** Centre of the depth-0 status slot. */
-export const TREE_RAIL_X = ROW_PAD + SLOT / 2;
+const TREE_RAIL_X = ROW_PAD + SLOT / 2;
 /** Depth-1 spacer before the status slot; also the project-child indent. */
-export const TREE_CHILD_INDENT = STEP;
 
 /**
  * x of the rail dropping from a row at `level` to its children. It must sit on
@@ -150,7 +150,16 @@ export const TREE_CHILD_INDENT = STEP;
  * indent, so a plain `level * STEP` drifts a gap left from the second level on.
  */
 export function treeRailX(level: number): number {
-  return TREE_RAIL_X + level * STEP + (level >= 1 ? ROW_GAP : 0);
+  return TREE_RAIL_X + level * STEP;
+}
+
+/**
+ * Centre of a row's status disc, measured from the row's left edge. The spacer
+ * is shrunk by the flex gap, so every level steps exactly `STEP` right of its
+ * parent's disc and the elbow ends on the centre at any depth.
+ */
+export function treeDotX(depth: number): number {
+  return ROW_PAD + depth * STEP + SLOT / 2;
 }
 
 export interface LiftedPin {
@@ -211,7 +220,86 @@ export function collectLiftedPins(
   return items;
 }
 
+/**
+ * The selected thread's ancestor path in one rendered list: the rails that lead
+ * from the top down to the selected row are the only ones that light, never
+ * every rail in the subtree. Pure so the pinned list, which renders its own
+ * rows, can light the same path as a shelf list does.
+ */
+function railPathFor(
+  section: ProjectSectionData,
+  rows: readonly DisplayRow[],
+  activeThreadId: string | null,
+  shelf: ThreadShelf,
+): { levels: ReadonlyMap<string, ReadonlySet<number>>; onPath: ReadonlySet<string> } {
+  const levels = new Map<string, ReadonlySet<number>>();
+  const onPath = new Set<string>();
+  if (shelf !== "active" || activeThreadId === null) return { levels, onPath };
+  const chain = activePathIds(section, activeThreadId);
+  if (chain.length === 0 || chain[chain.length - 1] !== activeThreadId) return { levels, onPath };
+  const index = new Map(rows.map((row, position) => [row.thread.id, position]));
+  const activeIndex = index.get(activeThreadId);
+  if (activeIndex === undefined) return { levels, onPath };
+  // Row depth counts the Project Manager as depth 0 even though its heading
+  // stands in for that row, so a direct conversation sits at depth 1.
+  const depth = rows[activeIndex]!.depth;
+  const ancestorIndex: number[] = [];
+  let cursor: string | null = activeThreadId;
+  let level = depth - 1;
+  while (cursor !== null && level >= 0) {
+    cursor = section.forest.parent.get(cursor) ?? null;
+    ancestorIndex[level] = cursor === null ? -1 : index.get(cursor) ?? -1;
+    level -= 1;
+  }
+  for (let fill = level; fill >= 0; fill -= 1) ancestorIndex[fill] = -1;
+  for (const id of chain) onPath.add(id);
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    const bright = new Set<number>();
+    const own = row.depth - 1;
+    // An ancestor level is bright only along the segment that actually reaches
+    // the next node on the path. Past that node's row the line is the quiet
+    // run to the remaining siblings, so the active row never lights it.
+    for (let level = 0; level < own; level += 1) {
+      const segmentEnd = ancestorIndex[level + 1];
+      if (
+        level < depth &&
+        ancestorIndex[level]! < i &&
+        segmentEnd !== undefined &&
+        i <= segmentEnd
+      ) {
+        bright.add(level);
+      }
+    }
+    if (own >= 0 && own < depth && ancestorIndex[own]! < i && i <= activeIndex) {
+      bright.add(own);
+    }
+    if (onPath.has(row.thread.id) && row.depth < depth) bright.add(row.depth);
+    levels.set(row.thread.id, bright);
+  }
+  return { levels, onPath };
+}
+
 export function PinnedList({ items, ctx }: { items: readonly LiftedPin[]; ctx: TreeContext }) {
+  // The block lifts families from several homes, so the path is resolved per
+  // home against that home's own pinned rows; otherwise a pinned selection
+  // would never light the rails that lead to it.
+  const rails = useMemo(() => {
+    const groups = new Map<string, { section: ProjectSectionData; rows: DisplayRow[] }>();
+    for (const { section, row } of items) {
+      const group = groups.get(section.id);
+      if (group === undefined) groups.set(section.id, { section, rows: [row] });
+      else group.rows.push(row);
+    }
+    const info = new Map<string, { levels: ReadonlySet<number> | undefined; onPath: boolean }>();
+    for (const { section, rows } of groups.values()) {
+      const { levels, onPath } = railPathFor(section, rows, ctx.activeThreadId, "active");
+      for (const row of rows) {
+        info.set(row.thread.id, { levels: levels.get(row.thread.id), onPath: onPath.has(row.thread.id) });
+      }
+    }
+    return info;
+  }, [ctx.activeThreadId, items]);
   return (
     <AnimatedList className="flex flex-col">
       {items.map(({ section, row }) => (
@@ -224,6 +312,8 @@ export function PinnedList({ items, ctx }: { items: readonly LiftedPin[]; ctx: T
           ctx={ctx}
           rootPinned
           inFolderId={null}
+          activeRailLevels={rails.get(row.thread.id)?.levels}
+          activeElbow={rails.get(row.thread.id)?.onPath ?? false}
         />
       ))}
     </AnimatedList>
@@ -239,7 +329,6 @@ export function ShelfList({
   keepIds,
   expandIds,
   grouped,
-  omitPinned = false,
   firstGroupTools,
 }: {
   section: ProjectSectionData;
@@ -254,8 +343,6 @@ export function ShelfList({
    * or Chats).
    */
   grouped: boolean;
-  /** When true, pinned families are rendered in the global Pinned block. */
-  omitPinned?: boolean;
   /** Tools on the first bucket heading, or a static fallback heading when no bucket renders. */
   firstGroupTools?: ReactNode;
 }) {
@@ -291,60 +378,10 @@ export function ShelfList({
       ),
     [keepIds, section, shelf],
   );
-  // The selected thread's ancestor path, used to tint only the rails that lead
-  // from the project down to the selected row (including nested descendants),
-  // never every rail in the subtree.
-  const railPath = useMemo(() => {
-    if (!(shelf === "active")) return null;
-    const chain = activePathIds(section, ctx.activeThreadId);
-    if (chain.length === 0 || chain[chain.length - 1] !== ctx.activeThreadId) return null;
-    const index = new Map(rows.map((row, position) => [row.thread.id, position]));
-    const activeIndex = index.get(ctx.activeThreadId);
-    if (activeIndex === undefined) return null;
-    // Row depth counts the Project Manager as depth 0 even though its heading
-    // stands in for that row, so a direct conversation sits at depth 1.
-    const depth = rows[activeIndex]!.depth;
-    const ancestorIndex: number[] = [];
-    let cursor: string | null = ctx.activeThreadId;
-    let level = depth - 1;
-    while (cursor !== null && level >= 0) {
-      cursor = section.forest.parent.get(cursor) ?? null;
-      ancestorIndex[level] = cursor === null ? -1 : index.get(cursor) ?? -1;
-      level -= 1;
-    }
-    for (let fill = level; fill >= 0; fill -= 1) ancestorIndex[fill] = -1;
-    return { path: new Set(chain), activeIndex, depth, ancestorIndex };
-  }, [ctx.activeThreadId, rows, section, shelf]);
-  const railLevels = useMemo(() => {
-    const map = new Map<string, ReadonlySet<number>>();
-    if (railPath === null) return map;
-    const { activeIndex, depth, ancestorIndex } = railPath;
-    for (let i = 0; i < rows.length; i += 1) {
-      const row = rows[i]!;
-      const levels = new Set<number>();
-      const own = row.depth - 1;
-      // An ancestor level is bright only along the segment that actually reaches
-      // the next node on the path. Past that node's row the line is the quiet
-      // run to the remaining siblings, so the active row never lights it.
-      for (let level = 0; level < own; level += 1) {
-        const segmentEnd = ancestorIndex[level + 1];
-        if (
-          level < depth &&
-          ancestorIndex[level]! < i &&
-          segmentEnd !== undefined &&
-          i <= segmentEnd
-        ) {
-          levels.add(level);
-        }
-      }
-      if (own >= 0 && own < depth && ancestorIndex[own]! < i && i <= activeIndex) {
-        levels.add(own);
-      }
-      if (railPath.path.has(row.thread.id) && row.depth < depth) levels.add(row.depth);
-      map.set(row.thread.id, levels);
-    }
-    return map;
-  }, [railPath, rows]);
+  const { levels: railLevels, onPath } = useMemo(
+    () => railPathFor(section, rows, ctx.activeThreadId, shelf),
+    [ctx.activeThreadId, rows, section, shelf],
+  );
   const grouping = grouped && shelf === "active";
   // Native facts for family assignment: the row's own thread first, the
   // visible feed as fallback for roots outside a bounded render.
@@ -356,14 +393,6 @@ export function ShelfList({
     },
     [ctx.visibleById, rows],
   );
-  const pinnedOf = useCallback(
-    (threadId: string): boolean => {
-      const row = rows.find((candidate) => candidate.thread.id === threadId);
-      const thread = row?.thread ?? ctx.visibleById.get(threadId);
-      return thread?.isPinned ?? false;
-    },
-    [ctx.visibleById, rows],
-  );
   const knownFolderIds = useMemo(
     () => new Set(ctx.threadSections.map((folder) => folder.id)),
     [ctx.threadSections],
@@ -372,17 +401,18 @@ export function ShelfList({
     (threadId: string): string | null => section.forest.parent.get(threadId) ?? null,
     [section],
   );
-  // A pin on any family member lifts the whole family into this home's Pinned
-  // group, so a child's native pin reads as the family's. The family root is
-  // still the write target.
+  // A pin on any family member lifts the whole family into the global Pinned
+  // block, so a child's native pin reads as the family's. The set comes from
+  // the home's complete shelf, not the bounded render, so a pin on a child
+  // past the preview page lifts the family here exactly as the block does.
   const pinnedFamilyRoots = useMemo(() => {
     const pinned = new Set<string>();
     if (!grouping) return pinned;
-    for (const row of rows) {
-      if (pinnedOf(row.thread.id)) pinned.add(familyRootId(parentOf, row.thread.id));
+    for (const thread of section.byShelf[shelf]) {
+      if (thread.isPinned) pinned.add(familyRootId(parentOf, thread.id));
     }
     return pinned;
-  }, [grouping, parentOf, pinnedOf, rows]);
+  }, [grouping, parentOf, section, shelf]);
   // The pin label and toggle follow the family's lifted native state, never the
   // cluster the row renders in.
   const rootPinnedOf = useCallback(
@@ -438,7 +468,7 @@ export function ShelfList({
             inFolderId={options.inFolderId ?? null}
             environmentGroupLabel={options.environmentGroupLabel ?? null}
             activeRailLevels={railLevels.get(row.thread.id)}
-            activeElbow={railPath?.path.has(row.thread.id) ?? false}
+            activeElbow={onPath.has(row.thread.id)}
           />
           {more ? (
             <li className="relative list-none">
@@ -487,7 +517,6 @@ export function ShelfList({
       now: ctx.now,
       parentOf,
       statusOf: ordinaryThreadStatus,
-      environmentOf: environmentIdentityOf,
       members: section.members,
     });
   }, [partition, rows, grouping, ctx.now, ctx.view, parentOf, shelf, section.members, section.personal]);
@@ -496,8 +525,6 @@ export function ShelfList({
     setGroupPages(new Map());
     setChildPages(new Map());
   }, [ctx.view.groupBy, section.id]);
-  const pinnedKey = `pinned:${section.id}`;
-  const pinnedOpen = !ctx.collapsedGroups.has(pinnedKey);
   const folderKey = (folderId: string) => `folder:${section.id}:${folderId}`;
   // Rows by folder in native registry order. Chats owns the user-folder
   // registry, so an empty folder still renders once there; Core-claimed native
@@ -517,7 +544,6 @@ export function ShelfList({
     ctx.folderDropTarget === "pin:unpin";
   const renderGroup = (group: OrdinaryGroup, index: number) => {
     const isDate = group.key.startsWith("updated:") && group.label !== null;
-    const isLast = index === groups.length - 1;
     const collapseKey =
       group.label === null
         ? null
@@ -564,7 +590,7 @@ export function ShelfList({
             />
           </div>
         ) : null}
-        {open ? (
+        <Drawer open={open}>
           <AnimatedList className="flex flex-col">
             {renderThreadRows(paged.shown, {
               environmentGroupLabel:
@@ -587,38 +613,19 @@ export function ShelfList({
               />
             ) : null}
           </AnimatedList>
-        ) : null}
+        </Drawer>
       </div>
     );
   };
 
   return (
-    <>
+    /* One animated parent for the section's blocks: a filter change can remove
+       a whole bucket, and only the group list itself can animate that out and
+       slide the survivors up. Rows inside a surviving bucket animate in their
+       own list. */
+    <AnimatedList as="div" className="flex flex-col">
       {grouping && partition !== null ? (
         <>
-      {!omitPinned && partition.pinned.length > 0 ? (
-        <div className="mt-2 first:mt-0">
-          <div
-            data-pin-target="pin"
-            className={cn(
-              "rounded",
-              ctx.folderDropTarget === "pin:pin" && "bg-primary/10 ring-1 ring-primary/40",
-            )}
-          >
-            <SectionDivider
-              label="Pinned"
-              open={pinnedOpen}
-              onToggle={() => ctx.onToggleGroup(pinnedKey)}
-              shelfKey={pinnedKey}
-            />
-          </div>
-          {pinnedOpen ? (
-            <AnimatedList className="flex flex-col">
-              {renderThreadRows(partition.pinned, { rootPinned: true })}
-            </AnimatedList>
-          ) : null}
-        </div>
-      ) : null}
       {foldersForHome.map((folder) => {
         const key = folderKey(folder.id);
         const open = !ctx.collapsedGroups.has(key);
@@ -636,11 +643,11 @@ export function ShelfList({
               onRename={() => ctx.onRenameFolder(folder.id)}
               onDelete={() => ctx.onDeleteFolder(folder.id)}
             />
-            {open && rows.length > 0 ? (
+            <Drawer open={open && rows.length > 0}>
               <AnimatedList className="flex flex-col">
                 {renderThreadRows(rows, { inFolderId: folder.id })}
               </AnimatedList>
-            ) : null}
+            </Drawer>
           </div>
         );
       })}
@@ -662,7 +669,7 @@ export function ShelfList({
         </div>
       ) : null}
       {groups.map(renderGroup)}
-    </>
+    </AnimatedList>
   );
 }
 
@@ -846,8 +853,12 @@ function ThreadRow({
   };
 
   const ownRail = treeRailX(depth - 1);
+  /** The guide digit for this row, or null when the guide is down. */
+  const shortcutKey = ctx.shortcutKeys?.get(thread.id) ?? null;
   const parentCarriesOn = guides[depth - 1] ?? false;
-  const indent = depth * STEP;
+  // The flex gap before the disc is part of the step, so the spacer carries
+  // the step minus that gap and every level lands `STEP` right of its parent.
+  const indent = Math.max(0, depth * STEP - ROW_GAP);
   // Only the rails that carry the selected thread's path take the selection
   // tone; the rest keep the quiet border colour.
   const railClass = (level: number) =>
@@ -890,7 +901,7 @@ function ThreadRow({
         onOpen={() => ctx.onNavigate()}
         swipeDisabled={isRenaming}
         onReorderStart={
-          ctx.canReorderThreads
+          ctx.canDragThreads
             ? (pointerId, clientX, clientY) => {
                 ctx.onThreadDragPickUp(pointerId, clientX, clientY, section, thread, shelf);
                 return true;
@@ -906,9 +917,12 @@ function ThreadRow({
           data-reorder-kind="thread"
           data-reorder-scope={scope}
           className={cn(
-            "group/row relative flex items-center gap-1.5 rounded-md py-1 pl-3 pr-1 transition-colors",
-            secondary && "ps-workspace-row",
+            "group/row relative flex items-center gap-1.5 rounded-md py-1 pl-2 pr-2",
+            secondary && "cs-workspace-row",
             "min-h-7 max-md:min-h-11 pointer-coarse:min-h-11",
+            // The row is the drag surface, but it reads as a link: the title
+            // inherits the hand so it never swaps in a caret.
+            "cursor-pointer",
             isActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-sidebar-foreground/95 hover:bg-sidebar-accent/60",
@@ -946,7 +960,7 @@ function ThreadRow({
               if (ctx.consumeSuppressedClick(thread.id)) return;
               open(event);
             }}
-            className="absolute inset-0 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+            className="absolute inset-0 cursor-pointer rounded-md outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
           />
 
           {/* Ancestor pass-through rails. */}
@@ -960,7 +974,7 @@ function ThreadRow({
                     "pointer-events-none absolute top-0 -bottom-px w-px",
                     railClass(level),
                   )}
-                  style={{ left: treeRailX(level) }}
+                  style={{ left: treeRailX(level) - 0.5 }}
                 />
               ),
           )}
@@ -973,12 +987,12 @@ function ThreadRow({
                   <span
                     aria-hidden
                     className={cn("pointer-events-none absolute top-0 w-px", railClass(depth - 1))}
-                    style={{ left: ownRail, height: "50%" }}
+                    style={{ left: ownRail - 0.5, height: "50%" }}
                   />
                   <span
                     aria-hidden
                     className="pointer-events-none absolute w-px bg-sidebar-border"
-                    style={{ left: ownRail, top: "50%", bottom: "-1px" }}
+                    style={{ left: ownRail - 0.5, top: "50%", bottom: "-1px" }}
                   />
                 </>
               ) : (
@@ -989,7 +1003,7 @@ function ThreadRow({
                     railClass(depth - 1),
                   )}
                   style={{
-                    left: ownRail,
+                    left: ownRail - 0.5,
                     height: parentCarriesOn ? "calc(100% + 1px)" : "50%",
                   }}
                 />
@@ -997,19 +1011,36 @@ function ThreadRow({
               <span
                 aria-hidden
                 className={cn("pointer-events-none absolute h-px", elbowClass)}
-                style={{ left: ownRail + 1, top: "50%", width: ELBOW - 2 }}
+                style={{
+                  left: ownRail + 0.5,
+                  top: "calc(50% - 0.5px)",
+                  width: Math.max(0, treeDotX(depth) - ownRail - 0.5),
+                }}
               />
             </>
           ) : null}
+          {/* The last piece of a parent's rail: without it the line starts at
+              the first child and leaves a visible gap under the parent's dot. */}
+          {hasChildren && expanded ? (
+            <span
+              aria-hidden
+              className={cn("pointer-events-none absolute w-px", railClass(depth))}
+              style={{ left: treeRailX(depth) - 0.5, top: "50%", bottom: "-1px" }}
+            />
+          ) : null}
           {indent > 0 ? <span aria-hidden style={{ width: indent }} className="shrink-0" /> : null}
 
-          <span className="ps-status-slot pointer-events-none relative flex w-4 shrink-0 items-center justify-center">
+          <span className="cs-status-slot pointer-events-none relative flex w-4 shrink-0 items-center justify-center">
             {/* Only the status glyph yields to the overlay chevron. The slot
                 itself stays put, so the chevron centres on the dot at any
                 depth instead of drifting left with the indent gap. */}
             <span
               className={cn(
                 "pointer-events-none flex",
+                // A rail runs behind this glyph whenever one connects to it, so
+                // the glyph gets a disc of the list surface. Without it a
+                // spinner's gaps show the line crossing the icon.
+                (depth > 0 || (hasChildren && expanded)) && "cs-status-glyph relative",
                 hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0",
               )}
             >
@@ -1029,7 +1060,7 @@ function ThreadRow({
                   event.stopPropagation();
                   ctx.onToggleChildren(thread.id);
                 }}
-                className="ps-child-toggle pointer-events-auto absolute inset-0 z-10 flex items-center justify-center text-sidebar-foreground/73 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:opacity-100 pointer-coarse:opacity-100"
+                className="cs-child-toggle pointer-events-auto absolute inset-0 z-10 flex items-center justify-center text-sidebar-foreground/73 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:opacity-100 pointer-coarse:opacity-100"
               >
                 <Icon
                   name="ChevronRight"
@@ -1044,7 +1075,7 @@ function ThreadRow({
 
           {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
 
-          <div className={cn("flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
+          <div className={cn("pointer-events-none flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
           <InlineThreadTitle
             thread={thread}
             editing={isRenaming}
@@ -1059,21 +1090,27 @@ function ThreadRow({
               open(event);
             }}
             className={cn(
-              "ps-thread-title w-full min-w-0 overflow-hidden whitespace-nowrap text-sm",
+              "cs-thread-title w-full min-w-0 overflow-hidden whitespace-nowrap text-sm",
               thread.isUnread && "font-medium",
             )}
           />
-          {secondary ? <span className="ps-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="ps-secondary-desktop">{secondary}</span><span className="ps-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          {secondary ? <span className="cs-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="cs-secondary-desktop">{secondary}</span><span className="cs-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
           </div>
 
           <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
+            {shortcutKey !== null ? (
+              /* While the guide is up the digit takes the row's right edge, so
+                 the age and the hover actions clear out of its way. */
+              <kbd className="cs-shortcut-key" aria-hidden="true">{shortcutKey}</kbd>
+            ) : (
+              <>
             {/* The actions anchor to the parent-mark group's right edge, which
                 is always the age's left edge, so they cover the parent mark and
                 the title's reserved padding but never the time. */}
             <span className="relative flex items-center self-stretch">
               <span
                 data-thread-actions=""
-                className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 focus-within:opacity-100"
+                className="cs-row-actions pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 focus-within:opacity-100"
               >
                 {pinnedCapable ? (
                   <button
@@ -1085,7 +1122,7 @@ function ThreadRow({
                       event.stopPropagation();
                       ctx.onTogglePin(thread.id, !rowPinned);
                     }}
-                    className="pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                    className="cs-row-action pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                   >
                     <Icon name={rowPinned ? "PinOff" : "Pin"} className="size-3.5" />
                   </button>
@@ -1099,7 +1136,7 @@ function ThreadRow({
                     event.stopPropagation();
                     void actions.archive(thread.id);
                   }}
-                  className="pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                  className="cs-row-action pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                 >
                   <Icon name="Archive" className="size-3.5" />
                 </button>
@@ -1114,9 +1151,11 @@ function ThreadRow({
                 </span>
               ) : null}
             </span>
-            <span className="ps-thread-time pointer-events-none tabular-nums text-xs text-sidebar-foreground/73">
+            <span className="cs-thread-time pointer-events-none tabular-nums text-xs text-sidebar-foreground/73">
               {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
             </span>
+              </>
+            )}
           </div>
         </div>
       </RowContextMenu>

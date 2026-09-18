@@ -7,26 +7,22 @@ was copied and adapted into this plugin's own package.
 
 The following files contain adapted source from that project:
 
-- `src/lifecycle.ts`
-- `src/useLifecycle.ts`
+- `src/lifecycle.ts` (the shelf vocabulary)
 - `src/inbox.ts`
 - `src/forest.ts`
 - `src/thread-order.ts`
 - `src/useThreadOrders.ts`
 - `src/useReorderDrag.ts`
 - `src/relative-time.ts`
-- `src/StatusGlyph.tsx`
+- `src/StatusGlyph.tsx` (the status predicates)
 - `src/StatusSlot.tsx`
-- `src/Disc.tsx`
-- `src/ChildThreadBadge.tsx`
 - `src/InlineThreadTitle.tsx`
 - `src/RowContextMenu.tsx`
 - `src/ThreadTree.tsx`
 - `src/AnimatedList.tsx`
-- `src/ProjectSidebar.tsx`
-- `src/settle-shortcut.ts`
-- `src/server.ts` (the settled store and RPC contract)
-- `components/ui/select.tsx`
+- `src/CursorSidebar.tsx`
+- `src/settle-shortcut.ts` (the protected-target guard)
+- `src/server.ts` (RPC contract and order store)
 
 ## AutoAnimate
 

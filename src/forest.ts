@@ -16,7 +16,7 @@
  */
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { ThreadShelf } from "./lifecycle";
-import { orderByStoredIds, siblingScope } from "./thread-order";
+import { siblingScope } from "./thread-order";
 
 export interface DisplayForest {
   /** Display parent within the project, or null at a top level. */
@@ -128,14 +128,12 @@ export function buildDisplayForest(
 }
 
 /**
- * How a section orders siblings. `manual` keeps the stored scope order (with
- * the recency fallback); an automatic ordering replaces it with `compare`.
- * Either way the display parent and the shelf partition are untouched, so
- * ordering never changes ancestry or membership.
+ * How a section orders siblings. Siblings always take this comparison; the
+ * stored scope order is what the pinned-first partition and the display parent
+ * are built on. Ordering never changes ancestry or membership.
  */
 export interface SiblingOrdering {
   compare: (left: PluginSidebarThread, right: PluginSidebarThread) => number;
-  manual: boolean;
 }
 
 /**
@@ -147,7 +145,6 @@ function orderedMembers(
   projectId: string,
   members: readonly PluginSidebarThread[],
   forest: DisplayForest,
-  orderForScope: (scope: string) => readonly string[] | null,
   ordering?: SiblingOrdering | undefined,
 ): {
   forest: DisplayForest;
@@ -166,17 +163,13 @@ function orderedMembers(
     if (base.length === 0) return base;
     const scope = siblingScope(projectId, parentId);
     scopeIds.set(scope, base.map((thread) => thread.id));
-    // An automatic ordering ignores the stored manual order; manual keeps it.
-    const ordered = ordering && !ordering.manual
-      ? base
-      : orderByStoredIds(base, orderForScope(scope));
     // A native pin sorts a sibling ahead of its unpinned siblings at the same
     // level, stably, with the stored manual order kept as the tiebreak inside
     // each partition. Only sibling order changes: the display parent is
     // untouched, so a nested pinned grandchild keeps its parent.
     const pinnedFirst = [
-      ...ordered.filter((thread) => thread.isPinned),
-      ...ordered.filter((thread) => !thread.isPinned),
+      ...base.filter((thread) => thread.isPinned),
+      ...base.filter((thread) => !thread.isPinned),
     ];
     if (parentId !== null) orderedChildren.set(parentId, pinnedFirst);
     return pinnedFirst;
@@ -217,14 +210,12 @@ function orderedMembers(
  * two unrelated unknown projects never share a heading.
  *
  * `orderingFor` resolves the sibling ordering per section. Every home — native
- * project interiors included — takes the selected automatic order, or its
- * stored sibling order when Manual is chosen.
+ * project interiors included — takes the selected automatic order.
  */
 export function buildSections(
   visible: readonly PluginSidebarThread[],
   projects: readonly { id: string; name: string; isPersonal?: boolean }[],
   shelfOf: (thread: PluginSidebarThread) => ThreadShelf,
-  orderForScope: (scope: string) => readonly string[] | null,
   orderingFor?: ((sectionId: string) => SiblingOrdering | undefined) | undefined,
 ): ProjectSectionData[] {
   const memberGroups = new Map<string, PluginSidebarThread[]>();
@@ -251,7 +242,7 @@ export function buildSections(
   return orderedIds.map((id) => {
     const members = memberGroups.get(id) ?? [];
     const base = buildDisplayForest(members);
-    const { forest, scopeIds, rank } = orderedMembers(id, members, base, orderForScope, orderingFor?.(id));
+    const { forest, scopeIds, rank } = orderedMembers(id, members, base, orderingFor?.(id));
     const shelfById = new Map<string, ThreadShelf>();
     const byShelf: Record<ThreadShelf, PluginSidebarThread[]> = {
       active: [],

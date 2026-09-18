@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { projectSidebarRpcContract } from "./server";
+import type { cursorSidebarRpcContract } from "./server";
 import { derivedProjectName } from "./project-name";
 
 /**
@@ -15,7 +15,7 @@ export function CreateNativeProjectDialog({ onClose, onCreated }: {
   onClose(): void;
   onCreated(project: { id: string; name: string }): void;
 }) {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const [hosts, setHosts] = useState<{ id: string; name: string; status: string }[]>([]);
   const [hostId, setHostId] = useState("");
   const [path, setPath] = useState("");
@@ -74,7 +74,7 @@ export function CreateNativeProjectDialog({ onClose, onCreated }: {
   const derivedName = derivedProjectName(path);
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-      <DialogContent className="ps-create-dialog">
+      <DialogContent className="cs-create-dialog">
         <DialogHeader>
           <DialogTitle>New Project</DialogTitle>
           <DialogDescription>
@@ -149,7 +149,7 @@ export function DeleteProjectDialog({ project, chatCount, onClose, onDeleted }: 
   onClose(): void;
   onDeleted(): void;
 }) {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (

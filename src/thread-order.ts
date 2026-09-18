@@ -78,33 +78,6 @@ export function mergeVisibleOrder(
   );
 }
 
-/**
- * Reconcile a stored order against the complete current id set. Stored ids
- * that still exist keep their stored order; current ids the store has never
- * seen (a new sibling, or a settled sibling that just became visible) are
- * appended in their base order. Removed ids are dropped. Hidden siblings keep
- * their stored slot rather than being reset.
- */
-export function reconcileOrder(
-  stored: readonly string[] | null,
-  base: readonly string[],
-): string[] {
-  if (stored === null) return [...base];
-  const baseSet = new Set(base);
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const id of stored) {
-    if (baseSet.has(id) && !seen.has(id)) {
-      seen.add(id);
-      result.push(id);
-    }
-  }
-  for (const id of base) {
-    if (!seen.has(id)) result.push(id);
-  }
-  return result;
-}
-
 /** The persisted scope key for one sibling group: project + native parent. */
 export function siblingScope(projectId: string, parentId: string | null): string {
   return `siblings::${projectId}::${parentId ?? "__root__"}`;

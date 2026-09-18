@@ -20,8 +20,6 @@ export const DEFAULT_INACTIVE_CONVERSATIONS = CONVERSATION_PAGE_SIZE;
 export interface ConversationPlan {
   /** Members to render for the current reveal state. */
   visible: ReadonlySet<string>;
-  /** Members held behind the reveal control (inactive, over the preview). */
-  hidden: ReadonlySet<string>;
   /** How many whole conversations the reveal control would add. */
   hiddenConversations: number;
 }
@@ -85,7 +83,6 @@ export function planConversations(
     });
 
   const visible = new Set<string>();
-  const hidden = new Set<string>();
   const inactiveRoots: string[] = [];
   for (const root of rootOrder) {
     if (familyIsActive(root)) {
@@ -100,11 +97,8 @@ export function planConversations(
     for (const id of family.get(root) ?? []) visible.add(id);
   }
   const remainder = inactiveRoots.slice(preview.length);
-  for (const root of remainder) {
-    for (const id of family.get(root) ?? []) hidden.add(id);
-  }
 
-  return { visible, hidden, hiddenConversations: remainder.length };
+  return { visible, hiddenConversations: remainder.length };
 }
 
 /**

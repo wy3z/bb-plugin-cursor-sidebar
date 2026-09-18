@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import type { projectSidebarRpcContract } from "./server";
+import type { cursorSidebarRpcContract } from "./server";
 
 export function useWorkspaces(threads: readonly PluginSidebarThread[]) {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const key = [...new Set(threads.flatMap((thread) => thread.environment?.id ? [thread.environment.id] : []))].sort().join("\0");
   const [paths, setPaths] = useState<ReadonlyMap<string, string | null>>(new Map());
   useEffect(() => {

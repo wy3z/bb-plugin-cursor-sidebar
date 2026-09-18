@@ -1,31 +1,110 @@
-# Project Sidebar for BB
+# Cursor Sidebar
 
-A replacement thread list: native BB projects, nested children, standalone chats, pins, folders, and aggregate activity. No Cores, no Project Managers, no worker orchestration.
+A thread list for BB that files every chat under the project it belongs to.
+
+BB ships a flat, recency-ordered list. Cursor Sidebar replaces it with a tree:
+your native Projects become foldable folders, chats spawned from a chat nest
+underneath it with connecting rails, pinned chats gather in one place, and each
+row tells you at a glance whether work is running, finished unread, or needs
+you.
+
+![The Cursor Sidebar: a Pinned block, project folders with nested chats, activity spinners, trailers and ages](docs/screenshots/sidebar.png)
+
+*Screenshot uses example data.*
 
 ## What you get
 
-Managed native projects keep their headings and collapsed child trees. Click the heading to expand or collapse. Expanded rows follow actual native ancestry with connecting rails.
+**Projects, in BB's own order.** Every native project gets a folder heading,
+including empty ones. Click the heading to fold it. A picked icon replaces the
+folder; `Set icon…` lives on the heading's right-click menu.
 
-Each project heading has a status indicator in a fixed slot: BB's stock `Loading` spinner while any member or descendant works, `AlertTriangle` when pending user input needs attention, otherwise a quiet folder glyph. Thread rows draw the same leading slot (host status glyph while the thread has something to say, read dot otherwise) and trail relative age. Reduced motion stops the spinner.
+**Real ancestry.** A spawned or forked thread hangs under the thread that made
+it, drawn with faint rail and elbow connectors. Nothing is invented: the
+project id and the parent link come from the native thread.
 
-Standalone chats appear under recency labels (Pinned, Today, Yesterday, Last 7 days, Last 30 days, Older), without a visible Chats heading when grouped by date. Secondary information uses real workspace, repository, branch and host metadata.
+**Activity you can read from the top.** A working thread spins. A finished but
+unread thread shows a dot; a failed one or one waiting on you shows its mark.
+A closed project keeps a small badge on its folder glyph, so a collapsed
+project still tells you something inside it is moving. Reduced motion stops the
+spin.
 
-## Pinned chats and folders
+**One Pinned block.** Pinned chats are lifted out of their project into a
+single block above Projects, so the things you keep coming back to are in one
+place. Every other chat appears exactly once: in its folder, in its date group,
+or in Pinned.
 
-Standalone chats can be pinned or filed into named folders. Both use BB's native thread state: pinning flips the thread's native pin, folders are BB's native named thread sections. One family shows in exactly one place: pinned first, then its folder, then its date group.
+**Folders for standalone chats.** Standalone chats can be filed into BB's
+native named thread sections, which render as folders with Rename and Delete on
+their heading. Filing never archives, deletes, or changes which project a chat
+belongs to.
 
-A family is filed and pinned by its root: dragging, pinning or moving any reply carries its whole family. Drag a family onto a folder heading to file it, onto the Pinned heading to pin it, or onto a date divider to return it to the dated chats. `Alt+ArrowUp/Down` reorders within one cluster. Folder headings offer Rename and Delete. Deleting a folder returns its chats to the dated groups and keeps pins.
+**A view you control.** Grouping, ordering, filters and metadata live in one
+menu, and the choices are remembered per user and synced across your clients.
+
+## The view menu
+
+![The view menu open over the sidebar: Grouping, Ordering, Show, Filters, Status and Environment](docs/screenshots/view-menu.png)
+
+| Control | What it changes |
+| --- | --- |
+| **Grouping** | Projects (one folder per project), Updated / Status / Environment (one pooled list grouped by date, status or environment) |
+| **Ordering** | Chats by last activity or status; Projects by hand or by worst status |
+| **Show** | Environment, branch, host and pull-request metadata on each row |
+| **Filters → Status** | Which statuses appear (needs input, failed, working, unread, idle) |
+| **Filters → Environment** | Which environments appear |
+| **Expand All / Collapse All** | Every section and group at once |
+| **Mark All as Read** | The loaded chats |
 
 ## Controls
 
-Project visibility and expansion are saved per client. A new project starts collapsed. Drag within a sibling group to reorder, or use **Alt+ArrowUp/Down**. Project ordering uses a plugin overlay rather than changing native storage.
+| | Do this |
+| --- | --- |
+| Open a chat | Click the row |
+| Rename | Double-click the title |
+| Row actions | Right-click, `Shift+F10`, hold on touch, or the hover Actions control |
+| Fold a project | Click the heading |
+| File or pin a family | Drag it onto a folder heading or onto Pinned; drag it onto a date heading to unfile |
+| Reorder projects | Drag a heading, or `Alt+ArrowUp/Down`, while Projects ordering is Manual |
+| Jump to a chat | Hold `Ctrl`/`⌘` for the numbered guide, then press `1`–`9` |
+| Phone | Hold to fold or open actions; swipe left to archive, right to pin |
 
-Right-click a project heading and choose **Set icon…** to pick a glyph from the built-in set, or **Use default** to return it to the folder.
+Dragging a chat nests it (drop on another chat in the same project), files it
+(folder heading), pins it (Pinned heading), or unfiles it (date heading). A
+family moves as one: the root carries its replies. Threads always auto-sort, so
+dragging never leaves a manual sibling order.
 
-A `+` on the Projects heading opens **New project**, which picks a host folder and creates (or reuses) a native BB Project. The Projects control keeps project visibility, grouping, and gesture help.
+## How it works
 
-The SDK cannot change a thread's native project membership, so this plugin does not move chats between projects.
+Cursor Sidebar reads BB's live sidebar feed. Project identity, thread ids and
+parent links stay authoritative; the plugin never creates Cores, workers or
+managed membership, and it never moves a chat between projects (the SDK cannot
+change native project membership).
 
-## Phone and touch
+What the plugin does store, in its own SQLite database on the BB server:
 
-At phone widths or with coarse pointers, project headings show the activity spinner, thread rows keep trailing status, and both show name and compact workspace detail. Hold a project for 550ms to expand/collapse; hold a leaf for actions. Swipe left archives; swipe right pins. Keyboard users have named Actions controls and Shift+F10.
+- the shared **view** (grouping, ordering, filters, Show) — per user, so every
+  client sees the same sidebar;
+- the **project order** overlay, used only while Projects ordering is Manual;
+- **project icons**, an overlay keyed by the native project id.
+
+Folds are remembered per client. Pins, folders and read state are BB's own
+thread state. Uninstalling the plugin removes its overlays and leaves threads
+untouched.
+
+## Development
+
+```sh
+npm run typecheck          # tsc --noEmit
+npm run build              # bb plugin build → dist/
+bb plugin reload cursor-sidebar
+```
+
+The backend is `src/server.ts` (RPC contract, migrations, realtime channels);
+the app is `app.tsx` → `src/CursorSidebar.tsx`. Migrations are append-only:
+BB's runner matches recorded statements by index, so a new table only ever goes
+at the end.
+
+## License
+
+MIT. Portions adapted from **bb-plugin-thread-inbox**; see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

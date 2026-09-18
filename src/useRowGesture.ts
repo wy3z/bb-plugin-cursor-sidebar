@@ -159,7 +159,24 @@ export function useRowGesture(
           window.removeEventListener("pointerdown", additional);
           window.removeEventListener("scroll", scroll, true);
           window.removeEventListener("blur", scroll);
+          window.removeEventListener("touchmove", keepForDrag);
           cancel.current = null;
+        };
+        /**
+         * Once the short hold has armed a reorder, a vertical move belongs to
+         * the drag, not the scroller. `pointermove` cannot cancel a scroll, so
+         * the touch move itself is claimed here; without it the browser pans
+         * the list first and the drag never gets a chance to start.
+         */
+        const keepForDrag = (touchEvent: TouchEvent) => {
+          if (!reorderArmed || recognized) return;
+          const touch = touchEvent.touches[0];
+          if (touch === undefined) return;
+          const touchDx = touch.clientX - clientX;
+          const touchDy = touch.clientY - clientY;
+          if (Math.hypot(touchDx, touchDy) < ROW_TOUCH_SLOP_PX) return;
+          if (Math.abs(touchDy) > Math.abs(touchDx)) touchEvent.preventDefault();
+          else reorderArmed = false;
         };
         const scroll = () => { moved = true; suppress(); resetSwipe(false); cleanup(); };
         const additional = (e: PointerEvent) => { if (e.pointerId !== pointerId) scroll(); };
@@ -206,11 +223,15 @@ export function useRowGesture(
           if (swipeLocked) {
             suppress();
             const offset = Math.max(-ROW_SWIPE_CLAMP_PX, Math.min(ROW_SWIPE_CLAMP_PX, dx));
-            setSwipeState({
-              offset,
-              settling: false,
-              direction: offset < 0 ? -1 : offset > 0 ? 1 : 0,
-            });
+            const direction = offset < 0 ? -1 : offset > 0 ? 1 : 0;
+            // Past the clamp the offset stops changing, so keep the same state
+            // object and skip the render.
+            setSwipeState((prev) =>
+              prev !== null && prev.offset === offset && !prev.settling &&
+              prev.direction === direction
+                ? prev
+                : { offset, settling: false, direction },
+            );
           }
         };
         const up = (e: PointerEvent) => {
@@ -250,6 +271,7 @@ export function useRowGesture(
         window.addEventListener("pointerdown", additional);
         window.addEventListener("scroll", scroll, true);
         window.addEventListener("blur", scroll);
+        window.addEventListener("touchmove", keepForDrag, { passive: false });
         cancel.current = () => { resetSwipe(false); cleanup(); };
       },
       onClickCapture(event) {

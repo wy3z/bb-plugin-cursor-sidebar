@@ -6,7 +6,7 @@ import { relativeTimeLabel } from "./relative-time";
 import type { ThreadStatusKind } from "./status";
 import { isWorking } from "./activity";
 
-export function activityStatusKind(status: ThreadStatusKind | undefined): boolean {
+function activityStatusKind(status: ThreadStatusKind | undefined): boolean {
   return status === "working";
 }
 
@@ -55,8 +55,6 @@ export function ThreadLeadStatus({
     />
   );
 }
-
-export { isActivityIndicator, isTrailingStatusIndicator };
 
 /** The trailing age label. Status lives in the left slot, never here. */
 export function ThreadAge({ thread, now }: { thread: PluginSidebarThread; now: number }) {

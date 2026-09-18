@@ -1,52 +1,52 @@
 /* Scoped phone/touch affordances; fine-pointer desktop density is unchanged. */
 @media (max-width: 767px), (pointer: coarse) {
-  [data-project-sidebar-root] { min-width: 0; overflow-x: clip; }
-  [data-project-sidebar-root] button,
-  [data-project-sidebar-root] select,
-  .ps-move-dialog button,
-  .ps-move-dialog select { min-height: 44px; touch-action: manipulation; }
-  [data-project-sidebar-root] button:has(> svg:only-child):not(.ps-icon-btn):not(.ps-new-project) { min-width: 44px; }
-  [data-project-sidebar-root] button[aria-expanded] { opacity: 1; }
-  [data-project-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
-  [data-project-sidebar-root] .ps-project-glyph { width: 16px; height: 16px; }
-  [data-project-sidebar-root] .ps-project-name {
+  [data-cursor-sidebar-root] { min-width: 0; overflow-x: clip; }
+  [data-cursor-sidebar-root] button,
+  [data-cursor-sidebar-root] select,
+  .cs-move-dialog button,
+  .cs-move-dialog select { min-height: 44px; touch-action: manipulation; }
+  [data-cursor-sidebar-root] button:has(> svg:only-child):not(.cs-icon-btn):not(.cs-new-project) { min-width: 44px; }
+  [data-cursor-sidebar-root] button[aria-expanded] { opacity: 1; }
+  [data-cursor-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
+  [data-cursor-sidebar-root] .cs-project-glyph { width: 16px; height: 16px; }
+  [data-cursor-sidebar-root] .cs-project-name {
     white-space: normal; overflow-wrap: anywhere; font-size: 13px;
   }
-  [data-project-sidebar-root] [data-thread-row] { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
-  [data-project-sidebar-root] .ps-child-toggle,
-  [data-project-sidebar-root] .ps-project-new,
-  [data-project-sidebar-root] .ps-project-disclosure { display: none; }
-  [data-project-sidebar-root] .ps-thread-title {
+  [data-cursor-sidebar-root] [data-thread-row] { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+  [data-cursor-sidebar-root] .cs-child-toggle,
+  [data-cursor-sidebar-root] .cs-project-new,
+  [data-cursor-sidebar-root] .cs-project-disclosure { display: none; }
+  [data-cursor-sidebar-root] .cs-thread-title {
     white-space: normal; overflow-wrap: anywhere; display: -webkit-box;
     -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   }
-  [data-project-sidebar-root] .ps-thread-info { font-size: 11px; line-height: 1.4; white-space: normal; opacity: 1; }
-  [data-project-sidebar-root] .ps-secondary-desktop { display: none; }
-  [data-project-sidebar-root] .ps-secondary-mobile {
+  [data-cursor-sidebar-root] .cs-thread-info { font-size: 11px; line-height: 1.4; white-space: normal; opacity: 1; }
+  [data-cursor-sidebar-root] .cs-secondary-desktop { display: none; }
+  [data-cursor-sidebar-root] .cs-secondary-mobile {
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
     overflow: hidden; overflow-wrap: anywhere;
   }
-  [data-project-sidebar-root] .ps-thread-time { display: flex; }
-  [data-project-sidebar-root] .ps-gesture-row { touch-action: pan-y; -webkit-touch-callout: none; }
-  [data-project-sidebar-root] .ps-gesture-row a,
-  [data-project-sidebar-root] .ps-gesture-row button,
-  [data-project-sidebar-root] .ps-thread-title { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
-  [data-project-sidebar-root] .ps-gesture-row input { user-select: text; -webkit-user-select: text; }
-  .ps-context-actions { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
-  .ps-context-actions button { min-height: 44px; touch-action: manipulation; }
-  .ps-move-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
-  .ps-move-dialog select { min-width: 0; max-width: 100%; font-size: 16px; }
+  [data-cursor-sidebar-root] .cs-thread-time { display: flex; }
+  [data-cursor-sidebar-root] .cs-gesture-row { touch-action: pan-y; -webkit-touch-callout: none; }
+  [data-cursor-sidebar-root] .cs-gesture-row a,
+  [data-cursor-sidebar-root] .cs-gesture-row button,
+  [data-cursor-sidebar-root] .cs-thread-title { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+  [data-cursor-sidebar-root] .cs-gesture-row input { user-select: text; -webkit-user-select: text; }
+  .cs-context-actions { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+  .cs-context-actions button { min-height: 44px; touch-action: manipulation; }
+  .cs-move-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+  .cs-move-dialog select { min-width: 0; max-width: 100%; font-size: 16px; }
 }
 
 @media (max-width: 767px), (pointer: coarse) {
-  .ps-create-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
-  .ps-create-dialog h2 { overflow-wrap: anywhere; }
+  .cs-create-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+  .cs-create-dialog h2 { overflow-wrap: anywhere; }
 }
 
 /* The project heading's glyph in the reserved leading slot: a fixed 16px box
    left of the name (with a gap before the label). Native projects always use
    a folder; live work is drawn on thread rows, never here. */
-.ps-project-glyph {
+.cs-project-glyph {
   display: inline-flex;
   box-sizing: border-box;
   flex: 0 0 auto;
@@ -57,14 +57,14 @@
   overflow: visible;
   pointer-events: none;
 }
-.ps-project-glyph svg {
+.cs-project-glyph svg {
   display: block;
 }
 
 /* One reserved left slot for Core/Project identity and thread status.
    Threads draw a status circle (or spinner) here; Core status is a badge
    on the glyph. Idle chats keep the box so titles stay aligned. */
-.ps-status-slot {
+.cs-status-slot {
   display: inline-flex;
   box-sizing: border-box;
   flex: 0 0 auto;
@@ -74,66 +74,143 @@
   justify-content: center;
   pointer-events: none;
 }
-.ps-status-slot svg {
+.cs-status-slot svg {
   display: block;
 }
 
 /* Workspace/repo rows: title and subtitle sit as one tight pair. */
-.ps-workspace-row .ps-thread-title {
+.cs-workspace-row .cs-thread-title {
   line-height: 1.2;
 }
-.ps-workspace-row .ps-thread-info {
+.cs-workspace-row .cs-thread-info {
   line-height: 1.15;
 }
 
 /* Chevrons are a short stroke; 2.75 reads heavier than the 1.5 default. */
-[data-project-sidebar-root] svg[data-icon="ChevronDown"] path,
-[data-project-sidebar-root] svg[data-icon="ChevronRight"] path,
-[data-project-sidebar-root] svg[data-icon="ChevronLeft"] path,
-[data-project-sidebar-root] svg[data-icon="ChevronUp"] path {
+[data-cursor-sidebar-root] svg[data-icon="ChevronDown"] path,
+[data-cursor-sidebar-root] svg[data-icon="ChevronRight"] path,
+[data-cursor-sidebar-root] svg[data-icon="ChevronLeft"] path,
+[data-cursor-sidebar-root] svg[data-icon="ChevronUp"] path {
   stroke-width: 2.75;
 }
 
 /* Long titles fade into the timestamp at rest. On hover they reserve space
    for pin/archive (padding) so those icons are not sitting on the glyphs. */
-[data-project-sidebar-root] [data-thread-row] .ps-thread-title,
-[data-project-sidebar-root] [data-thread-row] .ps-thread-info {
+[data-cursor-sidebar-root] [data-thread-row] .cs-thread-title,
+[data-cursor-sidebar-root] [data-thread-row] .cs-thread-info {
   mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
   -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
 }
-[data-project-sidebar-root] [data-thread-row]:hover .ps-thread-title,
-[data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-title,
-[data-project-sidebar-root] [data-thread-row]:hover .ps-thread-info,
-[data-project-sidebar-root] [data-thread-row]:focus-within .ps-thread-info {
+[data-cursor-sidebar-root] [data-thread-row]:hover .cs-thread-title,
+[data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-thread-title,
+[data-cursor-sidebar-root] [data-thread-row]:hover .cs-thread-info,
+[data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-thread-info {
   padding-right: 2.75rem;
   mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
   -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
 }
 
+/* The open thread's text reads brighter than its siblings, so the selection
+   separates from the rest the way a selected row should. */
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-title,
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-info,
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-time {
+  color: oklch(from var(--sidebar-accent-foreground) min(1, calc(l + 0.14)) c h);
+}
+
+/* The row's pin/archive buttons stay hidden until the row is hovered or
+   focused. Declared unlayered, like the rest of this sheet, so the host's own
+   utility classes cannot win over the reveal. Hovering the button brightens
+   the glyph itself; there is no surface behind it. */
+[data-cursor-sidebar-root] [data-thread-row] .cs-row-actions,
+[data-cursor-sidebar-root] [data-thread-row] .cs-row-action {
+  pointer-events: none;
+}
+[data-cursor-sidebar-root] [data-thread-row] .cs-row-actions {
+  opacity: 0;
+}
+[data-cursor-sidebar-root] [data-thread-row]:hover .cs-row-actions,
+[data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-row-actions,
+[data-cursor-sidebar-root] [data-thread-row]:hover .cs-row-action,
+[data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-row-action {
+  pointer-events: auto;
+}
+[data-cursor-sidebar-root] [data-thread-row]:hover .cs-row-actions,
+[data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-row-actions {
+  opacity: 1;
+}
+[data-cursor-sidebar-root] .cs-row-action:hover,
+[data-cursor-sidebar-root] .cs-row-action:focus-visible,
+[data-cursor-sidebar-root] .cs-row-action:active {
+  color: oklch(from var(--sidebar-foreground) min(1, calc(l + 0.14)) c h);
+}
+
+/* The heading and project create controls brighten the same way, so adding a
+   thread reads with the same strength as pinning or archiving one. */
+[data-cursor-sidebar-root] .cs-new-project:hover,
+[data-cursor-sidebar-root] .cs-new-project:focus-visible,
+[data-cursor-sidebar-root] .cs-new-project:active,
+[data-cursor-sidebar-root] .cs-project-new:hover,
+[data-cursor-sidebar-root] .cs-project-new:focus-visible,
+[data-cursor-sidebar-root] .cs-project-new:active {
+  color: oklch(from var(--sidebar-foreground) min(1, calc(l + 0.14)) c h);
+}
+
+/* A heading's contents open like a drawer: the block grows and shrinks its
+   height in 110ms instead of appearing. `Drawer.tsx` keeps the transition
+   duration in step. */
+.cs-drawer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 110ms ease-out;
+}
+.cs-drawer[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.cs-drawer > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Grouping is a wholesale swap of the list. It plays in rather than cutting. */
+@keyframes cs-grouping-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cs-grouping-swap {
+  animation: cs-grouping-swap 130ms ease-out;
+}
+
 /* Radix anchored surfaces grow from the point that opened them. */
-.ps-context-actions,
-.ps-new-project-dialog,
-.ps-project-icon-picker {
+.cs-context-actions,
+.cs-new-project-dialog,
+.cs-project-icon-picker {
   transform-origin: var(--radix-popover-content-transform-origin, center);
 }
-.ps-view-menu {
+.cs-view-menu {
   transform-origin: var(--radix-dropdown-menu-content-transform-origin, center);
 }
 
 /* Live-work "shine" pulse for the icon status glyphs (Workflow, agents,
    plan mode, goal). The class was referenced without a definition. */
-@keyframes ps-shine-icon {
+@keyframes cs-shine-icon {
   0%, 100% { opacity: 0.45; transform: scale(0.92); }
   50% { opacity: 1; transform: scale(1.06); }
 }
 .animate-shine-icon {
-  animation: ps-shine-icon 1.6s ease-in-out infinite;
+  animation: cs-shine-icon 1.6s ease-in-out infinite;
 }
 
 /* The lifted label that follows the pointer during a reorder drag. It mounts
    on document.body outside the plugin scope, so it is styled inline; this is
    the reduced-motion escape hatch and the transform channel hint. */
-.ps-drag-ghost {
+.cs-drag-ghost {
   will-change: transform;
 }
 
@@ -143,13 +220,13 @@
    never a literal, so they follow the active theme. Tune the two percentages
    to change the shade; everything below reads them. */
 :root {
-  --ps-nav-shade: 87%;
-  --ps-nav-shade-emphasis: 100%;
+  --cs-nav-shade: 87%;
+  --cs-nav-shade-emphasis: 100%;
 }
 [aria-label="Sidebar navigation"] :is(button, a),
 [data-testid="app-sidebar-trigger-overlay"] button,
 [data-testid="app-sidebar-top-reserve-row"] button {
-  color: color-mix(in oklab, var(--sidebar-foreground) var(--ps-nav-shade), transparent);
+  color: color-mix(in oklab, var(--sidebar-foreground) var(--cs-nav-shade), transparent);
 }
 [aria-label="Sidebar navigation"] :is(button, a):hover,
 [aria-label="Sidebar navigation"] :is(button, a):focus-visible,
@@ -158,7 +235,7 @@
 [data-testid="app-sidebar-trigger-overlay"] button:focus-visible,
 [data-testid="app-sidebar-top-reserve-row"] button:hover,
 [data-testid="app-sidebar-top-reserve-row"] button:focus-visible {
-  color: color-mix(in oklab, var(--sidebar-foreground) var(--ps-nav-shade-emphasis), transparent);
+  color: color-mix(in oklab, var(--sidebar-foreground) var(--cs-nav-shade-emphasis), transparent);
 }
 
 /* Heading icon buttons (view menu, new project, new thread, the date "+"):
@@ -166,49 +243,121 @@
    glyph. The surface is a pseudo so it can sit larger than the 16px slot
    without moving the heading; an unlayered reset beats our Tailwind layer, so
    these colours are declared unlayered. */
-.ps-icon-btn {
+.cs-icon-btn {
   position: relative;
 }
-.ps-icon-btn::after {
+.cs-icon-btn::after {
   content: "";
   position: absolute;
   inset: -5px;
   border-radius: 6px;
   pointer-events: none;
 }
-.ps-icon-btn > svg {
+.cs-icon-btn > svg {
   position: relative;
   z-index: 1;
 }
-.ps-icon-btn:hover::after,
-.ps-icon-btn:focus-visible::after {
+.cs-icon-btn:hover::after,
+.cs-icon-btn:focus-visible::after {
   background-color: var(--state-hover);
 }
-.ps-icon-btn:active::after,
-.ps-icon-btn[data-state="open"]::after {
+.cs-icon-btn:active::after,
+.cs-icon-btn[data-state="open"]::after {
   background-color: var(--state-active);
 }
 
-/* A bucket heading carries the view tools. The phone/touch layout adds a little
-   right padding above these rows, so pull the row flush with the top-bar
-   controls there; the desktop sidebar needs no change. */
+/* A project heading highlights like a thread row when the pointer is over it. */
+[data-cursor-sidebar-root] .cs-project-heading:hover {
+  background-color: color-mix(in oklab, var(--sidebar-accent) 60%, transparent);
+}
+
+/* While rows remain below the fold, the list's bottom edge dissolves so the
+   cut never meets the next section as a hard line. It clears at the end. */
+[data-cursor-sidebar-root] [data-fade-more="true"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent);
+}
+
+/* Every heading that carries the view tools shares one right edge. The
+   phone/touch layout adds a little right padding above these rows, so pull the
+   row flush with the top-bar controls there; the desktop sidebar needs no
+   change. */
 @media (max-width: 767px) and (pointer: coarse) {
-  [data-project-sidebar-root] .ps-section-divider { margin-right: -8px; }
+  [data-cursor-sidebar-root] .cs-heading { margin-right: -8px; }
+}
+
+/* While BB's keybind guide is up, a row shows the digit that opens it, in the
+   host's own chip shape. */
+.cs-shortcut-key {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  background-color: var(--state-hover);
+  padding: 4px 6px;
+  font-family: var(--font-sans, inherit);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--subtle-foreground);
+  opacity: 0.6;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* A connector rail runs behind the glyph it meets. The disc hugs the glyph, so
+   a spinner's gaps show the list surface rather than the line, and the row's
+   own hover tint is barely touched. */
+[data-cursor-sidebar-root] .cs-status-glyph::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  border-radius: 9999px;
+  background-color: var(--sidebar);
+}
+/* The disc has to follow the row's own surface: on a hovered or selected row a
+   list-coloured disc reads as a dark halo behind the glyph. Accent at 60% over
+   the list is the opaque equivalent of the hover tint the row paints. */
+[data-cursor-sidebar-root] [data-thread-row]:hover .cs-status-glyph::before {
+  background-color: color-mix(in oklab, var(--sidebar-accent) 60%, var(--sidebar));
+}
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-status-glyph::before {
+  background-color: var(--sidebar-accent);
+}
+[data-cursor-sidebar-root] .cs-status-glyph > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* The lifted row clone is purely visual: nothing inside it may take a hit, or
+   the drop target under the pointer would resolve to the ghost. */
+.cs-drag-ghost,
+.cs-drag-ghost * {
+  pointer-events: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ps-project-glyph svg {
+  .cs-project-glyph svg {
     animation: none !important;
     transition: none !important;
   }
-  .ps-status-slot svg {
+  .cs-status-slot svg {
     animation: none !important;
     transition: none !important;
   }
   .animate-shine-icon {
     animation: none !important;
   }
-  .ps-drag-ghost {
+  .cs-drag-ghost {
     transition: none !important;
+  }
+  .cs-drawer {
+    transition: none !important;
+  }
+  .cs-grouping-swap {
+    animation: none !important;
   }
 }

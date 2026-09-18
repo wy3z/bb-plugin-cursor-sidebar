@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import { type IconName } from "@/components/ui/icon";
-import type { projectSidebarRpcContract } from "./server";
+import type { cursorSidebarRpcContract } from "./server";
 import { PROJECT_ICON_CHANNEL } from "./server";
 import { PROJECT_ICON_NAME_SET } from "./project-icons";
 
@@ -24,7 +24,8 @@ export interface ProjectIcons {
  * a failed write.
  */
 export function useProjectIcons(): ProjectIcons {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
+  const realtimeState = useRealtimeConnectionState();
   const [icons, setIcons] = useState<ReadonlyMap<string, string>>(
     () => new Map(),
   );
@@ -38,9 +39,11 @@ export function useProjectIcons(): ProjectIcons {
     }
   }, [rpc]);
 
+  // A reconnect re-reads; realtime signals are not replayed, so an icon set
+  // while the socket was down would otherwise stay stale.
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, realtimeState]);
   useRealtime(PROJECT_ICON_CHANNEL, () => {
     void load();
   });

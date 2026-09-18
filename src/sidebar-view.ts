@@ -14,6 +14,7 @@ import { AGE_GROUPS, bucketForTimestamp } from "./age-groups";
 import type { DisplayRow } from "./forest";
 import { familyRootId } from "./standalone-groups";
 import {
+  THREAD_STATUS_LABEL,
   THREAD_STATUS_RANK,
   resolveThreadStatus,
   threadStatusFacts,
@@ -23,33 +24,35 @@ import {
 export const VIEW_GROUP_BY = ["workspace", "updated", "status", "environment"] as const;
 export type ViewGroupBy = (typeof VIEW_GROUP_BY)[number];
 
-export const VIEW_CONVERSATION_ORDER = ["manual", "updated", "status"] as const;
+/**
+ * Conversations always take an automatic order; only groups are arrangeable.
+ * A persisted "manual" from an older client is coerced to the default.
+ */
+export const VIEW_CONVERSATION_ORDER = ["updated", "status"] as const;
 export type ViewConversationOrder = (typeof VIEW_CONVERSATION_ORDER)[number];
 
 export const VIEW_GROUP_ORDER = ["manual", "updated"] as const;
 
+export const VIEW_PROJECT_ORDER = ["manual", "status"] as const;
+export type ViewProjectOrder = (typeof VIEW_PROJECT_ORDER)[number];
+
 export const VIEW_STATUS_FILTERS = ["input", "failed", "working", "unread", "idle"] as const;
 export type ViewStatusFilter = (typeof VIEW_STATUS_FILTERS)[number];
 
-export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = {
-  input: "Needs your input",
-  failed: "Failed",
-  working: "Working",
-  unread: "Unread",
-  idle: "Idle",
-};
+/** The filter's own labels are the same strings the rows report. */
+export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = THREAD_STATUS_LABEL;
 
 /**
  * Defaults recover the agreed view: native Projects / Chats homes with date
  * buckets on the pooled ordinary homes, the existing stored
  * conversation order, and every ordinary status and environment shown.
- * Reset writes these back without touching thread membership. Projects /
- * Updated / Status / Environment grouping is one exclusive choice.
+ * Projects / Updated / Status / Environment grouping is one exclusive choice.
  */
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
-  groupBy: "updated",
-  sortConversationsBy: "manual",
+  groupBy: "workspace",
+  sortConversationsBy: "updated",
   sortGroupsBy: "manual",
+  sortProjectsBy: "manual",
   statusFilter: [...VIEW_STATUS_FILTERS],
   environmentFilter: null,
   show: {
@@ -80,7 +83,6 @@ export interface SidebarViewStore {
   view: SidebarView;
   /** Shared per user, so a filter change travels between the user's clients. */
   update: (patch: Partial<SidebarView>) => void;
-  reset: () => void;
   /** Whether the shown view is saved, saving, unsaved or unreadable. */
   sync: SidebarViewSync;
   /** Re-attempt the unsaved change, or the failed read, once. */
@@ -151,7 +153,19 @@ function coerceEnvironmentFilter(raw: unknown): string[] | null {
  * invalid field falls back to its default; nothing is invented.
  */
 export function coerceSidebarView(value: unknown): SidebarView {
-  if (value === null || typeof value !== "object") return DEFAULT_SIDEBAR_VIEW;
+  // A clone, never the module-level default: callers hold the result and must
+  // not be able to mutate every other client's fallback in place.
+  if (value === null || typeof value !== "object") {
+    return {
+      ...DEFAULT_SIDEBAR_VIEW,
+      statusFilter: [...DEFAULT_SIDEBAR_VIEW.statusFilter],
+      environmentFilter:
+        DEFAULT_SIDEBAR_VIEW.environmentFilter === null
+          ? null
+          : [...DEFAULT_SIDEBAR_VIEW.environmentFilter],
+      show: { ...DEFAULT_SIDEBAR_VIEW.show },
+    };
+  }
   const raw = value as Record<string, unknown>;
   const groupBy = VIEW_GROUP_BY.find((entry) => entry === raw.groupBy) ?? DEFAULT_SIDEBAR_VIEW.groupBy;
   const sortConversationsBy =
@@ -160,6 +174,9 @@ export function coerceSidebarView(value: unknown): SidebarView {
   const sortGroupsBy =
     VIEW_GROUP_ORDER.find((entry) => entry === raw.sortGroupsBy) ??
     DEFAULT_SIDEBAR_VIEW.sortGroupsBy;
+  const sortProjectsBy =
+    VIEW_PROJECT_ORDER.find((entry) => entry === raw.sortProjectsBy) ??
+    DEFAULT_SIDEBAR_VIEW.sortProjectsBy;
   const showRaw = (raw.show ?? {}) as Record<string, unknown>;
   const showFlag = (key: keyof SidebarView["show"]): boolean =>
     typeof showRaw[key] === "boolean"
@@ -169,6 +186,7 @@ export function coerceSidebarView(value: unknown): SidebarView {
     groupBy,
     sortConversationsBy,
     sortGroupsBy,
+    sortProjectsBy,
     statusFilter: coerceStatusFilter(raw.statusFilter),
     environmentFilter: coerceEnvironmentFilter(raw.environmentFilter),
     show: {
@@ -282,7 +300,6 @@ export function homeDisplayParentOf(
 /** One family's aggregated facts, keyed by its display family root. */
 export interface FamilyAggregate {
   status: ViewStatusFilter;
-  environment: EnvironmentIdentity | null;
   environmentGroup: EnvironmentIdentity;
   latestUpdatedAt: number;
   firstIndex: number;
@@ -297,7 +314,7 @@ export interface OrdinaryFamilyFacts {
 
 type FamilyFactSources = Pick<
   OrdinaryGroupFacts,
-  "parentOf" | "statusOf" | "environmentOf"
+  "parentOf" | "statusOf"
 >;
 
 function familyAggregates(
@@ -314,7 +331,6 @@ function familyAggregates(
     if (aggregate === undefined) {
       aggregate = {
         status: facts.statusOf(thread),
-        environment: facts.environmentOf(thread),
         environmentGroup: environmentGroupOf(thread),
         latestUpdatedAt: thread.updatedAt,
         firstIndex: firstIndex++,
@@ -325,9 +341,6 @@ function familyAggregates(
     const status = facts.statusOf(thread);
     if (THREAD_STATUS_RANK[status] < THREAD_STATUS_RANK[aggregate.status]) {
       aggregate.status = status;
-    }
-    if (aggregate.environment === null) {
-      aggregate.environment = facts.environmentOf(thread);
     }
     if (aggregate.environmentGroup.id === NO_ENVIRONMENT_KEY) {
       const grouped = environmentGroupOf(thread);
@@ -359,8 +372,7 @@ export function ordinaryFamilyFacts(
 export function familyAwareComparator(
   order: ViewConversationOrder,
   facts: OrdinaryFamilyFacts,
-): ((left: PluginSidebarThread, right: PluginSidebarThread) => number) | null {
-  if (order === "manual") return null;
+): (left: PluginSidebarThread, right: PluginSidebarThread) => number {
   const aggregateOf = (thread: PluginSidebarThread): FamilyAggregate | undefined =>
     facts.aggregateOf.get(facts.rootOf.get(thread.id) ?? thread.id);
   if (order === "updated") {
@@ -533,7 +545,6 @@ export function ordinaryCollapsibleTargets(
     now: number;
     folderIds: ReadonlySet<string>;
     statusOf: (thread: PluginSidebarThread) => ViewStatusFilter;
-    environmentOf: (thread: PluginSidebarThread) => EnvironmentIdentity | null;
   },
 ): CollapsibleTargets {
   const groupKeys = new Set<string>();
@@ -543,7 +554,6 @@ export function ordinaryCollapsibleTargets(
     for (const thread of home.members) {
       if (home.childrenOf(thread.id).length > 0) parentIds.add(thread.id);
     }
-    if (home.members.some((thread) => thread.isPinned)) groupKeys.add(`pinned:${home.id}`);
     const pinnedRoots = new Set<string>();
     const filedRoots = new Set<string>();
     for (const thread of home.members) {
@@ -571,7 +581,6 @@ export function ordinaryCollapsibleTargets(
       now: options.now,
       parentOf: home.parentOf,
       statusOf: options.statusOf,
-      environmentOf: options.environmentOf,
     });
     for (const thread of home.members) {
       const key = keys.get(thread.id);
@@ -599,7 +608,6 @@ export interface OrdinaryGroupFacts {
   now: number;
   parentOf: (threadId: string) => string | null;
   statusOf: (thread: PluginSidebarThread) => ViewStatusFilter;
-  environmentOf: (thread: PluginSidebarThread) => EnvironmentIdentity | null;
   /**
    * The home's complete threads, before flatten or collapse. Defaults to the
    * rendered rows, which is exact only when nothing is folded.
@@ -698,7 +706,6 @@ export function groupOrdinaryRows(
       root === undefined
         ? {
             status: facts.statusOf(row.thread),
-            environment: facts.environmentOf(row.thread),
             environmentGroup: environmentGroupOf(row.thread),
             latestUpdatedAt: row.thread.updatedAt,
             firstIndex: 0,

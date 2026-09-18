@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
-import type { projectSidebarRpcContract } from "./server";
+import type { cursorSidebarRpcContract } from "./server";
 
 /**
  * The host bb itself runs on. A thread row only names its host when it differs,
@@ -8,7 +8,7 @@ import type { projectSidebarRpcContract } from "./server";
  * which the row treats as "unknown" and shows the label.
  */
 export function usePrimaryHost(): string | null {
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const [hostId, setHostId] = useState<string | null>(null);
   useEffect(() => {
     let disposed = false;

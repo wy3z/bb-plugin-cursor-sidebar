@@ -3,10 +3,11 @@ import { Icon } from "@/components/ui/icon";
 import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
+import { ICON_BTN } from "./icon-btn";
 
 /**
- * Header create action: BB's new-thread bubble. Choosing a native Project
- * opens a new chat in that working directory.
+ * Header create action: one plain plus in every grouping. Choosing a native
+ * Project opens a new chat in that working directory.
  */
 export function NewProjectAction({
   projects,
@@ -27,9 +28,9 @@ export function NewProjectAction({
           type="button"
           aria-label={label}
           title={label}
-          className="ps-new-project ml-3 flex size-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:pointer-coarse:ml-0 max-md:pointer-coarse:size-9"
+          className={cn("cs-new-project ml-3 max-md:pointer-coarse:ml-0", ICON_BTN)}
         >
-          <Icon name="MessageSquarePlus" className="size-3.5" />
+          <Icon name="Plus" className="size-3.5" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -39,7 +40,7 @@ export function NewProjectAction({
           align="end"
           sideOffset={4}
           className={cn(
-            "ps-new-project-dialog z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md",
+            "cs-new-project-dialog z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md",
             ANCHORED_OVERLAY_MOTION,
           )}
         >
@@ -50,14 +51,15 @@ export function NewProjectAction({
           ) : (
             <div className="max-h-72 overflow-y-auto">
               {projects.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => onSelect(project)}
-                  className="flex w-full items-center rounded px-2 py-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <span className="min-w-0 truncate" title={project.name}>{project.name}</span>
-                </button>
+                <Popover.Close key={project.id} asChild>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(project)}
+                    className="flex w-full items-center rounded px-2 py-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <span className="min-w-0 truncate" title={project.name}>{project.name}</span>
+                  </button>
+                </Popover.Close>
               ))}
             </div>
           )}

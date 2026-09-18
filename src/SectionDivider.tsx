@@ -14,7 +14,7 @@ export function SectionDivider({ label, open, onToggle, onNewThread, shelfKey, t
   tools?: ReactNode;
 }) {
   return (
-    <div className="ps-section-divider group/section flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5">
+    <div className="cs-section-divider cs-heading group/section flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5">
       <button
         type="button"
         data-shelf-toggle={shelfKey}

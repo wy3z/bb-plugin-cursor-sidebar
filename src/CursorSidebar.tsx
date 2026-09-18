@@ -40,8 +40,10 @@ import {
   STANDALONE,
 } from "./membership";
 import {
+  aggregateSectionStatus,
   summarizeSection,
   worstThreadStatus,
+  THREAD_STATUS_RANK,
   type ThreadStatusKind,
 } from "./status";
 import { pinAllowed, planPinWrites } from "./pin-scope";
@@ -61,7 +63,6 @@ import {
   mergeVisibleOrder,
   moveIdByOffset,
   orderByStoredIds,
-  reconcileOrder,
   type DropPlacement,
 } from "./thread-order";
 import {
@@ -72,8 +73,8 @@ import {
 } from "./collapse";
 import { useThreadSections } from "./useThreadSections";
 import { useSidebarView } from "./useSidebarView";
-import type { projectSidebarRpcContract } from "./server";
-import { SidebarViewMenu, SidebarViewSyncNotice } from "./SidebarViewMenu";
+import type { cursorSidebarRpcContract } from "./server";
+import { SidebarViewMenuRoot, SidebarViewMenuTrigger, SidebarViewSyncNotice } from "./SidebarViewMenu";
 import {
   environmentFilterOptions,
   familyAwareComparator,
@@ -83,11 +84,9 @@ import {
   ordinaryFamilyFacts,
   ordinaryFamilyGroupKeys,
   ordinaryThreadStatus,
-  environmentIdentityOf,
   environmentGroupOf,
   NO_ENVIRONMENT_KEY,
   unreadOrdinaryThreadIds,
-  viewHasActiveFilters,
 } from "./sidebar-view";
 import { DeleteFolderDialog, FolderNameDialog } from "./FolderDialogs";
 import {
@@ -101,6 +100,8 @@ import type { ThreadShelf } from "./lifecycle";
 import { ageGroupKey, type AgeGroup } from "./age-groups";
 import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus } from "./ProjectStatusGlyph";
 import { AnimatedList } from "./AnimatedList";
+import { Drawer } from "./Drawer";
+import { useShortcutGuide } from "./useShortcutGuide";
 import { ICON_BTN } from "./icon-btn";
 import { ShowMoreButton } from "./ShowMoreButton";
 
@@ -117,7 +118,7 @@ const COLLAPSED_ROW_EXIT_MS = 220;
  * native personal container is shown as Threads, and settled threads sit in
  * one collapsed section under the thread list rather than a shelf per project.
  */
-export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
+export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
   const { status, threads: rawThreads, projects: nativeProjects } = useSidebarThreads();
   const nativeProjectSections = useMemo(
     () => nativeProjects.filter((project) => !project.isPersonal).map((project) => ({ id: nativeProjectSectionId(project.id), name: project.name, isPersonal: false })),
@@ -138,7 +139,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
   const actions = useSidebarThreadActions();
-  const rpc = useRpc<typeof projectSidebarRpcContract>();
+  const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const projectIcons = useProjectIcons();
 
   // "Today +" opens BB's native composer with the personal project selected —
@@ -166,18 +167,27 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     onNavigate();
   }, [actions, onNavigate]);
 
-  const [scrolling, setScrolling] = useState(false);
-  const scrollIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleScroll = useCallback(() => {
-    setScrolling(true);
-    if (scrollIdleTimer.current !== null) clearTimeout(scrollIdleTimer.current);
-    scrollIdleTimer.current = setTimeout(() => {
-      setScrolling(false);
-      scrollIdleTimer.current = null;
-    }, 900);
-  }, []);
-  useEffect(() => () => {
-    if (scrollIdleTimer.current !== null) clearTimeout(scrollIdleTimer.current);
+  // The list fades its bottom edge while rows remain below the fold, so the
+  // last visible row dissolves instead of meeting the next section with a cut.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [listHasMore, setListHasMore] = useState(false);
+  useEffect(() => {
+    const list = listRef.current;
+    if (list === null) return;
+    const update = () => {
+      setListHasMore(list.scrollHeight - list.scrollTop - list.clientHeight > 4);
+    };
+    update();
+    list.addEventListener("scroll", update, { passive: true });
+    const resize = new ResizeObserver(update);
+    resize.observe(list);
+    const content = new MutationObserver(update);
+    content.observe(list, { childList: true, subtree: true, characterData: true });
+    return () => {
+      list.removeEventListener("scroll", update);
+      resize.disconnect();
+      content.disconnect();
+    };
   }, []);
 
   const [nowMinute, setNowMinute] = useState(() => Math.floor(Date.now() / 60_000));
@@ -190,7 +200,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   }, []);
   const now = nowMinute * 60_000;
 
-  const expandedProjects = usePersistentIds("bb-plugin-project-sidebar:expanded-projects:v1");
+  const expandedProjects = usePersistentIds("bb-plugin-cursor-sidebar:expanded-projects:v1");
   // Fresh devices open Today/Yesterday so populated recency is visible. Any
   // stored value, including an explicitly empty one, is kept and never
   // reseeded; a fold afterwards sticks for the whole mount.
@@ -202,7 +212,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // Top-level group headings (Projects) default open; this set holds the
   // folded ones and is a device preference, not shared state. Loose chats
   // under Projects grouping sit in a Threads subheading that defaults closed.
-  const topGroupCollapsed = usePersistentIds("bb-plugin-project-sidebar:collapsed-top-groups:v1");
+  const topGroupCollapsed = usePersistentIds("bb-plugin-cursor-sidebar:collapsed-top-groups:v1");
   const expandedThreads = usePersistentIds(EXPANDED_THREADS_KEY);
   const folderStore = useThreadSections();
   const knownFolderIds = useMemo(
@@ -221,6 +231,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   const [announcement, setAnnouncement] = useState("");
   const [markReadBusy, setMarkReadBusy] = useState(false);
+  // Held here rather than inside the menu so a grouping change, which moves the
+  // trigger to another heading, leaves the open menu open.
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const shortcutKeys = useShortcutGuide();
   const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -277,10 +291,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   }, [projectedById]);
 
   // Commit a released drag into the persistent stores.
-  const sectionsRef = useRef<ProjectSectionData[]>([]);
-  // True while the stored manual conversation order is the active order; an
-  // automatic order discards a pure reorder drop but keeps filing and pinning.
-  const manualOrderRef = useRef(true);
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
   const onDragCommit = useCallback(
@@ -289,12 +299,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       // under an automatic conversation order.
       if (committed.kind === "thread" && committed.parentTargetId !== null) {
         setThreadParentRef.current(committed.movingId, committed.parentTargetId);
-        return;
-      }
-      // An automatic conversation order owns the list: a thread drag must not
-      // reorder, file, or (un)pin. Dropping over a divider would otherwise
-      // silently change filing or pin state on a move the user meant as a drag.
-      if (committed.kind === "thread" && !manualOrderRef.current) {
         return;
       }
       // Folder and pin headers own the drop: the family is filed or (un)pinned
@@ -312,20 +316,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         void threadOrdersRef.current.reorder("managed-projects", ids);
         return;
       }
-      const section = sectionsRef.current.find(
-        (candidate) => candidate.id === committed.sectionId,
-      );
-      if (section === undefined) return;
-      // Reconcile the stored order against the complete current scope before
-      // merging: new siblings and folded siblings keep a slot instead
-      // of being dropped from the saved order.
-      const base = section.scopeIds.get(committed.scope) ?? committed.ids;
-      const stored = threadOrdersRef.current.orderForScope(committed.scope);
-      const global = reconcileOrder(stored, base);
-      void threadOrdersRef.current.reorder(
-        committed.scope,
-        mergeVisibleOrder(global, committed.ids),
-      );
+      // Conversations always take the selected automatic order, so a thread
+      // drag never writes a sibling order.
     },
     [],
   );
@@ -362,10 +354,56 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     drag.state?.kind === "project"
       ? mergeVisibleOrder(baseProjectIds, drag.state.ids)
       : baseProjectIds;
-  const orderedProjects = useMemo(
-    () => orderByStoredIds(projects, liveProjectIds),
-    [liveProjectIds, projects],
+  // One persisted SidebarView drives grouping, ordering, Show and the ordinary
+  // filters. It never touches homes, folders, pin flags or manual order: it only
+  // decides which ordinary rows render, how they are ordered and grouped, and
+  // which supported metadata a row shows.
+  const sidebarView = useSidebarView();
+  const view = sidebarView.view;
+  const familyRootOfId = useCallback(
+    (threadId: string) =>
+      familyRootId((id) => rawById.get(id)?.parentThreadId ?? null, threadId),
+    [rawById],
   );
+  // A pinned family and the open chat's family stay visible when an ordinary
+  // filter would hide them.
+  const pinnedFamilyRoots = useMemo(() => {
+    const roots = new Set<string>();
+    for (const thread of visible) {
+      if (thread.isPinned) roots.add(familyRootOfId(thread.id));
+    }
+    return roots;
+  }, [familyRootOfId, visible]);
+  // Each project's aggregate status, read from the same visible feed the project
+  // glyphs use, so a status ordering never disagrees with the heading. A family
+  // lifted into the Pinned block belongs there, not to its home, so it is
+  // skipped here exactly as the heading aggregate skips it.
+  const projectStatusById = useMemo(() => {
+    const members = new Map<string, PluginSidebarThread[]>();
+    for (const thread of visible) {
+      if (pinnedFamilyRoots.has(familyRootOfId(thread.id))) continue;
+      const group = members.get(thread.projectId);
+      if (group === undefined) members.set(thread.projectId, [thread]);
+      else group.push(thread);
+    }
+    const status = new Map<string, ThreadStatusKind>();
+    for (const [projectId, group] of members) {
+      status.set(projectId, aggregateSectionStatus(group).status);
+    }
+    return status;
+  }, [familyRootOfId, pinnedFamilyRoots, visible]);
+  const orderedProjects = useMemo(() => {
+    const byStored = orderByStoredIds(projects, liveProjectIds);
+    if (view.sortProjectsBy !== "status") return byStored;
+    const rank = (project: { id: string }): number =>
+      THREAD_STATUS_RANK[projectStatusById.get(project.id) ?? "idle"];
+    return [...byStored].sort(
+      (left, right) =>
+        rank(left) - rank(right) ||
+        Number(left.isPersonal) - Number(right.isPersonal) ||
+        left.name.localeCompare(right.name),
+    );
+  }, [liveProjectIds, projectStatusById, projects, view.sortProjectsBy]);
   const displayProjects = useMemo(
     () =>
       orderedProjects.map((project) => ({
@@ -375,57 +413,20 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       })),
     [orderedProjects],
   );
-
-  const effectiveOrderForScope = useCallback(
-    (scope: string) => {
-      const dragging = drag.state;
-      if (dragging !== null && dragging.kind === "thread" && dragging.scope === scope) {
-        return dragging.ids;
-      }
-      return threadOrders.orderForScope(scope);
-    },
-    [drag.state, threadOrders.orderForScope],
-  );
-
-  // One persisted SidebarView drives grouping, ordering, Show and the ordinary
-  // filters. It never touches homes, folders, pin flags or manual order: it only
-  // decides which ordinary rows render, how they are ordered and grouped, and
-  // which supported metadata a row shows.
-  const sidebarView = useSidebarView();
-  const view = sidebarView.view;
-  manualOrderRef.current = view.sortConversationsBy === "manual";
-  const familyRootOfId = useCallback(
-    (threadId: string) =>
-      familyRootId((id) => rawById.get(id)?.parentThreadId ?? null, threadId),
-    [rawById],
-  );
-  // A pinned family and the open chat's family stay visible when an ordinary
-  // filter would hide them, with the header note explaining the exception.
-  const pinnedFamilyRoots = useMemo(() => {
-    const roots = new Set<string>();
-    for (const thread of visible) {
-      if (thread.isPinned) roots.add(familyRootOfId(thread.id));
-    }
-    return roots;
-  }, [familyRootOfId, visible]);
   const activeFamilyRoot = useMemo(
     () => (activeThreadId === null ? null : familyRootOfId(activeThreadId)),
     [activeThreadId, familyRootOfId],
   );
-  const viewFiltersActive = viewHasActiveFilters(view);
-  // Projects grouping keeps native project interiors unfiltered; every other
-  // grouping filters project threads exactly like standalone chats.
   const projectsGrouping = view.groupBy === "workspace";
   const viewVisible = useMemo(
     () =>
       filterOrdinaryThreads(visible, view, {
         bypass: (thread) => {
-          if (projectsGrouping && homeKindOf(thread.projectId) === "project") return true;
           const root = familyRootOfId(thread.id);
           return pinnedFamilyRoots.has(root) || root === activeFamilyRoot;
         },
       }),
-    [activeFamilyRoot, familyRootOfId, pinnedFamilyRoots, projectsGrouping, visible, view],
+    [activeFamilyRoot, familyRootOfId, pinnedFamilyRoots, visible, view],
   );
   const viewEnvironmentOptions = useMemo(
     () => environmentFilterOptions(visible),
@@ -445,21 +446,17 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   // Automatic ordering reads the same family facts the grouping shows, so a
   // family sorts by the activity its divider shows. Facts come from the complete
   // visible set with same-home display parents, before any fold or preview.
-  const siblingOrdering = useMemo<SiblingOrdering | undefined>(() => {
-    if (view.sortConversationsBy === "manual") return undefined;
+  const siblingOrdering = useMemo<SiblingOrdering>(() => {
     const facts = ordinaryFamilyFacts(viewVisible, {
       parentOf: homeDisplayParentOf(viewVisible),
       statusOf: ordinaryThreadStatus,
-      environmentOf: environmentIdentityOf,
     });
-    const compare = familyAwareComparator(view.sortConversationsBy, facts);
-    return compare === null ? undefined : { compare, manual: false };
+    return { compare: familyAwareComparator(view.sortConversationsBy, facts) };
   }, [view.sortConversationsBy, viewVisible]);
-  // Every home takes the selected automatic order, or keeps its stored sibling
-  // order when Manual is chosen. Manual with no stored order still falls back to
-  // recency inside `orderedMembers`, so a freshly seen home starts newest-first.
+  // Conversations always take the selected automatic order; only projects and
+  // folders keep a manual arrangement.
   const orderingFor = useCallback(
-    (): SiblingOrdering | undefined => siblingOrdering,
+    (): SiblingOrdering => siblingOrdering,
     [siblingOrdering],
   );
 
@@ -469,12 +466,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         viewVisible,
         displayProjects,
         () => "active",
-        effectiveOrderForScope,
         orderingFor,
       ),
-    [displayProjects, effectiveOrderForScope, orderingFor, viewVisible],
+    [displayProjects, orderingFor, viewVisible],
   );
-  sectionsRef.current = sections;
   // Pooled ordinary section for Updated / Status / Environment. Presentation
   // only: homes, pins, folders and order are untouched.
   const pooledSection = useMemo(
@@ -703,7 +698,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
             now,
             parentOf: (id) => commitSection.forest.parent.get(id) ?? null,
             statusOf: ordinaryThreadStatus,
-            environmentOf: environmentIdentityOf,
           });
       const groupKeyOf = memberById === null || groupKeys === null ? null : (threadId: string): string => {
         return standaloneGroupKey({
@@ -790,7 +784,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         now,
         parentOf: (id) => keyScope.forest.parent.get(id) ?? null,
         statusOf: ordinaryThreadStatus,
-        environmentOf: environmentIdentityOf,
       });
       const key = keys.get(activeThreadId) ?? null;
       if (key !== null && view.groupBy === "updated") {
@@ -838,65 +831,10 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     setExpandedParents((current) => new Set([...current, ...reveal.ancestors]));
   }, [activeThreadId, reveal, expandedAges, collapsedGroups, expandedThreads, topGroupCollapsed, projectsGrouping]);
 
-  // Alt+ArrowUp/Down reorders the focused thread among its siblings, or the
-  // focused project among native projects, as a keyboard alternative to
-  // dragging. It acts only on the element that actually has focus, inside the
-  // sidebar list, and never on a composer/input/dialog/menu.
-  const moveThreadWithinSiblings = useCallback(
-    (threadId: string, shelf: ThreadShelf, offset: -1 | 1) => {
-      const sectionId = sectionByThreadId.get(threadId);
-      if (sectionId === undefined) return false;
-      const section = sectionsById.get(sectionId);
-      if (section === undefined) return false;
-      // Manual moves need the Manual conversation order; an automatic order
-      // owns every home, project interiors included.
-      if (view.sortConversationsBy !== "manual") return false;
-      const scope = scopeOf(section, threadId);
-      const memberById = shelf === "active"
-        ? new Map(section.members.map((member) => [member.id, member]))
-        : null;
-      const groupingView = section.personal ? view : { ...view, groupBy: "workspace" as const };
-      const groupKeys = memberById === null
-        ? null
-        : ordinaryFamilyGroupKeys(section.members, groupingView, {
-            now,
-            parentOf: (id) => section.forest.parent.get(id) ?? null,
-            statusOf: ordinaryThreadStatus,
-            environmentOf: environmentIdentityOf,
-          });
-      const groupKeyOf = memberById === null || groupKeys === null ? null : (id: string): string =>
-        standaloneGroupKey({
-          threadId: id,
-          parentOf: (child) => section.forest.parent.get(child) ?? null,
-          sectionIdOf: (child) => memberById.get(child)?.sectionId ?? null,
-          isPinned: (child) => memberById.get(child)?.isPinned ?? false,
-          knownFolderIds,
-          ageGroupOf: (child) => groupKeys.get(child) ?? null,
-        });
-      const sourceKey = groupKeyOf?.(threadId) ?? null;
-      const all = flattenShelf(section, shelf, (id) => expandedParents.has(id))
-        .filter((row) => scopeOf(section, row.thread.id) === scope)
-        .filter((row) => groupKeyOf === null || sourceKey === null || groupKeyOf(row.thread.id) === sourceKey)
-        .map((row) => row.thread.id);
-      const nextAll = moveIdByOffset(all, threadId, offset);
-      if (nextAll.join("\0") === all.join("\0")) return false;
-      const base = section.scopeIds.get(scope) ?? all;
-      const global = reconcileOrder(threadOrders.orderForScope(scope), base);
-      void threadOrders.reorder(scope, mergeVisibleOrder(global, nextAll));
-      const partition = nextAll;
-      const moved = visibleById.get(threadId);
-      setAnnouncement(
-        `Moved ${moved ? threadDisplayTitle(moved) : threadId} to position ${
-          partition.indexOf(threadId) + 1
-        } of ${partition.length}`,
-      );
-      return true;
-    },
-    [expandedParents, knownFolderIds, now, sectionByThreadId, sectionsById, threadOrders, view, visibleById],
-  );
-
   const moveProjectWithinNative = useCallback(
     (projectId: string, offset: -1 | 1) => {
+      // A status ordering owns the project list, so only the manual order moves.
+      if (view.sortProjectsBy !== "manual") return false;
       if (!reorderableProjectIds.includes(projectId)) return false;
       const next = moveIdByOffset(reorderableProjectIds, projectId, offset);
       if (next.join("\0") === reorderableProjectIds.join("\0")) return false;
@@ -918,7 +856,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       );
       return true;
     },
-    [displayProjects, onDragCommit, reorderableProjectIds],
+    [displayProjects, onDragCommit, reorderableProjectIds, view.sortProjectsBy],
   );
 
   const handleListKeyDown = useCallback(
@@ -940,18 +878,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
         }
         return;
       }
-      const row = target?.closest("[data-reorder-kind='thread']") ?? null;
-      if (row === null) return;
-      const threadId = row.getAttribute("data-reorder-id");
-      if (threadId === null) return;
-      const shelf: ThreadShelf =
-        row.getAttribute("data-thread-shelf") === "settled" ? "settled" : "active";
-      if (moveThreadWithinSiblings(threadId, shelf, offset)) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
     },
-    [moveProjectWithinNative, moveThreadWithinSiblings],
+    [moveProjectWithinNative],
   );
 
   const ctx = useMemo<TreeContext>(
@@ -972,7 +900,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       onThreadDragStart,
       onThreadDragPickUp,
       onProjectDragPickUp,
-      canReorderThreads: view.sortConversationsBy === "manual",
+      canDragThreads: true,
       consumeSuppressedClick: drag.consumeSuppressedClick,
       draggingThreadId: drag.state?.kind === "thread" ? drag.state.movingId : null,
       dropTarget:
@@ -1003,9 +931,11 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
       },
       folderDropTarget: drag.state?.kind === "thread" ? drag.state.overTarget : null,
       childDropTarget: drag.state?.kind === "thread" ? drag.state.parentTargetId : null,
+      shortcutKeys,
     }),
     [
       rawById, workspacePaths, primaryHostId,
+      shortcutKeys,
       activeThreadId,
       canPin,
       collapsedGroups,
@@ -1084,7 +1014,6 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           now,
           folderIds: knownFolderIds,
           statusOf: ordinaryThreadStatus,
-          environmentOf: environmentIdentityOf,
         },
       ),
     [collapseSections, knownFolderIds, now, view],
@@ -1176,20 +1105,8 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
     [...bulkTargets.parentIds].some((id) => !expandedParents.has(id));
 
   const viewMenu = (
-    <SidebarViewMenu
-      view={view}
+    <SidebarViewMenuTrigger
       sync={sidebarView.sync}
-      onRetry={sidebarView.retry}
-      onUpdate={sidebarView.update}
-      onReset={sidebarView.reset}
-      environmentOptions={viewEnvironmentOptions}
-      showNoEnvironment={hasEnvironmentlessOrdinary}
-      anyCollapsed={anyCollapsed}
-      onExpandAll={expandAll}
-      onCollapseAll={collapseAll}
-      unreadOrdinaryCount={unreadOrdinary.length}
-      markReadBusy={markReadBusy}
-      onMarkAllRead={() => { void markAllRead(); }}
       triggerClassName={`${ICON_BTN} data-[state=open]:text-sidebar-foreground/90`}
     />
   );
@@ -1202,7 +1119,15 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
 
   const renderSection = (section: ProjectSectionData) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
-    const sectionThreads = projectedThreads.filter((thread) => thread.projectId === section.id);
+    // Pinned rows are lifted into the global Pinned block, so their activity
+    // must not also light the home they came from: a working pinned thread
+    // would otherwise put a spinner on a closed project that is already
+    // showing it. The same lifted set drives the status ordering above.
+    const sectionThreads = projectedThreads.filter(
+      (thread) =>
+        thread.projectId === section.id &&
+        !pinnedFamilyRoots.has(familyRootOfId(thread.id)),
+    );
     const aggregate = summarizeSection(section.name, sectionThreads);
     const nativeId = section.id.startsWith(NATIVE_PROJECT_PREFIX)
       ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
@@ -1235,7 +1160,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
             ? () => setDeletingProject({ id: nativeId, name: section.name, chats: sectionThreads.length })
             : undefined
         }
-        canDragProject={kind === "project" && section.known}
+        canDragProject={kind === "project" && section.known && view.sortProjectsBy === "manual"}
         isDragging={drag.state?.kind === "project" && drag.state.movingId === section.id}
         dropPlacement={
           drag.state?.kind === "project" && drag.state.overId === section.id
@@ -1250,23 +1175,30 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
   };
 
   return (
-    <div data-project-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
+    <SidebarViewMenuRoot
+      open={viewMenuOpen}
+      onOpenChange={setViewMenuOpen}
+      view={view}
+      sync={sidebarView.sync}
+      onRetry={sidebarView.retry}
+      onUpdate={sidebarView.update}
+      environmentOptions={viewEnvironmentOptions}
+      showNoEnvironment={hasEnvironmentlessOrdinary}
+      anyCollapsed={anyCollapsed}
+      onExpandAll={expandAll}
+      onCollapseAll={collapseAll}
+      unreadOrdinaryCount={unreadOrdinary.length}
+      markReadBusy={markReadBusy}
+      onMarkAllRead={() => { void markAllRead(); }}
+    >
+    <div data-cursor-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
 
-      {viewFiltersActive ? (
-        <p
-          role="status"
-          className="px-3 pb-1 text-2xs leading-tight text-sidebar-foreground/73"
-        >
-          Pinned and the open chat ignore the status and environment filters. Folders, pins and membership are unchanged.
-        </p>
-      ) : null}
-
       <div
-        onScroll={handleScroll}
-        data-scrolling={scrolling}
+        ref={listRef}
+        data-fade-more={listHasMore ? "true" : undefined}
         onKeyDown={handleListKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:auto] [scrollbar-color:auto] [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-foreground/20 data-[scrolling=true]:[&::-webkit-scrollbar-thumb]:bg-foreground/20 [&::-webkit-scrollbar-thumb:hover]:bg-foreground/40"
+        className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <p aria-live="polite" className="sr-only">
           {announcement}
@@ -1311,23 +1243,21 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
               setIconPicker(null);
             }}
           />
-          <AnimatedList as="div">
+          <AnimatedList
+            as="div"
+            key={view.groupBy}
+            className="cs-grouping-swap"
+          >
             {liftedPins.length > 0 ? (
               <>
                 <GroupHeading
                   label="Pinned"
                   open={!topGroupCollapsed.ids.has("pinned")}
                   onToggle={() => topGroupCollapsed.toggle("pinned")}
-                  tools={
-                    <>
-                      {viewMenu}
-                      {!projectsGrouping ? newChatAction : null}
-                    </>
-                  }
                 />
-                {!topGroupCollapsed.ids.has("pinned") ? (
+                <Drawer open={!topGroupCollapsed.ids.has("pinned")}>
                   <PinnedList items={liftedPins} ctx={ctx} />
-                ) : null}
+                </Drawer>
               </>
             ) : null}
             {projectsGrouping ? (
@@ -1338,21 +1268,19 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
                   onToggle={() => topGroupCollapsed.toggle("projects")}
                   onCreate={() => setCreatingProject(true)}
                   createLabel="New Project"
-                  tools={liftedPins.length === 0 ? viewMenu : undefined}
+                  tools={viewMenu}
                 />
-                {!topGroupCollapsed.ids.has("projects") ? (
-                  <>
-                    {nativeSectionsVisible.map((section) => renderSection(section))}
-                    <GroupHeading
-                      label="Threads"
-                      open={expandedThreads.ids.has("threads")}
-                      onToggle={() => expandedThreads.toggle("threads")}
-                    />
-                    {expandedThreads.ids.has("threads")
-                      ? chatSectionsVisible.map((section) => renderSection(section))
-                      : null}
-                  </>
-                ) : null}
+                <Drawer open={!topGroupCollapsed.ids.has("projects")}>
+                  {nativeSectionsVisible.map((section) => renderSection(section))}
+                  <GroupHeading
+                    label="Threads"
+                    open={expandedThreads.ids.has("threads")}
+                    onToggle={() => expandedThreads.toggle("threads")}
+                  />
+                  <Drawer open={expandedThreads.ids.has("threads")}>
+                    {chatSectionsVisible.map((section) => renderSection(section))}
+                  </Drawer>
+                </Drawer>
               </>
             ) : (
               <>
@@ -1362,14 +1290,11 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
                     shelf="active"
                     ctx={ctx}
                     grouped
-                    omitPinned
                     firstGroupTools={
-                      liftedPins.length === 0 ? (
-                        <>
-                          {viewMenu}
-                          {newChatAction}
-                        </>
-                      ) : undefined
+                      <>
+                        {viewMenu}
+                        {newChatAction}
+                      </>
                     }
                   />
                 </section>
@@ -1378,6 +1303,7 @@ export function ProjectSidebar({ activeThreadId, onNavigate }: PluginThreadListP
           </AnimatedList>
       </div>
     </div>
+    </SidebarViewMenuRoot>
   );
 }
 
@@ -1388,7 +1314,6 @@ function GroupHeading({
   onCreate,
   createLabel,
   tools,
-  children,
 }: {
   label: string;
   open: boolean;
@@ -1396,10 +1321,9 @@ function GroupHeading({
   onCreate?: (() => void) | undefined;
   createLabel?: string | undefined;
   tools?: ReactNode;
-  children?: ReactNode;
 }) {
   return (
-    <div className="group/section mt-3 first:mt-0 flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5 pt-1">
+    <div className="cs-heading group/section mt-3 first:mt-0 flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5">
       <button
         type="button"
         aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
@@ -1419,7 +1343,6 @@ function GroupHeading({
       </button>
       <span aria-hidden className="min-w-0 flex-1" />
       {tools}
-      {children}
       {onCreate ? (
         <button
           type="button"
@@ -1522,7 +1445,6 @@ function ProjectSection({
           shelf="active"
           ctx={ctx}
           grouped
-          omitPinned
           keepIds={revealedConversations}
         />
         {showMore}
@@ -1571,7 +1493,7 @@ function ProjectSection({
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
         className={cn(
-          "group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-1 pl-3 pr-1 max-md:min-h-11 pointer-coarse:min-h-11",
+          "cs-project-heading group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-1 pl-3 pr-1 max-md:min-h-11 pointer-coarse:min-h-11",
           sectionOpen && "mb-1",
         )}
       >
@@ -1584,7 +1506,7 @@ function ProjectSection({
             )}
           />
         ) : null}
-        <span className="ps-status-slot relative flex w-4 shrink-0 items-center justify-center">
+        <span className="cs-status-slot relative flex w-4 shrink-0 items-center justify-center">
           <span className="flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
             <ProjectStatusGlyph
               open={sectionOpen}
@@ -1604,7 +1526,7 @@ function ProjectSection({
               onToggleProject();
             }}
             className={cn(
-              "ps-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "cs-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
           >
@@ -1626,7 +1548,7 @@ function ProjectSection({
           }}
           className="flex min-h-5 min-w-0 shrink items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
         >
-          <span className="ps-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/95">
+          <span className="cs-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/95">
             {section.name}
             {section.known ? null : (
               <span className="text-sidebar-foreground/73"> (unknown)</span>
@@ -1644,7 +1566,7 @@ function ProjectSection({
               onNewThread();
             }}
             className={cn(
-              "ps-project-new flex size-4 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+              "cs-project-new flex size-4 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
               "max-md:size-9 pointer-coarse:size-9",
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
@@ -1656,44 +1578,41 @@ function ProjectSection({
 
       </SidebarActions>
 
-      {(() => {
-        // The collapsed exception list stays mounted through the exit window so
-        // its own list animation can play the selected row out. Its keepIds go
-        // empty as soon as the selection clears; the row is a removed child,
-        // not an unmounted subtree.
-        if (showCollapsedSelection || (!sectionOpen && keepException)) {
-          return (
-            <div>
+      {showCollapsedSelection || (!sectionOpen && keepException) ? (
+        /* The collapsed exception list stays mounted through the exit window
+           so its own list animation can play the selected row out. Its keepIds
+           go empty as soon as the selection clears; the row is a removed
+           child, not an unmounted subtree. */
+        <div>
+          <ShelfList
+            section={section}
+            shelf="active"
+            ctx={ctx}
+            grouped
+            keepIds={exceptionIds}
+            expandIds={exceptionIds}
+          />
+        </div>
+      ) : (
+        /* A Drawer rather than an early return, so collapsing the heading
+           shrinks the interior instead of unmounting it in one frame. */
+        <Drawer open={sectionOpen}>
+          {isEmpty ? (
+            <p className="px-3 py-1 text-xs text-sidebar-foreground/73">No threads</p>
+          ) : (
+            <>
               <ShelfList
                 section={section}
                 shelf="active"
                 ctx={ctx}
                 grouped
-                omitPinned
-                keepIds={exceptionIds}
-                expandIds={exceptionIds}
+                keepIds={revealedConversations}
               />
-            </div>
-          );
-        }
-        if (!sectionOpen) return null;
-        const interior = isEmpty ? (
-          <p className="px-3 py-1 text-xs text-sidebar-foreground/73">No threads</p>
-        ) : (
-          <>
-            <ShelfList
-              section={section}
-              shelf="active"
-              ctx={ctx}
-              grouped
-              omitPinned
-              keepIds={revealedConversations}
-            />
-            {showMore}
-          </>
-        );
-        return <div>{interior}</div>;
-      })()}
+              {showMore}
+            </>
+          )}
+        </Drawer>
+      )}
 
     </section>
   );

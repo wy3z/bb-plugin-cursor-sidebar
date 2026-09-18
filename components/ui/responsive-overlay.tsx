@@ -22,13 +22,6 @@ export interface ResponsiveOverlayContextValue {
 
 const RESPONSIVE_DRAWER_REALIZE_FALLBACK_MS = 120;
 
-function resetDrawerKeyboardStyles(drawerElement: HTMLElement | null): void {
-  if (drawerElement === null) return;
-
-  drawerElement.style.height = "";
-  drawerElement.style.bottom = "";
-}
-
 export function useResponsiveRoot(
   controlledOpen: boolean | undefined,
   controlledOnChange: ((open: boolean) => void) | undefined,
@@ -188,10 +181,8 @@ interface ResponsiveDrawerShellProps {
 
 export function useResponsiveDrawerRealization({
   open,
-  enabled = true,
 }: {
   open: boolean;
-  enabled?: boolean;
 }): { isContentRealized: boolean; realizeContent: () => void } {
   const [isContentRealized, setIsContentRealized] = React.useState(false);
   const realizeContent = React.useCallback(
@@ -200,7 +191,7 @@ export function useResponsiveDrawerRealization({
   );
 
   React.useEffect(() => {
-    if (!enabled || !open || isContentRealized) {
+    if (!open || isContentRealized) {
       return;
     }
 
@@ -227,12 +218,9 @@ export function useResponsiveDrawerRealization({
       }
       window.clearTimeout(fallback);
     };
-  }, [enabled, isContentRealized, open, realizeContent]);
+  }, [isContentRealized, open, realizeContent]);
 
-  return {
-    isContentRealized: enabled && isContentRealized,
-    realizeContent,
-  };
+  return { isContentRealized, realizeContent };
 }
 
 export function ResponsiveDrawerShell({
@@ -549,12 +537,10 @@ export function PersistentResponsiveDrawerShell({
   }, [onOpenChange]);
   const requestClose = React.useCallback(() => {
     blurActiveKeyboardInputWithin(panelRef.current);
-    resetDrawerKeyboardStyles(panelRef.current);
     onOpenChangeRef.current(false);
   }, []);
   const prepareCloseAutoFocus = React.useCallback(() => {
     blurActiveKeyboardInputWithin(panelRef.current);
-    resetDrawerKeyboardStyles(panelRef.current);
   }, []);
 
   usePersistentOverlayFocus({
@@ -688,9 +674,11 @@ export function PersistentResponsiveDrawerShell({
           opacity: open ? 1 : 0,
           pointerEvents: open ? "auto" : "none",
           transition: backdropTransition,
+          // A touch drag that starts on the backdrop must not pan the page
+          // behind the drawer; React's passive touchmove cannot prevent it.
+          touchAction: "none",
         }}
         onClick={requestClose}
-        onTouchMove={(event) => event.preventDefault()}
       />
       <div
         ref={panelRef}
