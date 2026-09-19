@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import { type IconName } from "@/components/ui/icon";
+import { PROJECT_ICON_CHANNEL } from "./channels";
 import type { cursorSidebarRpcContract } from "./server";
-import { PROJECT_ICON_CHANNEL } from "./server";
 import { PROJECT_ICON_NAME_SET } from "./project-icons";
 
 function isIconName(value: string): value is IconName {

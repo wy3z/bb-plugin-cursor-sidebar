@@ -8,6 +8,12 @@
 // see THIRD-PARTY-NOTICES.md at the repository root.
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import {
+  PROJECT_ICON_CHANNEL,
+  SIDEBAR_VIEW_CHANNEL,
+  THREAD_ORDER_CHANNEL,
+  THREAD_SECTIONS_CHANNEL,
+} from "./channels";
 import { derivedProjectName, normalizeDirectoryPath } from "./project-name";
 import { coerceSidebarView } from "./sidebar-view";
 
@@ -207,11 +213,6 @@ export const cursorSidebarRpcContract = defineRpcContract({
     }),
   },
 });
-
-export const THREAD_ORDER_CHANNEL = "thread-order";
-export const PROJECT_ICON_CHANNEL = "project-icon";
-export const SIDEBAR_VIEW_CHANNEL = "sidebar-view";
-export const THREAD_SECTIONS_CHANNEL = "thread-sections";
 
 const inflightProjects = new Map<string, Promise<{ id: string; name: string }>>();
 

@@ -86,6 +86,15 @@ npm run build              # bb plugin build writes dist/
 bb plugin reload cursor-sidebar
 ```
 
+The realtime channel names shared with the backend live in `src/channels.ts`.
+Frontend modules must import them from there, and may only `import type` from
+`src/server.ts`. The backend imports `@get-bb/plugin-sdk`, which is a dev
+dependency: a git install prunes dev dependencies and the host only hands the
+SDK to the server bundle, so a value import of `./server` from frontend code
+drags the backend into `app.js` and fails `bb plugin install git:...` with
+`Could not resolve "@get-bb/plugin-sdk"` — while still building on a machine
+that has the SDK installed.
+
 ## License
 
 MIT. Portions adapted from bb-plugin-thread-inbox. See
