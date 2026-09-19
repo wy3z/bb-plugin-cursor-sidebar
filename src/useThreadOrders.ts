@@ -5,7 +5,8 @@ import {
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { THREAD_ORDER_CHANNEL, type cursorSidebarRpcContract } from "./server";
+import { THREAD_ORDER_CHANNEL } from "./channels";
+import type { cursorSidebarRpcContract } from "./server";
 
 interface StoredOrder {
   ids: readonly string[];

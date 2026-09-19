@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { THREAD_SECTIONS_CHANNEL, type cursorSidebarRpcContract } from "./server";
+import { THREAD_SECTIONS_CHANNEL } from "./channels";
+import type { cursorSidebarRpcContract } from "./server";
 
 export interface ThreadSectionInfo {
   id: string;
