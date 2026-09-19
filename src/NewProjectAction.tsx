@@ -12,11 +12,13 @@ import { ICON_BTN } from "./icon-btn";
 export function NewProjectAction({
   projects,
   onSelect,
+  onAddProject,
   label = "New chat",
   prompt = "Choose the Project for the new chat.",
 }: {
   projects: readonly { id: string; name: string }[];
   onSelect: (project: { id: string; name: string }) => void;
+  onAddProject?: (trigger: EventTarget) => void;
   label?: string;
   prompt?: string;
 }) {
@@ -63,6 +65,18 @@ export function NewProjectAction({
               ))}
             </div>
           )}
+          {onAddProject ? (
+            <Popover.Close asChild>
+              <button
+                type="button"
+                onClick={(event) => onAddProject(event.currentTarget)}
+                className="mt-1 flex w-full items-center gap-2 rounded border-t border-border px-2 py-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <Icon name="FolderPlus" className="size-3.5 shrink-0 text-muted-foreground" />
+                Add project
+              </button>
+            </Popover.Close>
+          ) : null}
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

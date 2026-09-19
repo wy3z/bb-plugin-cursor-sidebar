@@ -56,7 +56,7 @@ import { useWorkspaces } from "./useWorkspaces";
 import { usePrimaryHost } from "./usePrimaryHost";
 import { useProjectIcons } from "./useProjectIcons";
 import { ProjectIconPicker } from "./ProjectIconPicker";
-import { CreateNativeProjectDialog, DeleteProjectDialog } from "./CreateNativeProjectDialog";
+import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { useThreadOrders } from "./useThreadOrders";
 import { useReorderDrag, type ReorderDragState } from "./useReorderDrag";
 import {
@@ -103,6 +103,7 @@ import { AnimatedList } from "./AnimatedList";
 import { Drawer } from "./Drawer";
 import { useShortcutGuide } from "./useShortcutGuide";
 import { ICON_BTN } from "./icon-btn";
+import { openHostAddProject } from "./open-host-add-project";
 import { ShowMoreButton } from "./ShowMoreButton";
 
 
@@ -134,7 +135,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const workspacePaths = useWorkspaces(rawThreads);
   const primaryHostId = usePrimaryHost();
   const rawById = useMemo(() => new Map(rawThreads.map((thread) => [thread.id, thread])), [rawThreads]);
-  const [creatingProject, setCreatingProject] = useState(false);
   const threadOrders = useThreadOrders();
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
@@ -1124,6 +1124,9 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     <NewProjectAction
       projects={nativeChatProjects}
       onSelect={openNativeProjectChat}
+      onAddProject={(trigger) => {
+        if (!openHostAddProject(trigger)) toast.error("Couldn't open Add project.");
+      }}
     />
   );
 
@@ -1230,12 +1233,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         <p aria-live="polite" className="sr-only">
           {announcement}
         </p>
-          {creatingProject ? <CreateNativeProjectDialog
-            onClose={() => setCreatingProject(false)}
-            onCreated={(project) => {
-              setCreatingProject(false);
-              toast.success(`Project ${project.name} is ready.`);
-            }} /> : null}
           {renamingFolder ? <FolderNameDialog
             folder={renamingFolder}
             onClose={() => setRenamingFolderId(null)}
@@ -1293,7 +1290,9 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   label="Projects"
                   open={!topGroupCollapsed.ids.has("projects")}
                   onToggle={() => topGroupCollapsed.toggle("projects")}
-                  onCreate={() => setCreatingProject(true)}
+                  onCreate={() => {
+                    toast.error("Couldn't open Add project.");
+                  }}
                   createLabel="New Project"
                   tools={viewMenu}
                 />
@@ -1380,7 +1379,10 @@ function GroupHeading({
           type="button"
           aria-label={createLabel ?? `New ${label}`}
           title={createLabel ?? `New ${label}`}
-          onClick={onCreate}
+          onClick={(event) => {
+            if (openHostAddProject(event.currentTarget)) return;
+            onCreate();
+          }}
           className={`ml-3 ${ICON_BTN} max-md:pointer-coarse:ml-0`}
         >
           <Icon name="Plus" className="size-3.5" />

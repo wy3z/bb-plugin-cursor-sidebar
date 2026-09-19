@@ -14,7 +14,6 @@ import {
   THREAD_ORDER_CHANNEL,
   THREAD_SECTIONS_CHANNEL,
 } from "./channels";
-import { derivedProjectName, normalizeDirectoryPath } from "./project-name";
 import { coerceSidebarView } from "./sidebar-view";
 
 const migrations = [
@@ -109,26 +108,9 @@ export const cursorSidebarRpcContract = defineRpcContract({
     input: z.object({}),
     output: z.object({ hostId: z.string().nullable() }),
   },
-  createNativeProject: {
-    input: z.object({
-      hostId: z.string().trim().min(1),
-      path: z.string().trim().min(1),
-    }),
-    output: z.object({ id: z.string(), name: z.string() }),
-  },
   deleteNativeProject: {
     input: z.object({ projectId: z.string().trim().min(1) }),
     output: z.object({ ok: z.literal(true) }),
-  },
-  listHosts: {
-    input: z.object({}),
-    output: z.object({
-      hosts: z.array(z.object({ id: z.string(), name: z.string(), status: z.string() })),
-    }),
-  },
-  pickFolder: {
-    input: z.object({ hostId: z.string().trim().min(1) }),
-    output: z.object({ path: z.string().nullable() }),
   },
   listProjectIcons: {
     input: z.object({}),
@@ -214,8 +196,6 @@ export const cursorSidebarRpcContract = defineRpcContract({
   },
 });
 
-const inflightProjects = new Map<string, Promise<{ id: string; name: string }>>();
-
 export default function plugin(bb: BbPluginApi) {
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
@@ -290,35 +270,6 @@ export default function plugin(bb: BbPluginApi) {
     }));
   };
 
-  async function ensureNativeProject(hostId: string, path: string): Promise<{ id: string; name: string }> {
-    const normalized = normalizeDirectoryPath(path);
-    const key = `${hostId}\u0000${normalized}`;
-    const pending = inflightProjects.get(key);
-    if (pending) return pending;
-    const promise = (async () => {
-      const projects = await bb.sdk.projects.list();
-      for (const project of projects) {
-        const match = project.sources?.some(
-          (source) =>
-            source.type === "local_path" &&
-            source.hostId === hostId &&
-            normalizeDirectoryPath(source.path) === normalized,
-        );
-        if (match) return { id: project.id, name: project.name };
-      }
-      const name = derivedProjectName(normalized);
-      const created = await bb.sdk.projects.create({
-        name,
-        source: { hostId, type: "local_path", path: normalized },
-      });
-      return { id: created.id, name: created.name };
-    })().finally(() => {
-      inflightProjects.delete(key);
-    });
-    inflightProjects.set(key, promise);
-    return promise;
-  }
-
   bb.rpc.register(cursorSidebarRpcContract, {
     async listWorkspaces({ environmentIds }) {
       const workspaces = await Promise.all(
@@ -342,29 +293,10 @@ export default function plugin(bb: BbPluginApi) {
       const config = await bb.sdk.system.config();
       return { hostId: config.primaryHostId };
     },
-    async createNativeProject({ hostId, path }) {
-      return ensureNativeProject(hostId, path);
-    },
     async deleteNativeProject({ projectId }) {
       await bb.sdk.projects.delete({ projectId });
       db.prepare(`DELETE FROM project_icon WHERE project_id = ?`).run(projectId);
       return { ok: true as const };
-    },
-    async listHosts() {
-      const hosts = await bb.sdk.hosts.list();
-      return {
-        hosts: hosts.map((host) => ({ id: host.id, name: host.name, status: host.status })),
-      };
-    },
-    async pickFolder({ hostId }) {
-      const config = await bb.sdk.system.config();
-      if (config.primaryHostId !== hostId) {
-        throw new Error(
-          "Only this machine can open its folder picker. Type the path for a remote host.",
-        );
-      }
-      const result = await bb.sdk.hosts.pickFolder({ hostId, clientHostId: hostId });
-      return { path: result.path };
     },
     listProjectIcons() {
       return { icons: readIcons() };

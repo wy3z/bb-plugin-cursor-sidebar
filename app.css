@@ -48,11 +48,6 @@
   .cs-move-dialog select { min-width: 0; max-width: 100%; font-size: 16px; }
 }
 
-@media (max-width: 767px), (pointer: coarse) {
-  .cs-create-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
-  .cs-create-dialog h2 { overflow-wrap: anywhere; }
-}
-
 /* The row's pin/archive controls are a hover affordance. A touch pointer has no
    hover to reveal them, and the 44px targets above would stack them over the
    timestamp, so a swipe or the hold menu acts on the row instead. A narrow
