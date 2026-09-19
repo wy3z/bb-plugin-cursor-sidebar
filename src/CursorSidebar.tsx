@@ -1587,11 +1587,11 @@ function ProjectSection({
         <button
           type="button"
           title={section.name}
-          onClick={(event) => {
+          onClick={() => {
             if (ctx.consumeSuppressedClick(section.id)) return;
-            if (event.detail <= 1) onToggleProject();
+            onToggleProject();
           }}
-          className="flex min-h-5 min-w-0 shrink items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
+          className="flex min-h-5 min-w-0 flex-1 items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
         >
           <span className="cs-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/95">
             {section.name}
@@ -1600,7 +1600,6 @@ function ProjectSection({
             )}
           </span>
         </button>
-        <span aria-hidden className="min-w-0 flex-1" />
         {onNewThread ? (
           <button
             type="button"
