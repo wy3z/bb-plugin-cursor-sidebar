@@ -1,5 +1,6 @@
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import type { ProjectIcon } from "./project-icons";
 import type { ThreadStatusKind } from "./status";
 
 /**
@@ -30,7 +31,7 @@ export function glyphStateForStatus(status: ThreadStatusKind): ActivityState {
   }
 }
 
-/** Existing BB Icon primitives only; a chosen project icon swaps the folder. */
+/** Existing BB Icon primitives, or an uploaded image; a chosen icon swaps the folder. */
 export function ProjectStatusGlyph({
   open,
   icon,
@@ -41,7 +42,7 @@ export function ProjectStatusGlyph({
   /** True when the project section is expanded; picks the open folder. */
   open?: boolean;
   /** A chosen project icon; its presence replaces the Folder/FolderOpen pair. */
-  icon?: IconName | null;
+  icon?: ProjectIcon | null;
   label: string;
   /** The project's aggregated status, badged on the closed folder. */
   status?: ThreadStatusKind;
@@ -49,7 +50,7 @@ export function ProjectStatusGlyph({
 }) {
   // Folder (closed) and FolderOpen are Hugeicons' matched single-weight pair
   // (Folder01 / Folder02). The heavier stroke keeps both crisp at 14px.
-  const name: IconName = icon ?? (open ? "FolderOpen" : "Folder");
+  const name: IconName = icon?.kind === "glyph" ? icon.name : open ? "FolderOpen" : "Folder";
   // A closed folder hides its rows, so an active status keeps a small badge on
   // the glyph's bottom-right. An open folder shows the status on the rows.
   const badge = !open && status !== "idle" ? status : null;
@@ -63,12 +64,22 @@ export function ProjectStatusGlyph({
       data-heading-kind="project"
       className={cn("cs-project-glyph relative", className)}
     >
-      <Icon
-        name={name}
-        aria-hidden="true"
-        className="size-3.5 shrink-0 text-sidebar-foreground/73"
-        strokeWidth={2}
-      />
+      {icon?.kind === "image" ? (
+        <img
+          src={icon.src}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="size-3.5 shrink-0 object-contain"
+        />
+      ) : (
+        <Icon
+          name={name}
+          aria-hidden="true"
+          className="size-3.5 shrink-0 text-sidebar-foreground/73"
+          strokeWidth={2}
+        />
+      )}
       {badge !== null ? <ProjectStatusBadge status={badge} /> : null}
     </span>
   );

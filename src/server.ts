@@ -1,4 +1,5 @@
-// bb-plugin-cursor-sidebar backend — order overlay, view prefs, project icons.
+// bb-plugin-cursor-sidebar backend — order overlay, view prefs, project icons,
+// and the `bb cursor-sidebar icon` command.
 //
 // This state lives in the plugin's own SQLite database, never on a BB thread.
 // Uninstalling the plugin removes it. Native BB projects, threads, pins and
@@ -14,6 +15,7 @@ import {
   THREAD_ORDER_CHANNEL,
   THREAD_SECTIONS_CHANNEL,
 } from "./channels";
+import { registerIconCli } from "./icon-cli";
 import { coerceSidebarView } from "./sidebar-view";
 
 const migrations = [
@@ -63,6 +65,18 @@ const projectIconRowSchema = z.object({
   projectId: z.string(),
   icon: z.string(),
 });
+
+// An uploaded icon is stored inline as a PNG data URL. The app shrinks it to
+// 64px before sending, so the cap is generous headroom, not a working size.
+const PROJECT_ICON_IMAGE_PREFIX = "data:image/png;base64,";
+const projectIconSchema = z.union([
+  z.string().trim().min(1).max(100),
+  z
+    .string()
+    .max(256 * 1024)
+    .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/)
+    .refine((value) => value.length > PROJECT_ICON_IMAGE_PREFIX.length),
+]);
 
 const viewGroupBySchema = z.enum(["workspace", "updated", "status", "environment"]);
 const viewConversationOrderSchema = z.enum(["updated", "status"]);
@@ -119,7 +133,7 @@ export const cursorSidebarRpcContract = defineRpcContract({
   setProjectIcon: {
     input: z.object({
       projectId: z.string().trim().min(1),
-      icon: z.string().trim().min(1).max(100).nullable(),
+      icon: projectIconSchema.nullable(),
     }),
     output: z.object({ icons: z.array(projectIconRowSchema) }),
   },
@@ -219,6 +233,23 @@ export default function plugin(bb: BbPluginApi) {
     ).run(projectId, icon, Date.now());
   };
 
+  // Every icon write goes through here so open sidebars reload, whether it came
+  // from the picker or from `bb cursor-sidebar icon`.
+  const saveIcon = (projectId: string, icon: string | null): void => {
+    writeIcon(projectId, icon);
+    bb.realtime.publish(PROJECT_ICON_CHANNEL, { projectId });
+  };
+
+  registerIconCli(bb, {
+    read: (projectId) =>
+      (
+        db.prepare(`SELECT icon FROM project_icon WHERE project_id = ?`).get(projectId) as
+          | { icon: string }
+          | undefined
+      )?.icon ?? null,
+    save: saveIcon,
+  });
+
   const readSidebarView = (): SidebarView | null => {
     const row = db
       .prepare(`SELECT json FROM sidebar_view WHERE id = 1`)
@@ -302,8 +333,7 @@ export default function plugin(bb: BbPluginApi) {
       return { icons: readIcons() };
     },
     setProjectIcon({ projectId, icon }) {
-      writeIcon(projectId, icon);
-      bb.realtime.publish(PROJECT_ICON_CHANNEL, { projectId });
+      saveIcon(projectId, icon);
       return { icons: readIcons() };
     },
     sidebarView() {

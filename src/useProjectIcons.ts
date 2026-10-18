@@ -1,25 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
-import { type IconName } from "@/components/ui/icon";
 import { PROJECT_ICON_CHANNEL } from "./channels";
 import type { cursorSidebarRpcContract } from "./server";
-import { PROJECT_ICON_NAME_SET } from "./project-icons";
-
-function isIconName(value: string): value is IconName {
-  return PROJECT_ICON_NAME_SET.has(value);
-}
+import { parseProjectIcon, serializeProjectIcon, type ProjectIcon } from "./project-icons";
 
 export interface ProjectIcons {
-  /** The chosen glyph for a native project, or null when it wears the folder. */
-  iconFor: (projectId: string) => IconName | null;
-  /** Set or clear the glyph; the write is optimistic and reloads on failure. */
-  setIcon: (projectId: string, icon: IconName | null) => void;
+  /** The chosen glyph or image for a native project, or null for the folder. */
+  iconFor: (projectId: string) => ProjectIcon | null;
+  /** Set or clear the icon; the write is optimistic and reloads on failure. */
+  setIcon: (projectId: string, icon: ProjectIcon | null) => void;
 }
 
 /**
  * Project icons are a per-user overlay in the plugin database, keyed by the raw
  * native project id. BB's SDK has no icon field, so this is the only store; an
- * unknown or stale glyph name falls back to unset rather than crashing the
+ * unknown or stale value falls back to unset rather than crashing the
  * heading. Writes are optimistic and reconcile against a reload on realtime or
  * a failed write.
  */
@@ -48,24 +43,24 @@ export function useProjectIcons(): ProjectIcons {
     void load();
   });
 
-  const setIcon = useCallback((projectId: string, icon: IconName | null) => {
+  const setIcon = useCallback((projectId: string, icon: ProjectIcon | null) => {
+    const stored = icon === null ? null : serializeProjectIcon(icon);
     setIcons((current) => {
       const next = new Map(current);
-      if (icon === null) next.delete(projectId);
-      else next.set(projectId, icon);
+      if (stored === null) next.delete(projectId);
+      else next.set(projectId, stored);
       return next;
     });
-    void rpc.call("setProjectIcon", { projectId, icon }).catch(() => {
+    void rpc.call("setProjectIcon", { projectId, icon: stored }).catch(() => {
       // A lost write must not stick; re-read the shared truth.
       void load();
     });
   }, [rpc, load]);
 
   const iconFor = useCallback(
-    (projectId: string): IconName | null => {
+    (projectId: string): ProjectIcon | null => {
       const stored = icons.get(projectId);
-      if (stored === undefined || !isIconName(stored)) return null;
-      return stored;
+      return stored === undefined ? null : parseProjectIcon(stored);
     },
     [icons],
   );

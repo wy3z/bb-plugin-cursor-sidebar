@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { Icon, type IconName } from "@/components/ui/icon";
+import { Icon } from "@/components/ui/icon";
 import { ANCHORED_OVERLAY_MOTION } from "@/components/ui/motion";
 import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
-import { PROJECT_ICON_NAMES } from "./project-icons";
+import { imageFileToProjectIcon, PROJECT_ICON_NAMES, type ProjectIcon } from "./project-icons";
 
 /**
  * Anchored glyph palette for one native project. It is a popover rather than a
  * dialog so the heading stays visible while choosing, and it draws the catalog
- * as one grid that the filter narrows in place.
+ * as one grid that the filter narrows in place. An uploaded image (a
+ * transparent PNG, say) stands in for a glyph.
  */
 export function ProjectIconPicker({
   open,
@@ -23,20 +24,38 @@ export function ProjectIconPicker({
   onOpenChange: (open: boolean) => void;
   anchor: HTMLElement | null;
   projectName: string;
-  current: IconName | null;
+  current: ProjectIcon | null;
   /** Null means "Use default": clear the overlay back to the folder glyph. */
-  onPick: (icon: IconName | null) => void;
+  onPick: (icon: ProjectIcon | null) => void;
 }) {
   const scope = usePortalScopeProps();
   const searchRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const anchorRef = useMemo(() => ({ current: anchor }), [anchor]);
 
   useEffect(() => {
     if (!open) return;
     setQuery("");
+    setUploadError(null);
     requestAnimationFrame(() => searchRef.current?.focus());
   }, [open]);
+
+  const onFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    // Clear the input so choosing the same file again still fires a change.
+    input.value = "";
+    if (file === undefined) return;
+    try {
+      onPick(await imageFileToProjectIcon(file));
+    } catch {
+      setUploadError("That image could not be read.");
+    }
+  }, [onPick]);
+
+  const currentGlyph = current?.kind === "glyph" ? current.name : null;
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -106,6 +125,34 @@ export function ProjectIconPicker({
               <Icon name="Folder" aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/70" strokeWidth={2} />
               Use default
             </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              aria-pressed={current?.kind === "image"}
+              className={cn(
+                "mb-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:py-2.5 pointer-coarse:py-2.5",
+                current?.kind === "image" && "bg-accent",
+              )}
+            >
+              {current?.kind === "image" ? (
+                <img src={current.src} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
+              ) : (
+                <Icon name="ImageUp" aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/70" strokeWidth={2} />
+              )}
+              {current?.kind === "image" ? "Replace image" : "Upload image"}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/webp,image/svg+xml,image/gif,image/jpeg"
+              tabIndex={-1}
+              aria-hidden="true"
+              className="hidden"
+              onChange={(event) => void onFileChange(event)}
+            />
+            {uploadError !== null ? (
+              <p role="alert" className="mb-1 px-2 text-xs text-destructive">{uploadError}</p>
+            ) : null}
             <div
               role="group"
               aria-label={`Icons for ${projectName}`}
@@ -119,11 +166,11 @@ export function ProjectIconPicker({
                   data-icon-choice=""
                   aria-label={name}
                   title={name}
-                  aria-pressed={current === name}
-                  onClick={() => onPick(name)}
+                  aria-pressed={currentGlyph === name}
+                  onClick={() => onPick({ kind: "glyph", name })}
                   className={cn(
                     "flex size-7 items-center justify-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:size-10 pointer-coarse:size-10",
-                    current === name && "bg-accent text-foreground",
+                    currentGlyph === name && "bg-accent text-foreground",
                   )}
                 >
                   <Icon name={name} aria-hidden="true" className="size-4 max-md:size-5 pointer-coarse:size-5" strokeWidth={2} />

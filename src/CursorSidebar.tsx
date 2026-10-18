@@ -16,7 +16,7 @@ import {
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
-import { Icon, type IconName } from "@/components/ui/icon";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { SidebarActions } from "./SidebarActions";
 import { NewProjectAction } from "./NewProjectAction";
@@ -56,6 +56,7 @@ import { useWorkspaces } from "./useWorkspaces";
 import { usePrimaryHost } from "./usePrimaryHost";
 import { useProjectIcons } from "./useProjectIcons";
 import { ProjectIconPicker } from "./ProjectIconPicker";
+import type { ProjectIcon } from "./project-icons";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { useThreadOrders } from "./useThreadOrders";
 import { useReorderDrag, type ReorderDragState } from "./useReorderDrag";
@@ -1417,7 +1418,7 @@ function ProjectSection({
   onToggleProject: () => void;
   onDeleteProject?: (() => void) | undefined;
   onNewThread?: (() => void) | undefined;
-  icon?: IconName | null;
+  icon?: ProjectIcon | null;
   onSetIcon?: ((anchor: HTMLElement) => void) | undefined;
   canDragProject: boolean;
   /** Hand-order the project one place, the same write the drag commits. */

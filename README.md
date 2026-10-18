@@ -35,6 +35,24 @@ Filters.
 The menu button shows a warning mark when a view change has not reached the
 server. The notice inside the menu has a Retry button.
 
+## Project icons
+
+Click a project's folder icon to pick a glyph, or choose **Upload image** to
+use your own. Transparent PNGs keep their transparency. The image is shrunk to
+64px before it is saved.
+
+Chats can set icons too, from a shell:
+
+```sh
+bb cursor-sidebar icon set ./icon.png      # a PNG, under 192KB and 1024px a side
+bb cursor-sidebar icon glyph Rocket        # a built-in glyph; --list shows them
+bb cursor-sidebar icon clear               # back to the folder
+bb cursor-sidebar icon get                 # what the project wears now
+```
+
+Run from a chat, these act on that chat's project. Anywhere else, add
+`--project <id or name>`. The PNG is read on the BB server's machine.
+
 ## Mobile
 
 Touch uses the same list. A phone has no hover, so gestures carry the actions
