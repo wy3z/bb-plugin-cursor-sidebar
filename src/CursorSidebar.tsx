@@ -53,6 +53,7 @@ import {
   planConversations,
 } from "./conversations";
 import { useWorkspaces } from "./useWorkspaces";
+import { useWorkspaceNesting } from "./workspace-tabs";
 import { usePrimaryHost } from "./usePrimaryHost";
 import { useProjectIcons } from "./useProjectIcons";
 import { ProjectIconPicker } from "./ProjectIconPicker";
@@ -130,8 +131,16 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () => [...nativeProjectSections, { id: STANDALONE, name: "Chats", isPersonal: true }],
     [nativeProjectSections],
   );
-  const projectedThreads = useMemo(() => projectThreadView(rawThreads, nativeProjects), [rawThreads, nativeProjects]);
-  const threads = useMemo(() => resolveThreadDisplayTitles(projectedThreads), [projectedThreads]);
+  const nativeProjectedThreads = useMemo(() => projectThreadView(rawThreads, nativeProjects), [rawThreads, nativeProjects]);
+  const { threads: projectedThreads, names: workspaceNames } = useWorkspaceNesting(nativeProjectedThreads, rawThreads);
+  const threads = useMemo(
+    () =>
+      resolveThreadDisplayTitles(projectedThreads).map((thread) => {
+        const name = workspaceNames.get(thread.id);
+        return name ? { ...thread, displayTitle: name } : thread;
+      }),
+    [projectedThreads, workspaceNames],
+  );
   const projectedById = useMemo(() => new Map(projectedThreads.map((thread) => [thread.id, thread])), [projectedThreads]);
   const workspacePaths = useWorkspaces(rawThreads);
   const primaryHostId = usePrimaryHost();

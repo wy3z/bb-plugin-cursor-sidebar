@@ -84,6 +84,14 @@ The pin and archive icons stay hidden on touch. Nothing reveals them without
 hover, and the 44px targets a phone needs do not fit in a row, so a swipe or
 the actions menu does that work instead.
 
+## Workspaces
+
+With the [Workspaces](https://github.com/wy3z/bb-plugin-workspaces) plugin
+running, the chats of one workspace nest under its first chat, the way spawned
+chats nest under their parent, and that row shows the workspace's name when it
+has one. Top-level chats that share a worktree count as one workspace too.
+Without that plugin nothing changes.
+
 ## Requirements
 
 BB 0.42 or newer. The plugin fills BB's experimental thread-list slot, which

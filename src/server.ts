@@ -104,6 +104,39 @@ const sidebarViewSchema = z
 export type SidebarView = z.infer<typeof sidebarViewSchema>;
 export { sidebarViewSchema };
 
+// Optional Workspaces plugin integration (see src/workspace-tabs.ts). These
+// SDK calls are newer than this plugin's minimum SDK, so they are typed here
+// and feature-detected at runtime.
+const WORKSPACES_PLUGIN_ID = "workspaces";
+const WORKSPACES_CHECK_MS = 30_000;
+
+interface WorkspaceTabsSdk {
+  threads: {
+    experimental_listPluginMetadata?: (args: { pluginId: string; threadIds: readonly string[] }) => Promise<{
+      threads: { threadId: string; metadata: Record<string, unknown> }[];
+    }>;
+  };
+  plugins?: {
+    list?: () => Promise<{ plugins: { id: string; enabled: boolean; status?: string }[] }>;
+  };
+}
+
+let workspacesCheck: { at: number; running: boolean } | null = null;
+
+async function workspacesPluginRunning(sdk: WorkspaceTabsSdk): Promise<boolean> {
+  if (workspacesCheck && Date.now() - workspacesCheck.at < WORKSPACES_CHECK_MS) return workspacesCheck.running;
+  let running = false;
+  try {
+    const result = await sdk.plugins?.list?.();
+    const plugin = result?.plugins.find((entry) => entry.id === WORKSPACES_PLUGIN_ID);
+    running = plugin !== undefined && plugin.enabled && (plugin.status === undefined || plugin.status === "running");
+  } catch {
+    running = false;
+  }
+  workspacesCheck = { at: Date.now(), running };
+  return running;
+}
+
 export const cursorSidebarRpcContract = defineRpcContract({
   listWorkspaces: {
     input: z.object({ environmentIds: z.array(z.string().min(1)).max(100) }),
@@ -114,6 +147,19 @@ export const cursorSidebarRpcContract = defineRpcContract({
           path: z.string().nullable(),
           name: z.string().nullable(),
           hostId: z.string(),
+        }),
+      ),
+    }),
+  },
+  listWorkspaceTabs: {
+    input: z.object({ threadIds: z.array(z.string().min(1)).max(100) }),
+    output: z.object({
+      available: z.boolean(),
+      threads: z.array(
+        z.object({
+          threadId: z.string(),
+          workspaceId: z.string().nullable(),
+          workspaceName: z.string().nullable(),
         }),
       ),
     }),
@@ -319,6 +365,29 @@ export default function plugin(bb: BbPluginApi) {
         }),
       );
       return { workspaces: workspaces.filter((env) => env !== null) };
+    },
+    async listWorkspaceTabs({ threadIds }) {
+      const sdk = bb.sdk as unknown as WorkspaceTabsSdk;
+      const list = sdk.threads.experimental_listPluginMetadata;
+      if (typeof list !== "function" || !(await workspacesPluginRunning(sdk))) {
+        return { available: false, threads: [] };
+      }
+      try {
+        const result = await list.call(sdk.threads, { pluginId: WORKSPACES_PLUGIN_ID, threadIds });
+        return {
+          available: true,
+          threads: result.threads.map(({ threadId, metadata }) => ({
+            threadId,
+            workspaceId: typeof metadata.workspaceId === "string" && metadata.workspaceId ? metadata.workspaceId : null,
+            workspaceName:
+              typeof metadata.workspaceName === "string" && metadata.workspaceName.trim()
+                ? metadata.workspaceName.trim()
+                : null,
+          })),
+        };
+      } catch {
+        return { available: false, threads: [] };
+      }
     },
     async primaryHost() {
       const config = await bb.sdk.system.config();
