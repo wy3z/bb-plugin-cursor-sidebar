@@ -70,13 +70,13 @@ export function ProjectStatusGlyph({
           alt=""
           aria-hidden="true"
           draggable={false}
-          className="size-3.5 shrink-0 object-contain"
+          className="size-4 shrink-0 object-contain"
         />
       ) : (
         <Icon
           name={name}
           aria-hidden="true"
-          className="size-3.5 shrink-0 text-sidebar-foreground/73"
+          className="size-4 shrink-0 text-sidebar-foreground/73"
           strokeWidth={2}
         />
       )}

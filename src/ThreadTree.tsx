@@ -131,11 +131,12 @@ export interface TreeContext {
   childDropTarget: string | null;
 }
 
-// Tree coordinates are px from the row's left border. Headings and thread
-// rows share `pl-2` (8px) then a 16px status slot; rails run through that
-// slot's centre so a parent disc, its hover chevron, and the line to its
-// children occupy one column. Each nested level steps by one slot.
-const ROW_PAD = 8;
+// Tree coordinates are px from the row's left border. Project headings and
+// thread rows share `pl-3` (12px) then a 16px slot, so a thread's dot centres
+// under its project's icon and titles start where project names do. Rails run
+// through that slot's centre so a parent disc, its hover chevron, and the line
+// to its children occupy one column. Each nested level steps by one slot.
+const ROW_PAD = 12;
 const SLOT = 16;
 const STEP = 16;
 /** The row's flex gap (Tailwind `gap-1.5`); it offsets the first indent. */
@@ -883,7 +884,7 @@ function ThreadRow({
             ctx.onNavigate();
           }}
           aria-label={`Parent thread: ${threadDisplayTitle(detachedParent)}`}
-          className="flex max-w-full items-center gap-1 truncate py-1 pl-6 pr-2 text-xs leading-none text-sidebar-foreground/73 hover:text-sidebar-foreground/90 max-md:min-h-9 pointer-coarse:min-h-9"
+          className="flex max-w-full items-center gap-1 truncate py-1 pl-7 pr-2 text-xs leading-none text-sidebar-foreground/73 hover:text-sidebar-foreground/90 max-md:min-h-9 pointer-coarse:min-h-9"
         >
           <Icon name="CornerDownRight" className="size-3 shrink-0" />
           <span className="truncate">{threadDisplayTitle(detachedParent)}</span>
@@ -917,7 +918,7 @@ function ThreadRow({
           data-reorder-kind="thread"
           data-reorder-scope={scope}
           className={cn(
-            "group/row relative flex items-center gap-1.5 rounded-md py-1 pl-2 pr-2",
+            "group/row relative flex items-center gap-1.5 rounded-md py-1 pl-3 pr-2",
             secondary && "cs-workspace-row",
             "min-h-7 max-md:min-h-11 pointer-coarse:min-h-11",
             // The row is the drag surface, but it reads as a link: the title

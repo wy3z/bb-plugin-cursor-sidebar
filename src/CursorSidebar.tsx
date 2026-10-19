@@ -1625,7 +1625,7 @@ function ProjectSection({
               "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
           >
-            <Icon name="MessageSquarePlus" className="size-3.5 max-md:size-5 pointer-coarse:size-5" />
+            <Icon name="Plus" className="size-3.5 max-md:size-5 pointer-coarse:size-5" />
           </button>
         ) : null}
       </div>
