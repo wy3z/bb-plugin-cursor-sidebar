@@ -6,9 +6,11 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { moveId, type DropPlacement } from "./thread-order";
 import { holdListScroll, releaseListScroll } from "./scroll-lock";
 import { UNFILED_GROUP_KEY } from "./standalone-groups";
+import { liftProjectSection, scrollParentOf, type ProjectSort } from "./project-sort";
 
 export interface ReorderDragState {
   kind: "project" | "thread";
@@ -170,12 +172,13 @@ function moveDragGhost(ghost: HTMLDivElement, x: number, y: number): void {
  * drag (including Escape and a drag that returns to its start), and removes
  * every listener and timer on unmount.
  *
- * While engaged the dragged row is lifted into a floating ghost that follows
- * the pointer. A chat drag reorders the list as it goes, so its siblings slide
- * out of the way; a project drag holds the list still, leaving the dragged
- * heading where it is and faded, with the placement line alone saying where it
- * will drop. Either way the committed order is the one the pointer was showing
- * when it was released.
+ * While engaged a dragged chat row is lifted into a floating ghost that follows
+ * the pointer, and the list reorders as it goes so its siblings slide out of
+ * the way. A project drag moves the section itself instead, with Paseo's
+ * workspace sort motion (see `project-sort.ts`): the section follows the
+ * pointer, the sections it passes slide aside, and a release glides it into its
+ * slot before the order is written. Either way the committed order is the one
+ * the pointer was showing when it was released.
  */
 export function useReorderDrag(
   onCommit: (state: ReorderDragState) => void,
@@ -191,6 +194,8 @@ export function useReorderDrag(
   const activeCancel = useRef<(() => void) | null>(null);
   const suppressedClick = useRef<string | null>(null);
   const suppressedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A project drop or cancel still gliding into place. */
+  const settling = useRef<ProjectSort | null>(null);
 
   const clearSuppression = useCallback(() => {
     if (suppressedTimer.current !== null) {
@@ -202,6 +207,7 @@ export function useReorderDrag(
   useEffect(
     () => () => {
       activeCancel.current?.();
+      settling.current?.finish(false);
       clearSuppression();
     },
     [clearSuppression],
@@ -231,6 +237,9 @@ export function useReorderDrag(
     ) => {
       if (!engageNow && (event.button !== 0 || event.pointerType !== "mouse")) return;
       activeCancel.current?.();
+      // A new pick-up measures resting rects, so a glide still running from
+      // the last drop lands first.
+      settling.current?.finish();
       const pointerId = event.pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
@@ -264,6 +273,11 @@ export function useReorderDrag(
       const previousCursor = document.body.style.cursor;
       let dragCursorStyle: HTMLStyleElement | null = null;
       let ghost: HTMLDivElement | null = null;
+      // A project drag moves its own section; a wheel mid-drag shifts the
+      // list under the pointer, so the scroll travelled counts as movement.
+      let sort: ProjectSort | null = null;
+      const scroller = initial.kind === "project" ? scrollParentOf(grabbed) : null;
+      const startScroll = scroller?.scrollTop ?? 0;
 
       /**
        * A touch drag must hold the list still. `pointermove` cannot cancel a
@@ -295,6 +309,7 @@ export function useReorderDrag(
         window.removeEventListener("blur", cancel);
         document.removeEventListener("visibilitychange", cancel);
         window.removeEventListener("touchmove", preventTouchScroll);
+        scroller?.removeEventListener("scroll", onScroll);
         if (scrollHeld) releaseListScroll();
         document.body.style.userSelect = previousUserSelect;
         if (engaged) document.body.style.cursor = previousCursor;
@@ -307,10 +322,18 @@ export function useReorderDrag(
         if (finished) return;
         finished = true;
         cleanup();
-        if (engaged) {
-          suppressNextClick(current.movingId);
+        if (!engaged) return;
+        suppressNextClick(current.movingId);
+        if (sort === null) {
           setState(null);
+          return;
         }
+        const reverting = sort;
+        settling.current = reverting;
+        reverting.revert(() => {
+          if (settling.current === reverting) settling.current = null;
+          setState(null);
+        });
       };
       const engage = () => {
         engaged = true;
@@ -322,17 +345,28 @@ export function useReorderDrag(
         dragCursorStyle.textContent = "* { cursor: grabbing !important; }";
         document.head.appendChild(dragCursorStyle);
         window.addEventListener("touchmove", preventTouchScroll, { passive: false });
-        ghost = mountDragGhost(
-          grabbed,
-          label,
-          grabbedRect,
-          lastX - grabOffsetX,
-          lastY - grabOffsetY,
-        );
+        sort = current.kind === "project" ? liftProjectSection(grabbed) : null;
+        if (sort === null) {
+          ghost = mountDragGhost(
+            grabbed,
+            label,
+            grabbedRect,
+            lastX - grabOffsetX,
+            lastY - grabOffsetY,
+          );
+        } else {
+          scroller?.addEventListener("scroll", onScroll, { passive: true });
+          sort.move(lastY - startY + (scroller?.scrollTop ?? 0) - startScroll);
+        }
         stateRef.current = current;
         setState(current);
       };
       const reorderAt = (x: number, y: number) => {
+        if (sort !== null) {
+          const { overId, placement } = sort.move(y - startY + (scroller?.scrollTop ?? 0) - startScroll);
+          commit({ ...current, overId, placement });
+          return;
+        }
         const hit = document.elementFromPoint(x, y);
         if (!(hit instanceof Element)) return;
         if (current.kind === "thread") {
@@ -459,6 +493,9 @@ export function useReorderDrag(
         moveEvent.preventDefault();
         reorderAt(moveEvent.clientX, moveEvent.clientY);
       }
+      function onScroll() {
+        if (!finished && engaged) reorderAt(lastX, lastY);
+      }
       function onUp(upEvent: PointerEvent) {
         if (finished || upEvent.pointerId !== pointerId) return;
         finished = true;
@@ -466,12 +503,27 @@ export function useReorderDrag(
         const wasEngaged = engaged;
         cleanup();
         if (!wasEngaged || released === null) return;
-        setState(null);
         suppressNextClick(released.movingId);
         const committed = { ...released, ids: releasedOrder(released) };
-        if (committed.moveToSection !== undefined || committed.pin !== undefined || committed.parentTargetId !== null || committed.ids.join("\0") !== initial.ids.join("\0")) {
-          onCommitRef.current(committed);
+        const land = () => {
+          setState(null);
+          if (committed.moveToSection !== undefined || committed.pin !== undefined || committed.parentTargetId !== null || committed.ids.join("\0") !== initial.ids.join("\0")) {
+            onCommitRef.current(committed);
+          }
+        };
+        if (sort === null) {
+          land();
+          return;
         }
+        // The section glides into its slot first. The new order then renders
+        // synchronously, so the frame that drops the transforms is the frame
+        // that has the sections in their new places.
+        const landing = sort;
+        settling.current = landing;
+        landing.settle(() => {
+          if (settling.current === landing) settling.current = null;
+          flushSync(land);
+        });
       }
       function onCancel(cancelEvent: PointerEvent) {
         if (cancelEvent.pointerId === pointerId) cancel();
@@ -618,11 +670,11 @@ export function useReorderDrag(
   );
 }
 
-/** Whether a drag shuffles the list under the pointer as it moves.
+/** Whether a drag reorders the list's ids under the pointer as it moves.
  *
  * A chat row does, so the row it will land beside is already out of the way.
- * A project heading does not: the list holds still while it is dragged, and
- * the placement line is the only thing that moves. */
+ * A project does not: its sections slide aside on transforms alone, and the
+ * order only changes once the drop has settled. */
 function shufflesUnderPointer(kind: ReorderDragState["kind"]): boolean {
   return kind === "thread";
 }

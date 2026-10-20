@@ -65,7 +65,6 @@ import {
   mergeVisibleOrder,
   moveIdByOffset,
   orderByStoredIds,
-  type DropPlacement,
 } from "./thread-order";
 import {
   EXPANDED_AGES_KEY,
@@ -1202,11 +1201,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             : undefined
         }
         isDragging={drag.state?.kind === "project" && drag.state.movingId === section.id}
-        dropPlacement={
-          drag.state?.kind === "project" && drag.state.overId === section.id
-            ? drag.state.placement
-            : null
-        }
         onHeadingDragStart={(event) => {
           drag.startProject(event, reorderableProjectIds, section.id, section.name);
         }}
@@ -1308,9 +1302,10 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 />
                 <Drawer open={!topGroupCollapsed.ids.has("projects")}>
                   {/* The drawer body is not animated, so the projects need
-                      their own list: dragging a heading reorders these
-                      sections, and each one slides the rest out of the way. */}
-                  <AnimatedList as="div">
+                      their own list. A heading drag moves these sections on
+                      its own transforms, so the list holds its slides until
+                      the drop has landed. */}
+                  <AnimatedList as="div" paused={drag.state?.kind === "project"}>
                     {nativeSectionsVisible.map((section) => renderSection(section))}
                   </AnimatedList>
                   <GroupHeading
@@ -1414,7 +1409,6 @@ function ProjectSection({
   canDragProject,
   onMoveProject,
   isDragging,
-  dropPlacement,
   onHeadingDragStart,
   status,
   statusLabel,
@@ -1433,7 +1427,6 @@ function ProjectSection({
   /** Hand-order the project one place, the same write the drag commits. */
   onMoveProject?: ((offset: -1 | 1) => void) | undefined;
   isDragging: boolean;
-  dropPlacement: DropPlacement | null;
   onHeadingDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const headingRef = useRef<HTMLDivElement>(null);
@@ -1509,9 +1502,8 @@ function ProjectSection({
       aria-label={section.name}
       data-dragging={isDragging ? "true" : undefined}
       className={cn(
-        "mt-2 first:mt-0 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+        "mt-2 first:mt-0",
         sectionOpen && "mb-1.5 [&+section]:mt-4",
-        isDragging && "opacity-50",
       )}
     >
       <SidebarActions
@@ -1552,15 +1544,6 @@ function ProjectSection({
           sectionOpen && "mb-1",
         )}
       >
-        {dropPlacement !== null ? (
-          <span
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-x-1 z-20 h-0.5 rounded-full bg-primary",
-              dropPlacement === "before" ? "-top-px" : "-bottom-px",
-            )}
-          />
-        ) : null}
         <span className="cs-status-slot relative flex w-4 shrink-0 items-center justify-center">
           <span className="flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
             <ProjectStatusGlyph

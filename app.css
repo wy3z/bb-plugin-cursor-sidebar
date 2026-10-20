@@ -42,6 +42,11 @@
     box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
     transform: scale(1.02);
   }
+  /* A lifted project scales its whole section, so the heading inside does not
+     scale again on top of it. */
+  [data-cursor-sidebar-root] [data-dragging] .cs-drag-armed [data-reorder-kind="project"] {
+    transform: none;
+  }
   .cs-context-actions { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
   .cs-context-actions button { min-height: 44px; touch-action: manipulation; }
   .cs-move-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }

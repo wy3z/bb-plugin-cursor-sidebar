@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { autoAnimate } from "./vendor/auto-animate/index.mjs";
 
 /** Inbox Sidebar's list animation and timing, reused for every sibling list.
@@ -22,10 +22,17 @@ export function AnimatedList({
   as: Tag = "ul",
   children,
   className,
+  paused = false,
 }: {
   as?: "ul" | "div";
   children: ReactNode;
   className?: string;
+  /**
+   * Hold the list's own slides, for a drag that animates the children itself.
+   * Paused, the list still records where each child lands, so the reorder a
+   * drop commits does not replay from where the children were before it.
+   */
+  paused?: boolean;
 }) {
   const controller = useRef<ReturnType<typeof autoAnimate> | null>(null);
   const attach = useCallback((node: HTMLElement | null) => {
@@ -39,5 +46,15 @@ export function AnimatedList({
     ) return;
     controller.current = autoAnimate(node, { duration: MOVE_MS, easing: MOVE_EASING });
   }, []);
+  useEffect(() => {
+    if (paused) {
+      controller.current?.disable();
+      return;
+    }
+    // The mutation that lands with the unpause is read on a microtask, so the
+    // list resumes a frame later, once it has recorded the new places.
+    const frame = requestAnimationFrame(() => controller.current?.enable());
+    return () => cancelAnimationFrame(frame);
+  }, [paused]);
   return <Tag ref={attach} className={className}>{children}</Tag>;
 }
