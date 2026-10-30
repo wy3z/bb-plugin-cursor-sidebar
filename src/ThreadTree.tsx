@@ -46,6 +46,7 @@ import type { ThreadShelf } from "./lifecycle";
 import type { DropPlacement } from "./thread-order";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import { PullRequestMark } from "./PullRequestMark";
+import { ProviderMark } from "./ProviderMark";
 import { RowContextMenu } from "./RowContextMenu";
 import { useArchiveThread, useThreadMutations } from "./thread-actions";
 import {
@@ -1227,6 +1228,8 @@ function ThreadRow({
           ) : null}
 
           {ctx.view.show.pr ? <PullRequestMark environmentId={thread.environment?.id ?? null} /> : null}
+
+          {native.providerId ? <ProviderMark providerId={native.providerId} className="mr-1.5" /> : null}
 
           <div className={cn("pointer-events-none flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
           <InlineThreadTitle
