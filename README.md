@@ -70,9 +70,9 @@ Project icons are hidden on a row under its own project heading, and while the
 switcher is narrowed to one project, since the heading or the switcher already
 says which project it is.
 
-**Threads per group** bounds every section in every grouping — project sections,
-date, status and environment groups, the flat None list, Chats — and the child
-chats nested under a parent. Each group previews one page and **Show N more**
+**Threads per group** bounds every section in every grouping: project sections,
+date, status and environment groups, the flat None list and Chats, plus the
+child chats nested under a parent. Each group previews one page and **Show N more**
 reveals the next, where N is the chosen page. A family counts once,
 and a chat that is working, needs your input, selected or pinned always shows
 whatever the limit. **All** drops the limit and the button.
@@ -203,7 +203,7 @@ Frontend modules must import them from there, and may only `import type` from
 dependency: a git install prunes dev dependencies and the host only hands the
 SDK to the server bundle, so a value import of `./server` from frontend code
 drags the backend into `app.js` and fails `bb plugin install git:...` with
-`Could not resolve "@get-bb/plugin-sdk"` — while still building on a machine
+`Could not resolve "@get-bb/plugin-sdk"`, while still building on a machine
 that has the SDK installed.
 
 ## License
