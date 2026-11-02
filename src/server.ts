@@ -78,12 +78,20 @@ const projectIconSchema = z.union([
     .refine((value) => value.length > PROJECT_ICON_IMAGE_PREFIX.length),
 ]);
 
-const viewGroupBySchema = z.enum(["workspace", "updated", "status", "environment"]);
+const viewGroupBySchema = z.enum(["workspace", "updated", "status", "environment", "none"]);
 const viewConversationOrderSchema = z.enum(["updated", "status"]);
 const viewGroupOrderSchema = z.enum(["manual", "updated"]);
 /** How the project list is arranged: by hand, or by each project's worst status. */
 const viewProjectOrderSchema = z.enum(["manual", "status"]);
 const viewStatusFilterSchema = z.enum(["input", "failed", "working", "unread", "idle"]);
+/** The Updated grouping's buckets, reused verbatim as the age filter. */
+const viewAgeFilterSchema = z.enum([
+  "Today",
+  "Yesterday",
+  "Last 7 days",
+  "Last 30 days",
+  "Older",
+]);
 const sidebarViewSchema = z
   .object({
     groupBy: viewGroupBySchema,
@@ -91,13 +99,23 @@ const sidebarViewSchema = z
     sortGroupsBy: viewGroupOrderSchema,
     sortProjectsBy: viewProjectOrderSchema.default("manual"),
     statusFilter: z.array(viewStatusFilterSchema).max(5),
+    // Absent on a view written before the age filter existed: the default is
+    // every bucket, never a validation failure.
+    ageFilter: z
+      .array(viewAgeFilterSchema)
+      .max(5)
+      .default(["Today", "Yesterday", "Last 7 days", "Last 30 days", "Older"]),
     environmentFilter: z.array(z.string().trim().min(1).max(200)).max(200).nullable(),
+    projectFilter: z.array(z.string().trim().min(1).max(200)).max(200).nullable(),
     show: z.object({
       updated: z.boolean(),
       environment: z.boolean(),
       branch: z.boolean(),
       host: z.boolean(),
       pr: z.boolean(),
+      // Absent on a view written before the toggle existed; a missing flag is
+      // the default (shown), never a validation failure.
+      projectIcons: z.boolean().default(true),
     }),
   })
   .strict();

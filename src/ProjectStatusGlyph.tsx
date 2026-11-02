@@ -85,8 +85,54 @@ export function ProjectStatusGlyph({
   );
 }
 
-/** The mini status on a closed project: a spinner for work, a dot otherwise. */
-function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
+/**
+ * The project's identity at the start of a thread row, for groupings that are
+ * not already under a project heading. Same icon the heading wears (a chosen
+ * glyph, an uploaded image, or the folder) drawn at 14px in a muted tone, so it
+ * reads as context rather than a control. A personal "Chats" thread carries a
+ * chat glyph instead, since it has no project identity to name.
+ */
+export function ProjectRowIcon({
+  icon,
+  label,
+  chats = false,
+}: {
+  icon: ProjectIcon | null;
+  label: string;
+  /** True for a personal-project row: draw a muted chat glyph, not a folder. */
+  chats?: boolean;
+}) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn(
+        "pointer-events-none flex size-3.5 shrink-0 items-center justify-center",
+        chats ? "text-sidebar-foreground/45" : "text-sidebar-foreground/55",
+      )}
+    >
+      {icon?.kind === "image" ? (
+        <img
+          src={icon.src}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="size-3.5 object-contain"
+        />
+      ) : (
+        <Icon
+          name={chats ? "Chat" : icon?.kind === "glyph" ? icon.name : "Folder"}
+          aria-hidden="true"
+          strokeWidth={2}
+          className="size-3.5 shrink-0"
+        />
+      )}
+    </span>
+  );
+}
+
+/** The mini status on a closed project: a spinner for work, a dot otherwise. */function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
   const tone =
     status === "failed"
       ? "bg-destructive"

@@ -7,7 +7,6 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type PointerEventHandler,
-  type ReactNode,
   Fragment,
 } from "react";
 import {
@@ -25,14 +24,18 @@ import {
   partitionStandaloneRows,
 } from "./standalone-groups";
 import {
+  flattenOrdinaryFamilies,
   groupOrdinaryRows,
   ordinaryThreadStatus,
+  projectKeyOf,
   usableEnvironmentLabel,
-  viewHasActiveFilters,
   type OrdinaryGroup,
 } from "./sidebar-view";
 import type { SidebarView } from "./server";
-import { SectionDivider } from "./SectionDivider";
+import { ProjectRowIcon } from "./ProjectStatusGlyph";
+import type { ProjectIcon } from "./project-icons";
+import { isWorking } from "./activity";
+import { SectionDivider, SectionHeading } from "./SectionDivider";
 import { SidebarActions } from "./SidebarActions";
 import { AnimatedList } from "./AnimatedList";
 import { Drawer } from "./Drawer";
@@ -61,10 +64,9 @@ export interface TreeContext {
   descendantsById: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   activeThreadId: string | null;
   expandedParents: ReadonlySet<string>;
-  expandedAgeGroups: ReadonlySet<string>;
+  /** Persistently collapsed date buckets; every bucket defaults open. */
+  collapsedAgeGroups: ReadonlySet<string>;
   onToggleAgeGroup: (key: string) => void;
-  /** Opens BB's native new-thread composer with no project selected. */
-  onNewThread: () => void;
   rawById: ReadonlyMap<string, PluginSidebarThread>;
   workspacePaths: ReadonlyMap<string, string | null>;
   /** The host bb runs on; a row only names its host when it differs. */
@@ -120,6 +122,17 @@ export interface TreeContext {
   canPin: (threadId: string) => boolean;
   /** The one persisted view: grouping, conversation order and Show toggles. */
   view: SidebarView;
+  /**
+   * Whether a row may draw its project's icon at all: the Show toggle is on and
+   * the switcher is not narrowed to one project.
+   */
+  showProjectIcons: boolean;
+  /** The chosen icon for a native project, or null for the default folder. */
+  projectIconFor: (projectId: string) => ProjectIcon | null;
+  /** The native project's display name, for the row icon's tooltip. */
+  projectLabelFor: (projectId: string) => string | null;
+  /** The personal "Chats" project id, whose rows draw a chat glyph instead. */
+  personalProjectId: string | null;
   /**
    * Strongest status over a row's rendered subtree, or undefined. Drawn when
    * the native indicator is silent.
@@ -313,6 +326,7 @@ export function PinnedList({ items, ctx }: { items: readonly LiftedPin[]; ctx: T
           ctx={ctx}
           rootPinned
           inFolderId={null}
+          showProjectIcon={ctx.showProjectIcons}
           activeRailLevels={rails.get(row.thread.id)?.levels}
           activeElbow={rails.get(row.thread.id)?.onPath ?? false}
         />
@@ -330,7 +344,6 @@ export function ShelfList({
   keepIds,
   expandIds,
   grouped,
-  firstGroupTools,
 }: {
   section: ProjectSectionData;
   shelf: ThreadShelf;
@@ -344,8 +357,6 @@ export function ShelfList({
    * or Chats).
    */
   grouped: boolean;
-  /** Tools on the first bucket heading, or a static fallback heading when no bucket renders. */
-  firstGroupTools?: ReactNode;
 }) {
   const [childPages, setChildPages] = useState<ReadonlyMap<string, number>>(() => new Map());
   const childLimitOf = useCallback(
@@ -468,6 +479,9 @@ export function ShelfList({
             rootPinned={rootPinned}
             inFolderId={options.inFolderId ?? null}
             environmentGroupLabel={options.environmentGroupLabel ?? null}
+            // Under Projects grouping every row already sits beneath its own
+            // project heading, so the row icon would only repeat it.
+            showProjectIcon={ctx.showProjectIcons && ctx.view.groupBy !== "workspace"}
             activeRailLevels={railLevels.get(row.thread.id)}
             activeElbow={onPath.has(row.thread.id)}
           />
@@ -514,7 +528,23 @@ export function ShelfList({
     if (!section.personal) {
       return [{ key: `${shelf}:flat`, label: null, rows: partition.dated }];
     }
-    return groupOrdinaryRows(partition.dated, ctx.view, {
+    // None draws one flat list: folder families join the dated rows and whole
+    // families are sorted by the conversation order, since no heading carries
+    // a bucket order of its own.
+    const dated =
+      ctx.view.groupBy === "none"
+        ? flattenOrdinaryFamilies(
+            [...partition.dated, ...partition.folders.flatMap((folder) => folder.rows)],
+            ctx.view.sortConversationsBy,
+            {
+              now: ctx.now,
+              parentOf,
+              statusOf: ordinaryThreadStatus,
+              members: section.members,
+            },
+          )
+        : partition.dated;
+    return groupOrdinaryRows(dated, ctx.view, {
       now: ctx.now,
       parentOf,
       statusOf: ordinaryThreadStatus,
@@ -543,7 +573,7 @@ export function ShelfList({
   const unfileActive =
     ctx.folderDropTarget === `folder:${UNFILED_GROUP_KEY}` ||
     ctx.folderDropTarget === "pin:unpin";
-  const renderGroup = (group: OrdinaryGroup, index: number) => {
+  const renderGroup = (group: OrdinaryGroup) => {
     const isDate = group.key.startsWith("updated:") && group.label !== null;
     const collapseKey =
       group.label === null
@@ -551,14 +581,16 @@ export function ShelfList({
         : isDate
           ? ageGroupKey(section.id, group.label as AgeGroup)
           : `group:${section.id}:${group.key}`;
+    // Every bucket defaults open: an allow-list of open buckets left a bucket
+    // with threads in it looking empty. Only an explicit fold closes one.
     const open =
       collapseKey === null
         ? true
         : isDate
-          ? ctx.expandedAgeGroups.has(collapseKey)
+          ? !ctx.collapsedAgeGroups.has(collapseKey)
           : !ctx.collapsedGroups.has(collapseKey);
     const paged =
-      group.label === null
+      group.label === null && ctx.view.groupBy !== "none"
         ? { shown: group.rows, hiddenConversations: 0 }
         : pageGroupRows(group.rows, parentOf, {
             activeThreadId: ctx.activeThreadId,
@@ -581,13 +613,7 @@ export function ShelfList({
                   ? () => ctx.onToggleAgeGroup(collapseKey)
                   : () => ctx.onToggleGroup(collapseKey)
               }
-              onNewThread={
-                group.label === "Today" && firstGroupTools === undefined
-                  ? ctx.onNewThread
-                  : undefined
-              }
               shelfKey={collapseKey}
-              tools={index === 0 ? firstGroupTools : undefined}
             />
           </div>
         ) : null}
@@ -625,7 +651,7 @@ export function ShelfList({
        slide the survivors up. Rows inside a surviving bucket animate in their
        own list. */
     <AnimatedList as="div" className="flex flex-col">
-      {grouping && partition !== null ? (
+      {grouping && partition !== null && ctx.view.groupBy !== "none" ? (
         <>
       {foldersForHome.map((folder) => {
         const key = folderKey(folder.id);
@@ -654,22 +680,9 @@ export function ShelfList({
       })}
         </>
       ) : null}
-      {grouping && firstGroupTools !== undefined && !(groups.length > 0 && groups[0]!.label !== null) ? (
-        <div data-empty-fallback="true" className="mt-2 first:mt-0">
-          <div className="group/section flex min-h-7 items-center gap-1 py-1 pl-3 pr-1.5">
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground/73">
-              {section.name}
-            </span>
-            {firstGroupTools}
-          </div>
-          {rows.length === 0 ? (
-            <p className="px-3 py-1 text-xs text-sidebar-foreground/73">
-              {viewHasActiveFilters(ctx.view) ? "No threads match the current filters." : "No threads"}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {groups.map(renderGroup)}
+      {groups
+        .filter((group) => group.rows.length > 0)
+        .map(renderGroup)}
     </AnimatedList>
   );
 }
@@ -699,27 +712,13 @@ function FolderDivider({ sectionId, name, open, onToggle, shelfKey, dropActive, 
         data-folder-target={sectionId}
         className={cn("rounded", dropActive && "bg-primary/10 ring-1 ring-primary/40")}
       >
-        <div className="group/section flex items-center gap-1 pl-3 pr-1.5">
-          <button
-            type="button"
-            data-shelf-toggle={shelfKey}
-            aria-label={name}
-            aria-expanded={open}
-            onClick={onToggle}
-            className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded py-1 text-xs font-medium text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
-          >
-            <Icon name={open ? "FolderOpen" : "Folder"} className="size-3.5 shrink-0" strokeWidth={2} />
-            <span className="truncate">{name}</span>
-            <Icon
-              name="ChevronRight"
-              aria-hidden="true"
-              className={cn(
-                "size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
-                open && "rotate-90",
-              )}
-            />
-          </button>
-        </div>
+        <SectionHeading
+          label={name}
+          open={open}
+          onToggle={onToggle}
+          shelfKey={shelfKey}
+          icon={open ? "FolderOpen" : "Folder"}
+        />
       </div>
     </SidebarActions>
   );
@@ -739,6 +738,7 @@ function ThreadRow({
   rootPinned,
   inFolderId,
   environmentGroupLabel = null,
+  showProjectIcon = false,
   activeRailLevels,
   activeElbow,
 }: {
@@ -753,6 +753,11 @@ function ThreadRow({
   inFolderId: string | null;
   /** Environment heading this row sits under, when Grouping is Environment. */
   environmentGroupLabel?: string | null;
+  /**
+   * Draw the thread's project icon before its title. False under a project
+   * heading, where the heading already names the project.
+   */
+  showProjectIcon?: boolean;
   activeRailLevels?: ReadonlySet<number> | undefined;
   activeElbow?: boolean;
 }) {
@@ -822,6 +827,18 @@ function ThreadRow({
   );
   const hasChildren = children.length > 0;
   const expanded = hasChildren && ctx.expandedParents.has(thread.id);
+  // The children that are actually working right now, by the same notion of
+  // work the row's own status glyph uses. A parent keeps no static mark: this
+  // only exists while something beneath it is running.
+  const activeChildCount = (ctx.descendantsById.get(thread.id) ?? []).filter(
+    isWorking,
+  ).length;
+  const projectId = projectKeyOf(thread);
+  const chatProject =
+    ctx.personalProjectId !== null && projectId === ctx.personalProjectId;
+  const projectLabel = chatProject
+    ? "Chats"
+    : ctx.projectLabelFor(projectId) ?? "No project";
 
   const nativeParent =
     thread.parentThreadId === null
@@ -860,11 +877,10 @@ function ThreadRow({
   // The flex gap before the disc is part of the step, so the spacer carries
   // the step minus that gap and every level lands `STEP` right of its parent.
   const indent = Math.max(0, depth * STEP - ROW_GAP);
-  // Only the rails that carry the selected thread's path take the selection
-  // tone; the rest keep the quiet border colour.
-  const railClass = (level: number) =>
-    activeRailLevels?.has(level) ? "bg-sidebar-foreground/45" : "bg-sidebar-border";
-  const elbowClass = activeElbow ? "bg-sidebar-foreground/45" : "bg-sidebar-border";
+  // Rails stay the quiet border colour even on the selected thread's path;
+  // the row highlight alone marks the selection.
+  const railClass = (_level: number) => "bg-sidebar-border";
+  const elbowClass = "bg-sidebar-border";
 
   return (
     <li
@@ -1074,6 +1090,14 @@ function ThreadRow({
             ) : null}
           </span>
 
+          {showProjectIcon && depth === 0 ? (
+            <ProjectRowIcon
+              icon={chatProject ? null : ctx.projectIconFor(projectId)}
+              label={projectLabel}
+              chats={chatProject}
+            />
+          ) : null}
+
           {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
 
           <div className={cn("pointer-events-none flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
@@ -1105,9 +1129,9 @@ function ThreadRow({
               <kbd className="cs-shortcut-key" aria-hidden="true">{shortcutKey}</kbd>
             ) : (
               <>
-            {/* The actions anchor to the parent-mark group's right edge, which
-                is always the age's left edge, so they cover the parent mark and
-                the title's reserved padding but never the time. */}
+            {/* The actions anchor to the age's left edge, so they cover the
+                active-child mark and the title's reserved padding but never
+                the time. */}
             <span className="relative flex items-center self-stretch">
               <span
                 data-thread-actions=""
@@ -1142,18 +1166,25 @@ function ThreadRow({
                   <Icon name="Archive" className="size-3.5" />
                 </button>
               </span>
-              {hasChildren ? (
-                <span
-                  className="pointer-events-none flex size-4 shrink-0 items-center justify-center text-sidebar-foreground/73 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:opacity-0 group-focus-within/row:opacity-0"
-                  title={`${children.length} child ${children.length === 1 ? "thread" : "threads"}`}
-                  aria-hidden="true"
-                >
-                  <Icon name="User" className="size-3.5" />
-                </span>
-              ) : null}
             </span>
-            <span className="cs-thread-time pointer-events-none tabular-nums text-xs text-sidebar-foreground/73">
-              {ctx.view.show.updated ? <ThreadAge thread={statusThread} now={ctx.now} /> : null}
+            <span className="cs-thread-time pointer-events-none tabular-nums text-xs text-sidebar-foreground/45">
+              {activeChildCount > 0 ? (
+                /* While children are running, a light accent pill with their
+                   count takes the time's place. */
+                <span
+                  role="img"
+                  aria-label={`${activeChildCount} active child ${activeChildCount === 1 ? "thread" : "threads"}`}
+                  title={`${activeChildCount} active child ${activeChildCount === 1 ? "thread" : "threads"}`}
+                  className="flex h-4 shrink-0 items-center gap-1 rounded-full bg-timeline-accent/15 px-1.5 text-timeline-accent"
+                >
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-timeline-accent" />
+                  <span aria-hidden="true" className="tabular-nums text-2xs font-medium leading-none">
+                    {activeChildCount}
+                  </span>
+                </span>
+              ) : ctx.view.show.updated ? (
+                <ThreadAge thread={statusThread} now={ctx.now} />
+              ) : null}
             </span>
               </>
             )}

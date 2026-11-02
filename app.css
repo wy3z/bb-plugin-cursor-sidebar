@@ -5,7 +5,7 @@
   [data-cursor-sidebar-root] select,
   .cs-move-dialog button,
   .cs-move-dialog select { min-height: 44px; touch-action: manipulation; }
-  [data-cursor-sidebar-root] button:has(> svg:only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action) { min-width: 44px; }
+  [data-cursor-sidebar-root] button:has(> :is(svg, [data-icon-root]):only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action) { min-width: 44px; }
   [data-cursor-sidebar-root] button[aria-expanded] { opacity: 1; }
   [data-cursor-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
   [data-cursor-sidebar-root] .cs-project-glyph { width: 16px; height: 16px; }
@@ -107,10 +107,10 @@
 }
 
 /* Chevrons are a short stroke; 2.75 reads heavier than the 1.5 default. */
-[data-cursor-sidebar-root] svg[data-icon="ChevronDown"] path,
-[data-cursor-sidebar-root] svg[data-icon="ChevronRight"] path,
-[data-cursor-sidebar-root] svg[data-icon="ChevronLeft"] path,
-[data-cursor-sidebar-root] svg[data-icon="ChevronUp"] path {
+[data-cursor-sidebar-root] [data-icon="ChevronDown"] path,
+[data-cursor-sidebar-root] [data-icon="ChevronRight"] path,
+[data-cursor-sidebar-root] [data-icon="ChevronLeft"] path,
+[data-cursor-sidebar-root] [data-icon="ChevronUp"] path {
   stroke-width: 2.75;
 }
 
@@ -133,8 +133,7 @@
 /* The open thread's text reads brighter than its siblings, so the selection
    separates from the rest the way a selected row should. */
 [data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-title,
-[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-info,
-[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-time {
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-info {
   color: oklch(from var(--sidebar-accent-foreground) min(1, calc(l + 0.14)) c h);
 }
 
@@ -273,7 +272,7 @@
   border-radius: 6px;
   pointer-events: none;
 }
-.cs-icon-btn > svg {
+.cs-icon-btn > :is(svg, [data-icon-root]) {
   position: relative;
   z-index: 1;
 }
@@ -298,10 +297,9 @@
   mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent);
 }
 
-/* Every heading that carries the view tools shares one right edge. The
-   phone/touch layout adds a little right padding above these rows, so pull the
-   row flush with the top-bar controls there; the desktop sidebar needs no
-   change. */
+/* Section headings share one right edge. The phone/touch layout adds a little
+   right padding above these rows, so pull the row flush with the top-bar
+   controls there; the desktop sidebar needs no change. */
 @media (max-width: 767px) and (pointer: coarse) {
   [data-cursor-sidebar-root] .cs-heading { margin-right: -8px; }
 }
@@ -380,4 +378,19 @@
   .cs-grouping-swap {
     animation: none !important;
   }
+}
+
+/*
+ * Compact navigation proxies BB's own history buttons, so BB's copies are
+ * hidden while that header is mounted. Scoped to the sidebar header row
+ * (data-testid ending in "sidebar-top-reserve-row") so other "Go back" buttons
+ * in the app are untouched. The hidden buttons still receive .click().
+ */
+html[data-cursor-sidebar-compact-nav="true"]
+  [data-testid$="sidebar-top-reserve-row"]
+  button[aria-label="Go back"]:not([data-cursor-sidebar-compact-nav-control]),
+html[data-cursor-sidebar-compact-nav="true"]
+  [data-testid$="sidebar-top-reserve-row"]
+  button[aria-label="Go forward"]:not([data-cursor-sidebar-compact-nav-control]) {
+  display: none !important;
 }
