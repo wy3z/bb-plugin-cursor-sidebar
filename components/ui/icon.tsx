@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ComponentType } from "react";
-import * as sdkApp from "@get-bb/plugin-sdk/app";
+import { experimental_Icon as HostIcon } from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Alert02Icon,
@@ -196,23 +195,6 @@ const ICON_ALIASES: Readonly<Record<string, string>> = {
   User: "UserRound",
 };
 
-interface HostIconProps {
-  name: string;
-  className?: string;
-  style?: CSSProperties;
-  "aria-hidden"?: boolean | "true" | "false";
-  "aria-label"?: string;
-}
-
-/**
- * The plugin's SDK pin predates the typed export, but BB 0.48.1 still provides
- * the shared icon registry at runtime. Look it up once and keep the local
- * Hugeicons artwork as the fallback for an older host.
- */
-const HostIcon = (
-  sdkApp as unknown as { experimental_Icon?: ComponentType<HostIconProps> }
-).experimental_Icon;
-
 function resolveHostName(name: string): string | undefined {
   const mapped = ICON_ALIASES[name] ?? name;
   return HOST_ICON_NAMES.has(mapped) ? mapped : undefined;
@@ -236,10 +218,9 @@ export function Icon({
   "aria-label": ariaLabel,
 }: IconProps) {
   const hostName = resolveHostName(name);
-  if (HostIcon !== undefined && hostName !== undefined) {
-    const Icon = HostIcon;
+  if (hostName !== undefined) {
     return (
-      <Icon
+      <HostIcon
         name={hostName}
         className={cn(className)}
         style={style}

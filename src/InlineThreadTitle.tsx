@@ -6,11 +6,11 @@ import {
   type PointerEventHandler,
 } from "react";
 import {
-  experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { threadDisplayTitle, threadEditableTitle } from "./inbox";
+import { useThreadMutations } from "./thread-actions";
 
 /**
  * The row's title, which becomes an inline rename field on double-click.
@@ -33,7 +33,7 @@ export function InlineThreadTitle({
   onClick?: MouseEventHandler<HTMLElement>;
   onPointerDown?: PointerEventHandler<HTMLElement>;
 }) {
-  const actions = useSidebarThreadActions();
+  const actions = useThreadMutations();
   const title = threadDisplayTitle(thread);
   const editableTitle = threadEditableTitle(thread);
   const [draft, setDraft] = useState(editableTitle);

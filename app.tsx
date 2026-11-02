@@ -7,7 +7,6 @@ import "./app.css";
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { CursorSidebar } from "./src/CursorSidebar";
 import { CompactNavigation, CompactNavigationHeader } from "./src/CompactNavigation";
-import { registerSidebarNavigation } from "./src/sdk-navigation";
 
 // Register only the sidebar replacement. It deliberately ships no thread
 // header actions, so it never duplicates the ones Inbox Sidebar adds.
@@ -22,7 +21,7 @@ export default definePluginApp((app) => {
 
   // Zeron-style header: back, forward and + on the left, a menu of every
   // navigation destination on the right, and no navigation rows.
-  registerSidebarNavigation(app.slots, {
+  app.slots.experimental_sidebarNavigation({
     id: "compact",
     title: "Compact",
     description: "Back, forward, New thread and a menu in the header; no navigation rows.",

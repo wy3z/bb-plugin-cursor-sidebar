@@ -9,7 +9,6 @@ import {
 } from "react";
 import { toast } from "sonner";
 import {
-  experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
   useRpc,
   type PluginSidebarThread,
@@ -71,6 +70,7 @@ import {
   usePersistentIds,
 } from "./collapse";
 import { useThreadSections } from "./useThreadSections";
+import { useThreadMutations } from "./thread-actions";
 import { useSidebarView } from "./useSidebarView";
 import type { cursorSidebarRpcContract } from "./server";
 import { SidebarViewMenuRoot, SidebarViewMenuTrigger, SidebarViewSyncNotice } from "./SidebarViewMenu";
@@ -154,7 +154,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const threadOrders = useThreadOrders();
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
-  const actions = useSidebarThreadActions();
+  const actions = useThreadMutations();
   const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const projectIcons = useProjectIcons();
 

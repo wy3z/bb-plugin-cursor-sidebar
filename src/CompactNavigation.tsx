@@ -7,11 +7,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  Icon,
-  SidebarNavigationIcon,
-  useSidebarNavigation,
+  experimental_Icon as Icon,
+  experimental_SidebarNavigationIcon as SidebarNavigationIcon,
+  experimental_useSidebarNavigation as useSidebarNavigation,
   type ExperimentalSidebarHeaderProps,
-} from "./sdk-navigation";
+} from "@get-bb/plugin-sdk/app";
 
 const MENU_MIN_WIDTH = 200;
 const MENU_GAP = 4;
