@@ -42,7 +42,8 @@ export const VIEW_GROUP_ORDER = ["manual", "updated"] as const;
 export const VIEW_PROJECT_ORDER = ["manual", "status"] as const;
 export type ViewProjectOrder = (typeof VIEW_PROJECT_ORDER)[number];
 
-export const VIEW_STATUS_FILTERS = ["input", "failed", "working", "unread", "idle"] as const;
+// Also the Status grouping's fixed section order: Unread always sits above Working.
+export const VIEW_STATUS_FILTERS = ["input", "failed", "unread", "working", "idle"] as const;
 export type ViewStatusFilter = (typeof VIEW_STATUS_FILTERS)[number];
 
 /** The filter's own labels are the same strings the rows report. */
@@ -65,6 +66,26 @@ export const AGE_FILTER_LABELS: Record<ViewAgeFilter, string> = {
 };
 
 /**
+ * How many inactive conversations one group previews before its "Show more"
+ * control. `null` is "All": every conversation renders and no control appears.
+ * A page is one set of this many top-level conversations; a family always
+ * counts once and an active, selected or pinned one always shows.
+ */
+export const THREADS_PER_GROUP_VALUES = [5, 10, 20, 50] as const;
+export type ThreadsPerGroup = (typeof THREADS_PER_GROUP_VALUES)[number] | null;
+export const DEFAULT_THREADS_PER_GROUP: ThreadsPerGroup = 10;
+
+/** The page size a persisted value renders: "All" is no limit at all. */
+export function threadsPerGroupPage(value: ThreadsPerGroup): number {
+  return value === null ? Number.POSITIVE_INFINITY : value;
+}
+
+/** The value's menu label: the number, or "All". */
+export function threadsPerGroupLabel(value: ThreadsPerGroup): string {
+  return value === null ? "All" : String(value);
+}
+
+/**
  * Defaults recover the agreed view: native Projects / Chats homes with date
  * buckets on the pooled ordinary homes, the existing stored
  * conversation order, and every ordinary status, environment and project shown.
@@ -76,6 +97,7 @@ export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   sortConversationsBy: "updated",
   sortGroupsBy: "manual",
   sortProjectsBy: "manual",
+  threadsPerGroup: DEFAULT_THREADS_PER_GROUP,
   statusFilter: [...VIEW_STATUS_FILTERS],
   ageFilter: [...VIEW_AGE_FILTERS],
   environmentFilter: null,
@@ -203,6 +225,19 @@ function coerceProjectFilter(raw: unknown): string[] | null {
 }
 
 /**
+ * The persisted threads-per-group value. Missing or unsupported (an older or
+ * corrupt row) falls back to the default page; an explicit `null` survives as
+ * "All", never as a fallback.
+ */
+function coerceThreadsPerGroup(raw: unknown): ThreadsPerGroup {
+  if (raw === null) return null;
+  return (
+    THREADS_PER_GROUP_VALUES.find((value) => value === raw) ??
+    DEFAULT_THREADS_PER_GROUP
+  );
+}
+
+/**
  * Coerce a persisted view to the supported shape at the client boundary. The
  * server already validates it, but a view written by an older client, or a
  * partial one, must never put an unsupported value into a control. Every
@@ -248,6 +283,7 @@ export function coerceSidebarView(value: unknown): SidebarView {
     sortConversationsBy,
     sortGroupsBy,
     sortProjectsBy,
+    threadsPerGroup: coerceThreadsPerGroup(raw.threadsPerGroup),
     statusFilter: coerceStatusFilter(raw.statusFilter),
     ageFilter: coerceAgeFilter(raw.ageFilter),
     environmentFilter: coerceEnvironmentFilter(raw.environmentFilter),
@@ -493,6 +529,12 @@ export interface OrdinaryFilterFacts {
   bypass: (thread: PluginSidebarThread) => boolean;
   /** Current time for the calendar age buckets. */
   now: number;
+  /**
+   * Family aggregates over the complete unfiltered set, when the caller already
+   * has them. Reusing one set keeps the age filter and the Updated heading on
+   * the same family activity even when another filter hides a descendant.
+   */
+  familyFacts?: OrdinaryFamilyFacts | undefined;
 }
 
 /**
@@ -529,8 +571,9 @@ function projectAllowed(
 /**
  * Filter ordinary conversations by status, age, environment and project while
  * keeping the ancestry a surviving child needs. A pinned or current family is
- * always kept. Every ancestor of a kept row is kept, so a match never detaches
- * from its parent or loses its tree rails. Age is judged for the whole family
+ * always kept. Every ancestor of a kept row within its own home is kept, so a
+ * match never detaches from its parent or loses its tree rails, and a child in
+ * one project never drags in a parent from another. Age is judged for the whole
  * from the same latest activity the Updated grouping uses for its heading, so a
  * child never lands in a different bucket from its top-level thread. Nothing
  * here mutates pin, folder or manual-order state. The caller decides whether
@@ -542,14 +585,13 @@ export function filterOrdinaryThreads(
   view: SidebarView,
   facts: OrdinaryFilterFacts,
 ): PluginSidebarThread[] {
-  const byId = new Map(threads.map((thread) => [thread.id, thread]));
-  // Age is a family fact, exactly like the Updated grouping: the root owns one
-  // bucket, computed from the family's latest activity at the same `now`.
   const parentOf = homeDisplayParentOf(threads);
+  const familyRoot = facts.familyFacts?.rootOf;
+  const familyAggregate = facts.familyFacts?.aggregateOf;
   const rootOf = new Map<string, string>();
   const familyLatest = new Map<string, number>();
   for (const thread of threads) {
-    const root = familyRootId(parentOf, thread.id);
+    const root = familyRoot?.get(thread.id) ?? familyRootId(parentOf, thread.id);
     rootOf.set(thread.id, root);
     familyLatest.set(
       root,
@@ -558,7 +600,10 @@ export function filterOrdinaryThreads(
   }
   const ageAllowed = (thread: PluginSidebarThread): boolean => {
     const root = rootOf.get(thread.id) ?? thread.id;
-    const latest = familyLatest.get(root) ?? thread.updatedAt;
+    const latest =
+      familyAggregate?.get(root)?.latestUpdatedAt ??
+      familyLatest.get(root) ??
+      thread.updatedAt;
     return view.ageFilter.includes(bucketForTimestamp(latest, facts.now));
   };
   const keep = new Set<string>();
@@ -576,12 +621,14 @@ export function filterOrdinaryThreads(
     keep.add(thread.id);
   }
   for (const id of matches) {
-    let cursor = byId.get(id)?.parentThreadId ?? null;
+    // Ancestors follow the display forest's home boundary, so a child in one
+    // project never drags its parent in from another project.
+    let cursor = parentOf(id);
     const seen = new Set<string>([id]);
     while (cursor !== null && !seen.has(cursor)) {
       seen.add(cursor);
       keep.add(cursor);
-      cursor = byId.get(cursor)?.parentThreadId ?? null;
+      cursor = parentOf(cursor);
     }
   }
   return threads.filter((thread) => keep.has(thread.id));
@@ -718,6 +765,8 @@ export function ordinaryCollapsibleTargets(
     now: number;
     folderIds: ReadonlySet<string>;
     statusOf: (thread: PluginSidebarThread) => ViewStatusFilter;
+    /** Complete-set family aggregates, so a filtered view collapses what it shows. */
+    familyFacts?: OrdinaryFamilyFacts | undefined;
   },
 ): CollapsibleTargets {
   const groupKeys = new Set<string>();
@@ -752,6 +801,7 @@ export function ordinaryCollapsibleTargets(
       now: options.now,
       parentOf: home.parentOf,
       statusOf: options.statusOf,
+      familyFacts: options.familyFacts,
     });
     for (const thread of home.members) {
       const key = keys.get(thread.id);
@@ -784,6 +834,28 @@ export interface OrdinaryGroupFacts {
    * rendered rows, which is exact only when nothing is folded.
    */
   members?: readonly PluginSidebarThread[];
+  /**
+   * Family aggregates over the complete unfiltered set. When present these are
+   * authoritative, so a filter that hides a descendant never changes the
+   * family's Updated bucket, Status group or ordering.
+   */
+  familyFacts?: OrdinaryFamilyFacts | undefined;
+}
+
+/**
+ * Family facts for one grouping pass, preferring the caller's complete-set
+ * aggregates over anything re-derived from the rows that survived filtering.
+ */
+function resolveFamilyFacts(
+  threads: readonly PluginSidebarThread[],
+  facts: OrdinaryGroupFacts,
+): {
+  rootOf: ReadonlyMap<string, string>;
+  aggregateOf: ReadonlyMap<string, FamilyAggregate>;
+} {
+  if (facts.familyFacts !== undefined) return facts.familyFacts;
+  const { rootOf, aggregates } = familyAggregates(threads, facts);
+  return { rootOf, aggregateOf: aggregates };
 }
 
 function groupDefinition(
@@ -828,7 +900,7 @@ export function ordinaryFamilyGroupKeys(
     // crosses a visible heading because there is none.
     return new Map(threads.map((thread) => [thread.id, "__flat__"]));
   }
-  const { rootOf, aggregates } = familyAggregates(threads, facts);
+  const { rootOf, aggregateOf: aggregates } = resolveFamilyFacts(threads, facts);
   const keyOfRoot = new Map<string, string>();
   for (const [root, aggregate] of aggregates) {
     keyOfRoot.set(root, groupDefinition(view, aggregate, facts.now).key);
@@ -868,7 +940,7 @@ export function groupOrdinaryRows(
   }
 
   const complete = facts.members ?? rows.map((row) => row.thread);
-  const { rootOf, aggregates } = familyAggregates(complete, facts);
+  const { rootOf, aggregateOf: aggregates } = resolveFamilyFacts(complete, facts);
   interface GroupAccumulator {
     key: string;
     label: string;
@@ -901,8 +973,9 @@ export function groupOrdinaryRows(
 
   const sorted = [...groups.values()].sort((left, right) => {
     // "Most recent" floats the busiest group first; ties and the default keep
-    // the grouping's own canonical order.
-    if (view.sortGroupsBy === "updated") {
+    // the grouping's own canonical order. Status sections never reorder by
+    // time, so Unread always stays above Working.
+    if (view.sortGroupsBy === "updated" && view.groupBy !== "status") {
       const byTime = right.latestUpdatedAt - left.latestUpdatedAt;
       if (byTime !== 0) return byTime;
     }
@@ -925,7 +998,8 @@ export function flattenOrdinaryFamilies(
 ): DisplayRow[] {
   if (rows.length <= 1) return [...rows];
   const complete = facts.members ?? rows.map((row) => row.thread);
-  const familyFacts = ordinaryFamilyFacts(complete, facts);
+  const familyFacts =
+    facts.familyFacts ?? ordinaryFamilyFacts(complete, facts);
   const compare = familyAwareComparator(order, familyFacts);
   const chunks: DisplayRow[][] = [];
   for (const row of rows) {
@@ -952,32 +1026,41 @@ export function environmentFilterOptions(
 }
 
 /**
- * The native projects the loaded ordinary conversations belong to, in the
- * sidebar's own project order (the personal project reads as "Chats" there).
- * A project with no visible thread is never offered, and an unknown id falls
- * back to its own id as the label.
+ * The native projects offered by the switcher, in the sidebar's own project
+ * order (the personal project reads as "Chats" there). Every native project is
+ * listed, including one with no loaded thread, so an empty project stays
+ * selectable and its "No threads" state is reachable. Any id the persisted
+ * filter names but the project list no longer has is kept too, labelled by id,
+ * so a saved filter can always be cleared. `__no_project__` is listed only when
+ * the filter names it.
  */
 export function projectFilterOptions(
   threads: readonly PluginSidebarThread[],
   projects: readonly { id: string; name: string; isPersonal?: boolean }[],
+  selected: readonly string[] | null = null,
 ): ProjectIdentity[] {
+  const known = projects.map((project) => ({
+    id: project.id,
+    label: project.isPersonal === true ? "Chats" : project.name,
+  }));
   const present = new Set<string>();
   for (const thread of threads) {
     const id = projectKeyOf(thread);
     if (id !== NO_PROJECT_KEY) present.add(id);
   }
-  const known = projects
-    .filter((project) => present.has(project.id))
-    .map((project) => ({
-      id: project.id,
-      label: project.isPersonal === true ? "Chats" : project.name,
-    }));
+  for (const id of selected ?? []) {
+    if (id !== NO_PROJECT_KEY) present.add(id);
+  }
   const knownIds = new Set(known.map((project) => project.id));
   const unknown = [...present]
     .filter((id) => !knownIds.has(id))
     .sort((left, right) => left.localeCompare(right))
     .map((id) => ({ id, label: id }));
-  return [...known, ...unknown];
+  const noProject =
+    selected !== null && selected.includes(NO_PROJECT_KEY)
+      ? [{ id: NO_PROJECT_KEY, label: "No project" }]
+      : [];
+  return [...known, ...noProject, ...unknown];
 }
 
 /**

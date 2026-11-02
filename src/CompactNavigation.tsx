@@ -1,3 +1,4 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   useCallback,
   useEffect,
@@ -5,16 +6,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   experimental_Icon as Icon,
   experimental_SidebarNavigationIcon as SidebarNavigationIcon,
   experimental_useSidebarNavigation as useSidebarNavigation,
   type ExperimentalSidebarHeaderProps,
 } from "@get-bb/plugin-sdk/app";
-
-const MENU_MIN_WIDTH = 200;
-const MENU_GAP = 4;
+import { cn } from "@/lib/utils";
+import { usePortalScopeProps } from "@/lib/portal-scope";
+import { VIEW_MENU_CONTENT, VIEW_MENU_ITEM } from "./SidebarViewMenu";
 
 /**
  * BB's header row is `div[data-testid="app-sidebar-top-reserve-row"]`
@@ -24,7 +24,8 @@ const MENU_GAP = 4;
  */
 const HEADER_ROW_SELECTOR = '[data-testid$="sidebar-top-reserve-row"]';
 const COMPACT_NAV_MARKER = "data-cursor-sidebar-compact-nav-control";
-const COMPACT_NAV_ROOT_ATTRIBUTE = "data-cursor-sidebar-compact-nav";
+/** Marks the one row this header mounted in, never another sidebar's row. */
+const COMPACT_NAV_ROW_ATTRIBUTE = "data-cursor-sidebar-compact-nav-row";
 /** Same gap BB uses between its own header controls (--bb-chrome-control-gap). */
 const CONTROL_GAP = 4;
 
@@ -32,14 +33,6 @@ type HistoryLabel = "Go back" | "Go forward";
 
 const CONTROL_CLASS =
   "inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
-
-const ROW_CLASS =
-  "flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-left text-xs outline-none hover:bg-state-hover focus:bg-state-hover focus:text-foreground disabled:pointer-events-none disabled:opacity-50";
-
-interface MenuPosition {
-  top: number;
-  left: number;
-}
 
 interface HistoryState {
   available: boolean;
@@ -95,20 +88,17 @@ function isHistoryButtonDisabled(button: HTMLButtonElement): boolean {
   return button.disabled || button.getAttribute("aria-disabled") === "true";
 }
 
-/** Mount count so a re-mount (or StrictMode double effect) keeps the marker. */
-let compactNavMounts = 0;
+/** Mount count per header row so a re-mount (or StrictMode double effect) keeps the marker. */
+const compactNavRowMounts = new Map<HTMLElement, number>();
 
 export function CompactNavigationHeader({
   width,
   controlSize,
 }: ExperimentalSidebarHeaderProps) {
   const state = useSidebarNavigation();
-  const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState<MenuPosition | null>(null);
   const [history, setHistory] = useState<HistoryState>(EMPTY_HISTORY);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const scope = usePortalScopeProps();
 
   const newThreadItem = state.items.find(
     (item) => item.action.kind === "new-thread",
@@ -116,24 +106,6 @@ export function CompactNavigationHeader({
   const menuItems = state.items.filter(
     (item) => item.action.kind !== "new-thread",
   );
-
-  const close = useCallback(() => {
-    setIsOpen(false);
-    setPosition(null);
-  }, []);
-
-  const updatePosition = useCallback(() => {
-    const button = buttonRef.current;
-    if (button === null) return;
-    const rect = button.getBoundingClientRect();
-    setPosition({
-      top: rect.bottom + MENU_GAP,
-      left: Math.max(
-        8,
-        Math.min(rect.left, window.innerWidth - MENU_MIN_WIDTH - 8),
-      ),
-    });
-  }, []);
 
   const readHistory = useCallback((): HistoryState => {
     const root = rootRef.current;
@@ -176,59 +148,25 @@ export function CompactNavigationHeader({
     return () => observer.disconnect();
   }, [readHistory]);
 
-  // Hide BB's own back/forward only while this header is mounted; the proxies
-  // click the hidden buttons, which keeps BB's behaviour and shortcuts intact.
+  // Mark only the exact header row holding this component. Other sidebars
+  // (Settings, Plugins) keep their own history buttons, even while BB keeps
+  // the app sidebar mounted but hidden behind them.
   useEffect(() => {
-    compactNavMounts += 1;
-    document.documentElement.setAttribute(COMPACT_NAV_ROOT_ATTRIBUTE, "true");
+    const root = rootRef.current;
+    const row = root === null ? null : findHeaderRow(root);
+    if (row === null) return;
+    compactNavRowMounts.set(row, (compactNavRowMounts.get(row) ?? 0) + 1);
+    row.setAttribute(COMPACT_NAV_ROW_ATTRIBUTE, "");
     return () => {
-      compactNavMounts = Math.max(0, compactNavMounts - 1);
-      if (
-        compactNavMounts === 0 &&
-        document.documentElement.getAttribute(COMPACT_NAV_ROOT_ATTRIBUTE) ===
-          "true"
-      ) {
-        document.documentElement.removeAttribute(COMPACT_NAV_ROOT_ATTRIBUTE);
+      const remaining = (compactNavRowMounts.get(row) ?? 1) - 1;
+      if (remaining > 0) {
+        compactNavRowMounts.set(row, remaining);
+        return;
       }
+      compactNavRowMounts.delete(row);
+      row.removeAttribute(COMPACT_NAV_ROW_ATTRIBUTE);
     };
   }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (menuRef.current?.contains(target) === true) return;
-      if (buttonRef.current?.contains(target) === true) return;
-      close();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-      buttonRef.current?.focus();
-    };
-
-    updatePosition();
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    document.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("keydown", handleKeyDown, true);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [isOpen, close, updatePosition]);
-
-  const activate = (itemId: string) => {
-    close();
-    state.actions.activate(itemId, { target: "current" });
-  };
 
   const goHistory = (label: HistoryLabel) => {
     const root = rootRef.current;
@@ -296,67 +234,64 @@ export function CompactNavigationHeader({
       </button>
       <div aria-hidden="true" className="min-w-0 flex-1" />
       {showMenuButton ? (
-        <button
-          ref={buttonRef}
-          type="button"
-          aria-label="Navigation menu"
-          title="Navigation menu"
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          data-state={isOpen ? "open" : "closed"}
-          className={`${CONTROL_CLASS}${isOpen ? " bg-state-active text-foreground" : ""}`}
-          style={{ width: controlSize, height: controlSize }}
-          onClick={() => {
-            if (isOpen) {
-              close();
-            } else {
-              setIsOpen(true);
-            }
-          }}
-        >
-          <Icon name="MoreHorizontal" className="size-4" aria-hidden="true" />
-        </button>
-      ) : null}
-      {isOpen && position !== null
-        ? createPortal(
-            <div
-              ref={menuRef}
-              role="menu"
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
               aria-label="Navigation menu"
-              className="fixed z-50 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-              style={{
-                top: position.top,
-                left: position.left,
-                minWidth: MENU_MIN_WIDTH,
-              }}
+              title="Navigation menu"
+              className={cn(
+                CONTROL_CLASS,
+                "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
+              )}
+              style={{ width: controlSize, height: controlSize }}
+            >
+              <Icon name="MoreHorizontal" className="size-4" aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              {...scope}
+              align="end"
+              sideOffset={4}
+              collisionPadding={8}
+              aria-label="Navigation menu"
+              className={cn(
+                VIEW_MENU_CONTENT,
+                "min-w-48 max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto",
+              )}
             >
               {state.isHomeActive ? null : (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={ROW_CLASS}
-                  onClick={() => {
-                    close();
-                    state.actions.goHome();
-                  }}
+                <DropdownMenu.Item
+                  className={VIEW_MENU_ITEM}
+                  onSelect={() => state.actions.goHome()}
                 >
-                  <Icon name="Home" className="size-4 shrink-0" aria-hidden="true" />
+                  <Icon
+                    name="Home"
+                    className="size-4 shrink-0 text-muted-foreground/70"
+                    aria-hidden="true"
+                  />
                   <span className="min-w-0 flex-1 truncate">Back to threads</span>
-                </button>
+                </DropdownMenu.Item>
               )}
               {menuItems.map((item) => {
                 const isActive = item.id === state.activeItemId;
                 return (
-                  <button
+                  <DropdownMenu.Item
                     key={item.id}
-                    type="button"
-                    role="menuitem"
                     disabled={item.isDisabled || item.isLoading}
                     aria-busy={item.isLoading || undefined}
                     aria-keyshortcuts={item.shortcut?.ariaKeyShortcuts}
                     aria-current={isActive ? "page" : undefined}
-                    className={`${ROW_CLASS}${isActive ? " bg-state-active text-foreground" : ""}`}
-                    onClick={() => activate(item.id)}
+                    className={cn(
+                      VIEW_MENU_ITEM,
+                      isActive && "bg-state-active text-foreground",
+                    )}
+                    // Activation stays synchronous: the host requires the
+                    // select event's user gesture to open a panel or tab.
+                    onSelect={() =>
+                      state.actions.activate(item.id, { target: "current" })
+                    }
                   >
                     <SidebarNavigationIcon
                       icon={item.icon}
@@ -368,30 +303,25 @@ export function CompactNavigationHeader({
                         {item.shortcut.label}
                       </span>
                     )}
-                  </button>
+                  </DropdownMenu.Item>
                 );
               })}
-              <div role="separator" className="-mx-1 my-1 h-px bg-muted" />
-              <button
-                type="button"
-                role="menuitem"
-                className={ROW_CLASS}
-                onClick={() => {
-                  close();
-                  state.actions.openCustomize();
-                }}
+              <DropdownMenu.Separator className="-mx-1 my-1 h-px bg-muted" />
+              <DropdownMenu.Item
+                className={VIEW_MENU_ITEM}
+                onSelect={() => state.actions.openCustomize()}
               >
                 <Icon
                   name="SlidersHorizontal"
-                  className="size-4 shrink-0"
+                  className="size-4 shrink-0 text-muted-foreground/70"
                   aria-hidden="true"
                 />
                 <span className="min-w-0 flex-1 truncate">Customize…</span>
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      ) : null}
     </div>
   );
 }

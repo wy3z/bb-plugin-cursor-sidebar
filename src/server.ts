@@ -59,8 +59,10 @@ const migrations = [
 
 const scopeSchema = z.string().trim().min(1).max(400);
 
-// The overlay only guarantees a non-empty string; glyph names are validated in
-// the app against the icon registry, never by importing React code here.
+// The overlay only guarantees a non-empty string; glyph, emoji and monogram
+// payloads are validated in the app against the icon registry and palette,
+// never by importing React code here. 200 chars fits the longest encoded
+// form (`glyph:<Name>:<color>` plus headroom) well under the image cap.
 const projectIconRowSchema = z.object({
   projectId: z.string(),
   icon: z.string(),
@@ -70,7 +72,7 @@ const projectIconRowSchema = z.object({
 // 64px before sending, so the cap is generous headroom, not a working size.
 const PROJECT_ICON_IMAGE_PREFIX = "data:image/png;base64,";
 const projectIconSchema = z.union([
-  z.string().trim().min(1).max(100),
+  z.string().trim().min(1).max(200),
   z
     .string()
     .max(256 * 1024)
@@ -98,6 +100,12 @@ const sidebarViewSchema = z
     sortConversationsBy: viewConversationOrderSchema,
     sortGroupsBy: viewGroupOrderSchema,
     sortProjectsBy: viewProjectOrderSchema.default("manual"),
+    // Absent on a view written before the setting existed: the default page of
+    // 10, never a validation failure. `null` is "All".
+    threadsPerGroup: z
+      .union([z.literal(5), z.literal(10), z.literal(20), z.literal(50)])
+      .nullable()
+      .default(10),
     statusFilter: z.array(viewStatusFilterSchema).max(5),
     // Absent on a view written before the age filter existed: the default is
     // every bucket, never a validation failure.
@@ -106,7 +114,13 @@ const sidebarViewSchema = z
       .max(5)
       .default(["Today", "Yesterday", "Last 7 days", "Last 30 days", "Older"]),
     environmentFilter: z.array(z.string().trim().min(1).max(200)).max(200).nullable(),
-    projectFilter: z.array(z.string().trim().min(1).max(200)).max(200).nullable(),
+    // Absent on a view written before the project filter existed; a missing
+    // list is "every project", never a validation failure.
+    projectFilter: z
+      .array(z.string().trim().min(1).max(200))
+      .max(200)
+      .nullable()
+      .default(null),
     show: z.object({
       updated: z.boolean(),
       environment: z.boolean(),

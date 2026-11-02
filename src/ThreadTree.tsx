@@ -25,9 +25,12 @@ import {
 import {
   flattenOrdinaryFamilies,
   groupOrdinaryRows,
+  NO_PROJECT_KEY,
   ordinaryThreadStatus,
   projectKeyOf,
+  threadsPerGroupPage,
   usableEnvironmentLabel,
+  type OrdinaryFamilyFacts,
   type OrdinaryGroup,
 } from "./sidebar-view";
 import type { SidebarView } from "./server";
@@ -50,8 +53,6 @@ import {
 } from "./StatusSlot";
 import { hasStatusGlyph } from "./StatusGlyph";
 import {
-  CONVERSATION_PAGE_SIZE,
-  DEFAULT_INACTIVE_CONVERSATIONS,
   pageGroupRows,
 } from "./conversations";
 import { ShowMoreButton } from "./ShowMoreButton";
@@ -61,6 +62,12 @@ import { resolveRowStatus, type ThreadStatusKind } from "./status";
 /** Everything a row needs that is the same for every row in a section. */
 export interface TreeContext {
   visibleById: ReadonlyMap<string, PluginSidebarThread>;
+  /**
+   * Family aggregates over the complete unfiltered set. Grouping, headings and
+   * ordering read these so a hidden descendant cannot change its family's
+   * Updated bucket or Status group.
+   */
+  familyFacts: OrdinaryFamilyFacts;
   descendantsById: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   activeThreadId: string | null;
   expandedParents: ReadonlySet<string>;
@@ -133,6 +140,8 @@ export interface TreeContext {
   projectLabelFor: (projectId: string) => string | null;
   /** The personal "Chats" project id, whose rows draw a chat glyph instead. */
   personalProjectId: string | null;
+  /** Open the one project-icon dialog for a native project, after any menu closes. */
+  openIconPicker: (projectId: string, anchor?: HTMLElement | null) => void;
   /**
    * Strongest status over a row's rendered subtree, or undefined. Drawn when
    * the native indicator is silent.
@@ -359,12 +368,15 @@ export function ShelfList({
   grouped: boolean;
 }) {
   const [childPages, setChildPages] = useState<ReadonlyMap<string, number>>(() => new Map());
+  // One page of child threads under a parent. "All" is no limit, so no child
+  // "Show more" appears at any depth.
+  const pageSize = threadsPerGroupPage(ctx.view.threadsPerGroup);
   const childLimitOf = useCallback(
     (threadId: string) => {
       if (expandIds !== undefined && expandIds.has(threadId)) return Number.POSITIVE_INFINITY;
-      return childPages.get(threadId) ?? DEFAULT_INACTIVE_CONVERSATIONS;
+      return childPages.get(threadId) ?? pageSize;
     },
-    [childPages, expandIds],
+    [childPages, expandIds, pageSize],
   );
   const rows = useMemo(
     () =>
@@ -434,13 +446,10 @@ export function ShelfList({
   const bumpChildPage = useCallback((parentId: string) => {
     setChildPages((current) => {
       const next = new Map(current);
-      next.set(
-        parentId,
-        (next.get(parentId) ?? DEFAULT_INACTIVE_CONVERSATIONS) + CONVERSATION_PAGE_SIZE,
-      );
+      next.set(parentId, (next.get(parentId) ?? pageSize) + pageSize);
       return next;
     });
-  }, []);
+  }, [pageSize]);
   const renderThreadRows = (
     list: readonly DisplayRow[],
     options: {
@@ -489,8 +498,9 @@ export function ShelfList({
             <li className="relative list-none">
               <ShowMoreButton
                 hiddenConversations={more.remaining}
+                pageSize={pageSize}
                 onShowMore={() => bumpChildPage(more.parentId)}
-                ariaLabel={`Show ${Math.min(CONVERSATION_PAGE_SIZE, more.remaining)} more child threads`}
+                ariaLabel={`Show ${Math.min(pageSize, more.remaining)} more child threads`}
               />
             </li>
           ) : null}
@@ -541,6 +551,7 @@ export function ShelfList({
               parentOf,
               statusOf: ordinaryThreadStatus,
               members: section.members,
+              familyFacts: ctx.familyFacts,
             },
           )
         : partition.dated;
@@ -549,9 +560,18 @@ export function ShelfList({
       parentOf,
       statusOf: ordinaryThreadStatus,
       members: section.members,
+      familyFacts: ctx.familyFacts,
     });
-  }, [partition, rows, grouping, ctx.now, ctx.view, parentOf, shelf, section.members, section.personal]);
+  }, [partition, rows, grouping, ctx.now, ctx.view, parentOf, shelf, section.members, section.personal, ctx.familyFacts]);
   const [groupPages, setGroupPages] = useState<ReadonlyMap<string, number>>(() => new Map());
+  // A new page size drops every reveal in the same render, so the new limit is
+  // what the list paints, not the old one's leftovers.
+  const [lastPageSize, setLastPageSize] = useState(pageSize);
+  if (lastPageSize !== pageSize) {
+    setLastPageSize(pageSize);
+    setGroupPages(new Map());
+    setChildPages(new Map());
+  }
   useEffect(() => {
     setGroupPages(new Map());
     setChildPages(new Map());
@@ -594,7 +614,7 @@ export function ShelfList({
         ? { shown: group.rows, hiddenConversations: 0 }
         : pageGroupRows(group.rows, parentOf, {
             activeThreadId: ctx.activeThreadId,
-            limit: groupPages.get(group.key) ?? DEFAULT_INACTIVE_CONVERSATIONS,
+            limit: groupPages.get(group.key) ?? pageSize,
           });
     return (
       <div key={group.key} className={group.label ? "mt-2 first:mt-0" : undefined}>
@@ -626,13 +646,13 @@ export function ShelfList({
             {paged.hiddenConversations > 0 ? (
               <ShowMoreButton
                 hiddenConversations={paged.hiddenConversations}
+                pageSize={pageSize}
                 onShowMore={() => {
                   setGroupPages((current) => {
                     const next = new Map(current);
                     next.set(
                       group.key,
-                      (next.get(group.key) ?? DEFAULT_INACTIVE_CONVERSATIONS) +
-                        CONVERSATION_PAGE_SIZE,
+                      (next.get(group.key) ?? pageSize) + pageSize,
                     );
                     return next;
                   });
@@ -837,6 +857,10 @@ function ThreadRow({
   const projectId = projectKeyOf(thread);
   const chatProject =
     ctx.personalProjectId !== null && projectId === ctx.personalProjectId;
+  // The row can set an icon only for a real project: not the personal "Chats"
+  // home and not a thread with no project at all.
+  const iconProjectId =
+    chatProject || projectId === NO_PROJECT_KEY ? null : projectId;
   const projectLabel = chatProject
     ? "Chats"
     : ctx.projectLabelFor(projectId) ?? "No project";
@@ -915,6 +939,16 @@ function ThreadRow({
         onTogglePin={pinnedCapable ? () => ctx.onTogglePin(thread.id, !rowPinned) : undefined}
         isPinned={rowPinned}
         onRemoveFromFolder={inFolderId !== null ? () => ctx.onRemoveFromFolder(thread.id) : undefined}
+        onSetProjectIcon={
+          iconProjectId === null
+            ? undefined
+            : () => {
+                const anchor = document.querySelector<HTMLElement>(
+                  `[data-thread-focus-id="${CSS.escape(thread.id)}"]`,
+                );
+                ctx.openIconPicker(iconProjectId, anchor);
+              }
+        }
         onRename={() => setIsRenaming(true)}
         onOpen={() => ctx.onNavigate()}
         onArchive={archiveThread}

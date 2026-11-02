@@ -18,6 +18,7 @@ export function RowContextMenu({
   onRemoveFromFolder,
   swipeDisabled,
   onReorderStart,
+  onSetProjectIcon,
   children,
 }: {
   thread: PluginSidebarThread;
@@ -31,6 +32,8 @@ export function RowContextMenu({
   onTogglePin?: () => void;
   isPinned?: boolean;
   onRemoveFromFolder?: () => void;
+  /** Set the icon of the native project this thread belongs to, when it has one. */
+  onSetProjectIcon?: () => void;
   swipeDisabled?: boolean;
   /** Touch long-press pick-up for a reorder drag; true means it took over. */
   onReorderStart?: (pointerId: number, clientX: number, clientY: number) => boolean;
@@ -52,6 +55,7 @@ export function RowContextMenu({
     items.push({ label: pinActionLabel(isPinned ?? false), run: onTogglePin });
   }
   if (onRemoveFromFolder) items.push({ label: "Remove family from folder", run: onRemoveFromFolder });
+  if (onSetProjectIcon) items.push({ label: "Set project icon…", run: onSetProjectIcon, separatorBefore: true });
   items.push({ label: "Archive", run: onArchive, separatorBefore: true });
   // Deleting without bb's confirmation is never an option, so the entry only
   // exists while bb contributes the action that owns it.

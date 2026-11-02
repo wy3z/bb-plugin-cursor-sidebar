@@ -14,9 +14,6 @@ import { familyRootId } from "./standalone-groups";
  * "N more conversations", and the full native tree stays available when
  * expanded.
  */
-export const CONVERSATION_PAGE_SIZE = 10;
-export const DEFAULT_INACTIVE_CONVERSATIONS = CONVERSATION_PAGE_SIZE;
-
 export interface ConversationPlan {
   /** Members to render for the current reveal state. */
   visible: ReadonlySet<string>;
@@ -26,8 +23,11 @@ export interface ConversationPlan {
 
 export interface ConversationPlanOptions {
   activeThreadId: string | null;
-  /** Inactive conversations previewed before the reveal control. */
-  limit?: number;
+  /**
+   * Inactive conversations previewed before the reveal control: the view's
+   * "Threads per group" page. `Number.POSITIVE_INFINITY` is "All".
+   */
+  limit: number;
 }
 
 /**
@@ -40,7 +40,7 @@ export function planConversations(
   section: ProjectSectionData,
   options: ConversationPlanOptions,
 ): ConversationPlan {
-  const limit = options.limit ?? DEFAULT_INACTIVE_CONVERSATIONS;
+  const limit = options.limit;
   const memberIds = new Set(section.members.map((thread) => thread.id));
   const byId = new Map(section.members.map((thread) => [thread.id, thread]));
   const parentOf = (threadId: string): string | null => {
@@ -114,7 +114,7 @@ export function pageGroupRows(
   options: ConversationPlanOptions,
 ): { shown: DisplayRow[]; hiddenConversations: number } {
   if (rows.length === 0) return { shown: [], hiddenConversations: 0 };
-  const limit = options.limit ?? DEFAULT_INACTIVE_CONVERSATIONS;
+  const limit = options.limit;
   const ids = new Set(rows.map((row) => row.thread.id));
   const boundedParentOf = (threadId: string): string | null => {
     const parent = parentOf(threadId);

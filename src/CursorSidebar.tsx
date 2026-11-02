@@ -44,11 +44,7 @@ import {
   type ThreadStatusKind,
 } from "./status";
 import { pinAllowed, planPinWrites } from "./pin-scope";
-import {
-  CONVERSATION_PAGE_SIZE,
-  DEFAULT_INACTIVE_CONVERSATIONS,
-  planConversations,
-} from "./conversations";
+import { planConversations } from "./conversations";
 import { useWorkspaces } from "./useWorkspaces";
 import { useWorkspaceNesting } from "./workspace-tabs";
 import { usePrimaryHost } from "./usePrimaryHost";
@@ -89,6 +85,7 @@ import {
   NO_ENVIRONMENT_KEY,
   projectFilterOptions,
   projectKeyOf,
+  threadsPerGroupPage,
   unreadOrdinaryThreadIds,
 } from "./sidebar-view";
 import { DeleteFolderDialog, FolderNameDialog } from "./FolderDialogs";
@@ -134,7 +131,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     [nativeProjects],
   );
   const projects = useMemo(
-    () => [...nativeProjectSections, { id: STANDALONE, name: "Chats", isPersonal: true }],
+    () => [...nativeProjectSections, { id: STANDALONE, name: "Threads", isPersonal: true }],
     [nativeProjectSections],
   );
   const nativeProjectedThreads = useMemo(() => projectThreadView(rawThreads, nativeProjects), [rawThreads, nativeProjects]);
@@ -240,7 +237,35 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState<{ id: string; name: string; chats: number } | null>(null);
-  const [iconPicker, setIconPicker] = useState<{ projectId: string; name: string; anchor: HTMLElement } | null>(null);
+  const [iconPicker, setIconPicker] = useState<{ projectId: string; name: string; anchor: HTMLElement | null } | null>(null);
+  const iconPickerFrame = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (iconPickerFrame.current !== null) cancelAnimationFrame(iconPickerFrame.current);
+    },
+    [],
+  );
+  // One dialog for every entry point: a heading, a thread row or the switcher.
+  // The open is deferred a frame so the menu that asked for it has finished
+  // closing (and restoring focus) before the dialog claims focus for itself.
+  const openIconPicker = useCallback(
+    (projectId: string, anchor?: HTMLElement | null) => {
+      if (iconPickerFrame.current !== null) cancelAnimationFrame(iconPickerFrame.current);
+      const explicit = anchor ?? null;
+      iconPickerFrame.current = requestAnimationFrame(() => {
+        iconPickerFrame.current = null;
+        const restore =
+          explicit ??
+          (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+        setIconPicker({
+          projectId,
+          name: projectLabelById.get(projectId) ?? "",
+          anchor: restore,
+        });
+      });
+    },
+    [projectLabelById],
+  );
 
   const [announcement, setAnnouncement] = useState("");
   const [markReadBusy, setMarkReadBusy] = useState(false);
@@ -273,6 +298,17 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     }
     return map;
   }, [visible]);
+  // One set of family aggregates for the complete loaded set, reused by the
+  // age filter, the Updated headings, the Status groups and the conversation
+  // order. Filtering out a descendant can never move its family elsewhere.
+  const familyFacts = useMemo(
+    () =>
+      ordinaryFamilyFacts(visible, {
+        parentOf: homeDisplayParentOf(visible),
+        statusOf: ordinaryThreadStatus,
+      }),
+    [visible],
+  );
 
   // Defined after the section memos; the drag commit reads it at drop time.
   const commitFolderPinDropRef = useRef<(movingId: string, moveToSection: string | null | undefined, pin: boolean | undefined) => Promise<void>>(async () => {});
@@ -431,7 +467,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () =>
       orderedProjects.map((project) => ({
         id: project.id,
-        name: project.isPersonal ? "Chats" : project.name,
+        name: project.isPersonal ? "Threads" : project.name,
         isPersonal: project.isPersonal,
       })),
     [orderedProjects],
@@ -445,12 +481,13 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () =>
       filterOrdinaryThreads(visible, view, {
         now,
+        familyFacts,
         bypass: (thread) => {
           const root = familyRootOfId(thread.id);
           return pinnedFamilyRoots.has(root) || root === activeFamilyRoot;
         },
       }),
-    [activeFamilyRoot, familyRootOfId, now, pinnedFamilyRoots, visible, view],
+    [activeFamilyRoot, familyFacts, familyRootOfId, now, pinnedFamilyRoots, visible, view],
   );
   const viewEnvironmentOptions = useMemo(
     () => environmentFilterOptions(visible),
@@ -464,8 +501,8 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     [visible],
   );
   const viewProjectOptions = useMemo(
-    () => projectFilterOptions(visible, nativeProjects),
-    [nativeProjects, visible],
+    () => projectFilterOptions(visible, nativeProjects, view.projectFilter),
+    [nativeProjects, visible, view.projectFilter],
   );
   const unreadOrdinary = useMemo(
     () => unreadOrdinaryThreadIds(visible),
@@ -473,14 +510,14 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   );
   // Automatic ordering reads the same family facts the grouping shows, so a
   // family sorts by the activity its divider shows. Facts come from the complete
-  // visible set with same-home display parents, before any fold or preview.
-  const siblingOrdering = useMemo<SiblingOrdering>(() => {
-    const facts = ordinaryFamilyFacts(viewVisible, {
-      parentOf: homeDisplayParentOf(viewVisible),
-      statusOf: ordinaryThreadStatus,
-    });
-    return { compare: familyAwareComparator(view.sortConversationsBy, facts) };
-  }, [view.sortConversationsBy, viewVisible]);
+  // visible set with same-home display parents, before any filter, fold or
+  // preview.
+  const siblingOrdering = useMemo<SiblingOrdering>(
+    () => ({
+      compare: familyAwareComparator(view.sortConversationsBy, familyFacts),
+    }),
+    [familyFacts, view.sortConversationsBy],
+  );
   // Conversations always take the selected automatic order; only projects and
   // folders keep a manual arrangement.
   const orderingFor = useCallback(
@@ -743,6 +780,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             now,
             parentOf: (id) => commitSection.forest.parent.get(id) ?? null,
             statusOf: ordinaryThreadStatus,
+            familyFacts,
           });
       const groupKeyOf = memberById === null || groupKeys === null ? null : (threadId: string): string => {
         return standaloneGroupKey({
@@ -761,7 +799,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         .map((row) => row.thread.id);
       return { commitSection, scope, ids };
     },
-    [expandedParents, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
+    [expandedParents, familyFacts, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
   );
 
   const onThreadDragStart = useCallback(
@@ -829,6 +867,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         now,
         parentOf: (id) => keyScope.forest.parent.get(id) ?? null,
         statusOf: ordinaryThreadStatus,
+        familyFacts,
       });
       const key = keys.get(activeThreadId) ?? null;
       if (key !== null && view.groupBy === "updated") {
@@ -844,7 +883,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       shelf: section.shelfById.get(activeThreadId) ?? "active",
       ancestors,
     };
-  }, [activeThreadId, now, projectsGrouping, sectionByThreadId, sectionsById, view]);
+  }, [activeThreadId, familyFacts, now, projectsGrouping, sectionByThreadId, sectionsById, view]);
 
   // Reveal once per navigation (and once when the store finishes loading).
   // Pending is tracked separately: if data has not arrived, the request stays
@@ -927,6 +966,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       workspacePaths,
       primaryHostId,
       visibleById,
+      familyFacts,
       descendantsById,
       activeThreadId,
       expandedParents,
@@ -970,6 +1010,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       projectIconFor: (projectId: string) => projectIcons.iconFor(projectId),
       projectLabelFor: (projectId: string) => projectLabelById.get(projectId) ?? null,
       personalProjectId,
+      openIconPicker,
       statusOf: (threadId: string) => {
         const thread = visibleById.get(threadId);
         if (thread === undefined) return undefined;
@@ -991,6 +1032,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       drag.consumeSuppressedClick,
       drag.state,
       expandedParents,
+      familyFacts,
       folderStore.sections,
       now,
       onNavigate,
@@ -1003,6 +1045,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       personalProjectId,
       projectIcons,
       projectLabelById,
+      openIconPicker,
     ],
   );
 
@@ -1062,9 +1105,10 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
           now,
           folderIds: knownFolderIds,
           statusOf: ordinaryThreadStatus,
+          familyFacts,
         },
       ),
-    [collapseSections, knownFolderIds, now, view],
+    [collapseSections, familyFacts, knownFolderIds, now, view],
   );
   const expandAll = useCallback(() => {
     topGroupCollapsed.removeMany(bulkTopGroupKeys);
@@ -1120,6 +1164,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     view.projectFilter !== null && view.projectFilter.length === 1
       ? view.projectFilter[0]!
       : null;
+  // An empty project picked in the switcher says "No threads" rather than
+  // blaming the current filters for hiding every row.
+  const selectedProjectEmpty =
+    selectedProjectId !== null &&
+    !visible.some((thread) => projectKeyOf(thread) === selectedProjectId);
   const sectionHasVisibleThreads = (section: ProjectSectionData): boolean =>
     section.byShelf.active.some(
       (thread) => !pinnedFamilyRoots.has(familyRootOfId(thread.id)),
@@ -1242,7 +1291,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         icon={nativeId !== null ? projectIcons.iconFor(nativeId) : null}
         onSetIcon={
           kind === "project" && nativeId !== null
-            ? (anchor) => setIconPicker({ projectId: nativeId, name: section.name, anchor })
+            ? (anchor) => openIconPicker(nativeId, anchor)
             : undefined
         }
         onDeleteProject={
@@ -1296,6 +1345,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             onSelect={(projectId) =>
               sidebarView.update({ projectFilter: projectId === null ? null : [projectId] })
             }
+            onSetIcon={
+              selectedProjectId !== null && selectedProjectId !== personalProjectId
+                ? (anchor) => openIconPicker(selectedProjectId, anchor)
+                : undefined
+            }
             onNewProject={(trigger) => {
               if (!openHostAddProject(trigger)) toast.error("Couldn't open Add project.");
             }}
@@ -1347,8 +1401,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             onPick={(icon) => {
               if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
               setIconPicker(null);
-            }}
-          />
+            }}          />
           <AnimatedList
             as="div"
             key={view.groupBy}
@@ -1397,9 +1450,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 list still says why, rather than going blank. */}
             {nothingToShow ? (
               <p className="px-3 py-2 text-xs text-sidebar-foreground/73">
-                {viewHasActiveFilters(view)
-                  ? "No threads match the current filters."
-                  : "No threads"}
+                {selectedProjectEmpty
+                  ? "No threads"
+                  : viewHasActiveFilters(view)
+                    ? "No threads match the current filters."
+                    : "No threads"}
               </p>
             ) : null}
           </AnimatedList>
@@ -1474,7 +1529,10 @@ function ProjectSection({
   onHeadingDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const headingRef = useRef<HTMLDivElement>(null);
-  const [inactiveLimit, setInactiveLimit] = useState(DEFAULT_INACTIVE_CONVERSATIONS);
+  // The project previews one page of its inactive conversations. "All" is no
+  // limit, so the reveal control never appears.
+  const pageSize = threadsPerGroupPage(ctx.view.threadsPerGroup);
+  const [inactiveLimit, setInactiveLimit] = useState(pageSize);
   const conversationPlan = useMemo(
     () =>
       planConversations(section, {
@@ -1484,11 +1542,18 @@ function ProjectSection({
     [ctx.activeThreadId, inactiveLimit, section],
   );
   const revealedConversations = conversationPlan.visible;
+  // A new page size applies in the same render: resetting in an effect would
+  // paint one frame of the old limit's extra rows first.
+  const [lastPageSize, setLastPageSize] = useState(pageSize);
+  if (lastPageSize !== pageSize) {
+    setLastPageSize(pageSize);
+    setInactiveLimit(pageSize);
+  }
   // Collapsing a native project returns it to the first page, so reopening it
   // never silently dumps every historical conversation.
   useEffect(() => {
-    if (!sectionOpen) setInactiveLimit(DEFAULT_INACTIVE_CONVERSATIONS);
-  }, [sectionOpen]);
+    if (!sectionOpen) setInactiveLimit(pageSize);
+  }, [pageSize, sectionOpen]);
   // Minimal selected ancestor path, render-only: force-open collapsed
   // ancestors so the active row stays reachable without touching the stored
   // expansion preference.
@@ -1517,7 +1582,8 @@ function ProjectSection({
   const showMore = (
     <ShowMoreButton
       hiddenConversations={conversationPlan.hiddenConversations}
-      onShowMore={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
+      pageSize={pageSize}
+      onShowMore={() => setInactiveLimit((current) => current + pageSize)}
     />
   );
 
@@ -1588,6 +1654,7 @@ function ProjectSection({
       ]}>
       <div
         ref={headingRef}
+        tabIndex={-1}
         data-reorder-id={canDragProject ? section.id : undefined}
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
@@ -1597,6 +1664,8 @@ function ProjectSection({
           sectionOpen && "mb-1",
         )}
       >
+        {/* Threads without a project read as a plain heading: no glyph slot. */}
+        {section.personal ? null : (
         <span className="cs-status-slot relative flex w-4 shrink-0 items-center justify-center">
           <span className="flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
             <ProjectStatusGlyph
@@ -1630,6 +1699,7 @@ function ProjectSection({
             />
           </button>
         </span>
+        )}
         <button
           type="button"
           title={section.name}
@@ -1645,6 +1715,16 @@ function ProjectSection({
               <span className="text-sidebar-foreground/73"> (unknown)</span>
             )}
           </span>
+          {section.personal ? (
+            <Icon
+              name="ChevronRight"
+              aria-hidden="true"
+              className={cn(
+                "ml-1 size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
+                sectionOpen && "rotate-90",
+              )}
+            />
+          ) : null}
         </button>
       </div>
 

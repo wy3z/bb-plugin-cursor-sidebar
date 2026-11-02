@@ -382,15 +382,61 @@
 
 /*
  * Compact navigation proxies BB's own history buttons, so BB's copies are
- * hidden while that header is mounted. Scoped to the sidebar header row
- * (data-testid ending in "sidebar-top-reserve-row") so other "Go back" buttons
- * in the app are untouched. The hidden buttons still receive .click().
+ * hidden only inside the exact header row this plugin's header mounted in.
+ * The row is marked by CompactNavigationHeader, never globally, so Settings
+ * and other sidebars — app sidebar hidden behind them or not — keep their own
+ * back/forward buttons. The hidden buttons still receive .click().
  */
-html[data-cursor-sidebar-compact-nav="true"]
-  [data-testid$="sidebar-top-reserve-row"]
+[data-cursor-sidebar-compact-nav-row]
   button[aria-label="Go back"]:not([data-cursor-sidebar-compact-nav-control]),
-html[data-cursor-sidebar-compact-nav="true"]
-  [data-testid$="sidebar-top-reserve-row"]
+[data-cursor-sidebar-compact-nav-row]
   button[aria-label="Go forward"]:not([data-cursor-sidebar-compact-nav-control]) {
   display: none !important;
 }
+
+/*
+ * Project-icon colours, ported from T3 Code's projectIconColors.ts.
+ * `color` is the glyph/monogram ink (600 in light, 400 in dark);
+ * `--cs-pi-swatch` is the picker's 500-weight dot. BB marks dark mode with
+ * `html.dark`, which Tailwind's default `dark:` variant (prefers-color-scheme)
+ * does not follow, so the switch is a plain descendant rule.
+ */
+.cs-pi-gray { --cs-pi-fg: oklch(44.6% 0.03 256.802); --cs-pi-swatch: oklch(55.1% 0.027 264.364); color: var(--cs-pi-fg); }
+.cs-pi-red { --cs-pi-fg: oklch(57.7% 0.245 27.325); --cs-pi-swatch: oklch(63.7% 0.237 25.331); color: var(--cs-pi-fg); }
+.cs-pi-orange { --cs-pi-fg: oklch(64.6% 0.222 41.116); --cs-pi-swatch: oklch(70.5% 0.213 47.604); color: var(--cs-pi-fg); }
+.cs-pi-amber { --cs-pi-fg: oklch(66.6% 0.179 58.318); --cs-pi-swatch: oklch(76.9% 0.188 70.08); color: var(--cs-pi-fg); }
+.cs-pi-yellow { --cs-pi-fg: oklch(68.1% 0.162 75.834); --cs-pi-swatch: oklch(79.5% 0.184 86.047); color: var(--cs-pi-fg); }
+.cs-pi-lime { --cs-pi-fg: oklch(64.8% 0.2 131.684); --cs-pi-swatch: oklch(76.8% 0.233 130.85); color: var(--cs-pi-fg); }
+.cs-pi-green { --cs-pi-fg: oklch(62.7% 0.194 149.214); --cs-pi-swatch: oklch(72.3% 0.219 149.579); color: var(--cs-pi-fg); }
+.cs-pi-emerald { --cs-pi-fg: oklch(59.6% 0.145 163.225); --cs-pi-swatch: oklch(69.6% 0.17 162.48); color: var(--cs-pi-fg); }
+.cs-pi-teal { --cs-pi-fg: oklch(60% 0.118 184.704); --cs-pi-swatch: oklch(70.4% 0.14 182.503); color: var(--cs-pi-fg); }
+.cs-pi-cyan { --cs-pi-fg: oklch(60.9% 0.126 221.723); --cs-pi-swatch: oklch(71.5% 0.143 215.221); color: var(--cs-pi-fg); }
+.cs-pi-sky { --cs-pi-fg: oklch(58.8% 0.158 241.966); --cs-pi-swatch: oklch(68.5% 0.169 237.323); color: var(--cs-pi-fg); }
+.cs-pi-blue { --cs-pi-fg: oklch(54.6% 0.245 262.881); --cs-pi-swatch: oklch(62.3% 0.214 259.815); color: var(--cs-pi-fg); }
+.cs-pi-indigo { --cs-pi-fg: oklch(51.1% 0.262 276.966); --cs-pi-swatch: oklch(58.5% 0.233 277.117); color: var(--cs-pi-fg); }
+.cs-pi-violet { --cs-pi-fg: oklch(54.1% 0.281 293.009); --cs-pi-swatch: oklch(60.6% 0.25 292.717); color: var(--cs-pi-fg); }
+.cs-pi-purple { --cs-pi-fg: oklch(55.8% 0.288 302.321); --cs-pi-swatch: oklch(62.7% 0.265 303.9); color: var(--cs-pi-fg); }
+.cs-pi-fuchsia { --cs-pi-fg: oklch(59.1% 0.293 322.896); --cs-pi-swatch: oklch(66.7% 0.295 322.15); color: var(--cs-pi-fg); }
+.cs-pi-pink { --cs-pi-fg: oklch(59.2% 0.249 0.584); --cs-pi-swatch: oklch(65.6% 0.241 354.308); color: var(--cs-pi-fg); }
+.cs-pi-rose { --cs-pi-fg: oklch(58.6% 0.253 17.585); --cs-pi-swatch: oklch(64.5% 0.246 16.439); color: var(--cs-pi-fg); }
+
+html.dark .cs-pi-gray { --cs-pi-fg: oklch(70.7% 0.022 261.325); }
+html.dark .cs-pi-red { --cs-pi-fg: oklch(70.4% 0.191 22.216); }
+html.dark .cs-pi-orange { --cs-pi-fg: oklch(75% 0.183 55.934); }
+html.dark .cs-pi-amber { --cs-pi-fg: oklch(82.8% 0.189 84.429); }
+html.dark .cs-pi-yellow { --cs-pi-fg: oklch(85.2% 0.199 91.936); }
+html.dark .cs-pi-lime { --cs-pi-fg: oklch(84.1% 0.238 128.85); }
+html.dark .cs-pi-green { --cs-pi-fg: oklch(79.2% 0.209 151.711); }
+html.dark .cs-pi-emerald { --cs-pi-fg: oklch(76.5% 0.177 163.223); }
+html.dark .cs-pi-teal { --cs-pi-fg: oklch(77.7% 0.152 181.912); }
+html.dark .cs-pi-cyan { --cs-pi-fg: oklch(78.9% 0.154 211.53); }
+html.dark .cs-pi-sky { --cs-pi-fg: oklch(74.6% 0.16 232.661); }
+html.dark .cs-pi-blue { --cs-pi-fg: oklch(70.7% 0.165 254.624); }
+html.dark .cs-pi-indigo { --cs-pi-fg: oklch(67.3% 0.182 276.935); }
+html.dark .cs-pi-violet { --cs-pi-fg: oklch(70.2% 0.183 293.541); }
+html.dark .cs-pi-purple { --cs-pi-fg: oklch(71.4% 0.203 305.504); }
+html.dark .cs-pi-fuchsia { --cs-pi-fg: oklch(74% 0.238 322.16); }
+html.dark .cs-pi-pink { --cs-pi-fg: oklch(71.8% 0.202 349.761); }
+html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
+
+.cs-pi-swatch { background-color: var(--cs-pi-swatch); }
