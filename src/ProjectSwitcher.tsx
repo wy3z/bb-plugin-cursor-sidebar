@@ -179,8 +179,10 @@ export function ProjectSwitcher({
               {onNewProject !== undefined ? (
                 <DropdownMenu.Item
                   className={cn(VIEW_MENU_ITEM, "text-muted-foreground")}
-                  onSelect={(event) => {
-                    const trigger = event.currentTarget ?? event.target;
+                  onSelect={() => {
+                    // Start from the trigger: the menu item sits in a portal,
+                    // too far down the React tree to reach bb's provider.
+                    const trigger = triggerRef.current;
                     if (trigger !== null) onNewProject(trigger);
                   }}
                 >

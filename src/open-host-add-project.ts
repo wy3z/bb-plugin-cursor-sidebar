@@ -32,7 +32,7 @@ function fiberOf(node: EventTarget | null): Fiber | null {
 
 export function openHostAddProject(from: EventTarget | null): boolean {
   let fiber = fiberOf(from);
-  for (let hops = 0; fiber && hops < 120; hops++) {
+  for (let hops = 0; fiber && hops < 400; hops++) {
     const value = fiber.memoizedProps?.value ?? fiber.pendingProps?.value;
     if (isHostCreate(value)) {
       if (value.isAvailable === false) return false;
