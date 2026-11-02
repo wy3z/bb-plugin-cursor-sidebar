@@ -124,6 +124,13 @@ bb cursor-sidebar icon get                 # what the project wears now
 Run from a chat, these act on that chat's project. Anywhere else, add
 `--project <id or name>`. The PNG is read on the BB server's machine.
 
+The same icons replace BB's folder in the composer: the project label under a
+thread's prompt box, the project button on the New thread screen, and that
+button's project picker. Projects without an icon keep the folder, and the view
+menu's **Project icons** switch turns these off too. BB has no project icon
+field, so the label and button are matched by project name; two projects with
+the same name keep the folder there.
+
 ## Mobile
 
 Touch uses the same list. A phone has no hover, so gestures carry the actions
@@ -149,7 +156,9 @@ Letting go of a lifted row without moving opens its menu, and that menu holds
 Expand children or Collapse children for a chat that has any. A lifted drag
 drops where you leave it: a folder heading files the chat, the middle of another
 chat in the same project nests it, and a project heading between two others
-reorders the projects.
+reorders the projects. Hovering the middle half of a chat to nest shows an
+elbow into a child slot and a **Make child** label, so a nest never reads as a
+reorder line.
 
 The pin and archive icons stay hidden on touch. Nothing reveals them without
 hover, and the 44px targets a phone needs do not fit in a row, so a swipe or

@@ -832,6 +832,7 @@ function ThreadRow({
     ctx.descendantsById.get(thread.id) ?? [],
   );
   const isDropTarget = ctx.dropTarget?.id === thread.id;
+  const isNestTarget = ctx.childDropTarget === thread.id;
   const pinnedCapable = ctx.canPin(thread.id);
   const rowPinned = rootPinned;
   const rowStatus = resolveRowStatus({
@@ -980,12 +981,44 @@ function ThreadRow({
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-sidebar-foreground/95 hover:bg-sidebar-accent/60",
             !isActive && layout !== null && "bg-sidebar-accent/30",
-            ctx.childDropTarget === thread.id && "bg-primary/10 ring-1 ring-primary/60",
+            isNestTarget && "bg-primary/15 ring-2 ring-inset ring-primary",
             shelf === "settled" &&
               !isActive &&
               "text-sidebar-foreground/73 hover:bg-sidebar-accent/25 hover:text-sidebar-foreground/73",
           )}
         >
+          {isNestTarget ? (
+            <>
+              {/* Nest preview: an elbow from this row's disc to a child slot one
+                  level in, plus a label, so "becomes a child" never reads as a
+                  reorder line. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute z-20 border-b-2 border-l-2 border-primary rounded-bl-sm"
+                style={{
+                  left: treeDotX(depth) - 1,
+                  width: STEP - 2,
+                  top: "60%",
+                  height: "calc(40% + 2px)",
+                }}
+              />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -bottom-px right-1 z-20 h-0.5 rounded-full bg-primary"
+                style={{ left: treeDotX(depth) + STEP - 3 }}
+              />
+              <span
+                role="status"
+                className="pointer-events-none absolute right-1.5 top-1/2 z-30 inline-flex -translate-y-1/2 items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary-foreground shadow-sm"
+              >
+                <svg viewBox="0 0 24 24" className="size-3" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+                  <path d="m15 10 5 5-5 5" />
+                </svg>
+                Make child
+              </span>
+            </>
+          ) : null}
           {isDropTarget ? (
             <span
               aria-hidden
