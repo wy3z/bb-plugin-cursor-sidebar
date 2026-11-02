@@ -1,4 +1,3 @@
-import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { experimental_useRpcKeyedQuery } from "@get-bb/plugin-sdk/app";
 import { z } from "zod";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -8,8 +7,11 @@ import { cn } from "@/lib/utils";
  * The bundled GitHub PR Status plugin's `pullRequests` read, copied from
  * references/frontend-pull-requests.md. Keys are environment ids, so rows
  * sharing a worktree share one read.
+ *
+ * A plain object, not `defineRpcContract`: that lives in the server SDK root,
+ * which a clean install does not provide to the frontend bundle.
  */
-const githubPrStatus = defineRpcContract({
+const githubPrStatus = {
   pullRequests: {
     input: z.object({ keys: z.array(z.string()) }),
     output: z.record(
@@ -30,7 +32,7 @@ const githubPrStatus = defineRpcContract({
       ]),
     ),
   },
-});
+} as const;
 
 type PullRequestState = "open" | "draft" | "merged" | "closed";
 
