@@ -49,6 +49,7 @@ import { useWorkspaces } from "./useWorkspaces";
 import { useWorkspaceNesting } from "./workspace-tabs";
 import { usePrimaryHost } from "./usePrimaryHost";
 import { useProjectIcons } from "./useProjectIcons";
+import { ComposerProjectIcons } from "./ComposerProjectIcons";
 import { ProjectIconPicker } from "./ProjectIconPicker";
 import type { ProjectIcon } from "./project-icons";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
@@ -385,6 +386,14 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     [descendantsById, rawById],
   );
   const drag = useReorderDrag(onDragCommit, canNest);
+  // While a drop would nest, the lifted ghost steps aside (right and down, and
+  // fainter) so the target row and its "Make child" preview stay visible.
+  const nestTargetId = drag.state?.kind === "thread" ? drag.state.parentTargetId : null;
+  useEffect(() => {
+    const ghost = document.querySelector<HTMLElement>(".cs-drag-ghost");
+    if (ghost === null) return;
+    ghost.toggleAttribute("data-nesting", nestTargetId !== null);
+  }, [nestTargetId]);
 
   // Project order is a plugin overlay; native storage projects stay unchanged.
   // A project drag holds the list still and commits on release, so there is no
@@ -1333,6 +1342,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       onMarkAllRead={() => { void markAllRead(); }}
     >
     <div data-cursor-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
+      <ComposerProjectIcons
+        enabled={view.show.projectIcons}
+        projects={nativeProjects}
+        iconFor={projectIcons.iconFor}
+      />
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
       {/* One fixed toolbar above the scroll area: the project switcher on the
           left, the view menu on the right. No section heading carries controls. */}

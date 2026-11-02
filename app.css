@@ -233,6 +233,14 @@
   will-change: transform;
 }
 
+.cs-drag-ghost {
+  transition: translate 120ms ease-out, opacity 120ms ease-out;
+}
+.cs-drag-ghost[data-nesting] {
+  translate: 22px 28px;
+  opacity: 0.6 !important;
+}
+
 /* BB's own sidebar chrome — the nav rows and the top-bar controls (toggle,
    back/forward) — is not rendered here, but it shares the column and should
    shade like our rows. The colours derive from the theme's sidebar foreground,
@@ -440,3 +448,10 @@ html.dark .cs-pi-pink { --cs-pi-fg: oklch(71.8% 0.202 349.761); }
 html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 
 .cs-pi-swatch { background-color: var(--cs-pi-swatch); }
+
+/* The composer's project label and New thread project button draw the
+   sidebar's project icon (src/ComposerProjectIcons.tsx); hide BB's folder
+   beside it. */
+[data-cs-has-project-icon] [data-icon="Folder"]:not([data-cs-composer-project-icon] *) {
+  display: none !important;
+}
