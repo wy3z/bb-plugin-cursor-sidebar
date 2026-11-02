@@ -42,6 +42,7 @@ in Projects grouping, except the one picked in the switcher, which says
 | **Chat order** | By last activity, or by status |
 | **Project order** | By hand, or by worst status and then by the project used most recently. Projects grouping only |
 | **Group order** | Most recent first, or the grouping's own default order. Hidden under None, which has no groups |
+| **Threads per group** | How many inactive chats a section previews: 5, 10, 20, 50 or All. The default is 10 |
 | **Show** | Updated time, environment, branch, machine, the pull request mark and project icons on rows outside Projects grouping |
 | **Status filter** | Needs your input, Failed, Working, Unread, Idle |
 | **Age filter** | Today, Yesterday, Last 7 days, Last 30 days, Older |
@@ -52,6 +53,13 @@ in Projects grouping, except the one picked in the switcher, which says
 The three order controls live under Ordering and the three filters live under
 Filters. None offers only the conversation order, since it has no sections to
 arrange.
+
+**Threads per group** bounds every section in every grouping — project sections,
+date, status and environment groups, the flat None list, Chats — and the child
+chats nested under a parent. Each group previews one page and **Show N more**
+reveals the next, where N is the chosen page. A family counts once,
+and a chat that is working, needs your input, selected or pinned always shows
+whatever the limit. **All** drops the limit and the button.
 
 The menu button shows a warning mark when a view change has not reached the
 server. The notice inside the menu has a Retry button.
@@ -73,9 +81,12 @@ switch between; with fewer, the toolbar keeps the view menu on the right.
 
 ## Project icons
 
-Click a project's folder icon to pick a glyph, or choose **Upload image** to
-use your own. Transparent PNGs keep their transparency. The image is shrunk to
-64px before it is saved.
+Open a project heading's **Actions** menu and choose **Set icon…**. The dialog
+offers a searchable glyph grid, an emoji grid (paste any emoji), or a
+one-or-two-letter monogram, each with an 18-colour palette and a live
+preview. **Upload image** uses your own picture and keeps PNG transparency; the
+image is shrunk to 64px before it is saved. **Reset to default** returns the
+folder.
 
 Chats can set icons too, from a shell:
 
@@ -130,8 +141,9 @@ Without that plugin nothing changes.
 
 ## Requirements
 
-BB 0.42 or newer. The plugin fills BB's experimental thread-list slot, which
-replaces BB's own thread list. Turn it off with `bb plugin disable cursor-sidebar`.
+BB 0.48.1 or newer, with plugin SDK 0.6.104 or newer. The plugin fills BB's
+experimental thread-list slot, which replaces BB's own thread list. Turn it off
+with `bb plugin disable cursor-sidebar`.
 
 ## Install
 

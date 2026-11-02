@@ -1,5 +1,6 @@
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import { ProjectIconMark } from "./ProjectIconMark";
 import type { ProjectIcon } from "./project-icons";
 import type { ThreadStatusKind } from "./status";
 
@@ -50,7 +51,7 @@ export function ProjectStatusGlyph({
 }) {
   // Folder (closed) and FolderOpen are Hugeicons' matched single-weight pair
   // (Folder01 / Folder02). The heavier stroke keeps both crisp at 14px.
-  const name: IconName = icon?.kind === "glyph" ? icon.name : open ? "FolderOpen" : "Folder";
+  const fallback: IconName = open ? "FolderOpen" : "Folder";
   // A closed folder hides its rows, so an active status keeps a small badge on
   // the glyph's bottom-right. An open folder shows the status on the rows.
   const badge = !open && status !== "idle" ? status : null;
@@ -64,22 +65,12 @@ export function ProjectStatusGlyph({
       data-heading-kind="project"
       className={cn("cs-project-glyph relative", className)}
     >
-      {icon?.kind === "image" ? (
-        <img
-          src={icon.src}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          className="size-4 shrink-0 object-contain"
-        />
-      ) : (
-        <Icon
-          name={name}
-          aria-hidden="true"
-          className="size-4 shrink-0 text-sidebar-foreground/73"
-          strokeWidth={2}
-        />
-      )}
+      <ProjectIconMark
+        icon={icon ?? null}
+        fallback={fallback}
+        className="size-4"
+        mutedClassName="text-sidebar-foreground/73"
+      />
       {badge !== null ? <ProjectStatusBadge status={badge} /> : null}
     </span>
   );
@@ -112,22 +103,12 @@ export function ProjectRowIcon({
         chats ? "text-sidebar-foreground/45" : "text-sidebar-foreground/55",
       )}
     >
-      {icon?.kind === "image" ? (
-        <img
-          src={icon.src}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          className="size-3.5 object-contain"
-        />
-      ) : (
-        <Icon
-          name={chats ? "Chat" : icon?.kind === "glyph" ? icon.name : "Folder"}
-          aria-hidden="true"
-          strokeWidth={2}
-          className="size-3.5 shrink-0"
-        />
-      )}
+      <ProjectIconMark
+        icon={icon}
+        fallback={chats ? "Chat" : "Folder"}
+        className="size-3.5"
+        mutedClassName={chats ? "text-sidebar-foreground/45" : "text-sidebar-foreground/55"}
+      />
     </span>
   );
 }

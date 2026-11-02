@@ -9,6 +9,7 @@ import {
   AGE_FILTER_LABELS,
   NO_ENVIRONMENT_KEY,
   STATUS_FILTER_LABELS,
+  THREADS_PER_GROUP_VALUES,
   VIEW_AGE_FILTERS,
   VIEW_GROUP_BY,
   VIEW_STATUS_FILTERS,
@@ -19,8 +20,10 @@ import {
   environmentFilterPatch,
   sidebarViewSyncNotice,
   statusFilterPatch,
+  threadsPerGroupLabel,
   type EnvironmentIdentity,
   type SidebarViewSync,
+  type ThreadsPerGroup,
   type ViewAgeFilter,
   type ViewConversationOrder,
   type ViewGroupBy,
@@ -233,8 +236,8 @@ export function SidebarViewSyncNotice({
 
 /**
  * The compact view menu. It mirrors Cursor's organization as submenus
- * (Grouping, Ordering, Show, Filters) over the one persisted SidebarView, using
- * BB's theme tokens. Grouping is one radio: Projects, Updated, Status,
+ * (Grouping, Ordering, Threads per group, Show, Filters) over the one persisted
+ * SidebarView, using BB's theme tokens. Grouping is one radio: Projects, Updated, Status,
  * Environment or None — selecting one replaces the current extra grouping; they
  * never stack. Ordering chooses how conversations, projects and group sections
  * are sorted; None has no sections, so it offers only the conversation order. Radix menu primitives supply real arrow-key navigation, roving focus
@@ -259,7 +262,7 @@ export function SidebarViewMenuTrigger({ sync, triggerClassName }: SidebarViewMe
           "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
         }
       >
-        <Icon name="ListFilter" className="size-3.5" />
+        <Icon name="SlidersHorizontal" className="size-3.5" />
         {notice !== null ? (
           <Icon
             name={notice.tone === "warning" ? "AlertTriangle" : "CircleX"}
@@ -417,6 +420,31 @@ export function SidebarViewMenuRoot({
                     )}
                   </>
                 )}
+              </DropdownMenu.SubContent>
+            </DropdownMenu.Portal>
+          </Section>
+
+          <Section>
+            <SubTrigger
+              label="Threads per group"
+              value={threadsPerGroupLabel(view.threadsPerGroup)}
+            />
+            <DropdownMenu.Portal>
+              <DropdownMenu.SubContent {...scope} sideOffset={4} alignOffset={-4} className={CONTENT}>
+                <DropdownMenu.RadioGroup
+                  value={view.threadsPerGroup === null ? "all" : String(view.threadsPerGroup)}
+                  onValueChange={(value) =>
+                    onUpdate({
+                      threadsPerGroup:
+                        value === "all" ? null : (Number(value) as ThreadsPerGroup),
+                    })
+                  }
+                >
+                  {THREADS_PER_GROUP_VALUES.map((count) => (
+                    <ChoiceItem key={count} value={String(count)} label={String(count)} />
+                  ))}
+                  <ChoiceItem value="all" label="All" />
+                </DropdownMenu.RadioGroup>
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </Section>
