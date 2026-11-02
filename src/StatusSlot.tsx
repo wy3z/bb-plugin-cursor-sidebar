@@ -61,7 +61,7 @@ export function ThreadAge({ thread, now }: { thread: PluginSidebarThread; now: n
   return (
     <span
       className={cn(
-        "tabular-nums text-xs text-sidebar-foreground/73",
+        "tabular-nums text-xs text-sidebar-foreground/45",
       )}
     >
       {relativeTimeLabel(thread.updatedAt, now)}

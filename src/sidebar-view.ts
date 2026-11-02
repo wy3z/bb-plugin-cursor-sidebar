@@ -10,7 +10,7 @@
  */
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { SidebarView } from "./server";
-import { AGE_GROUPS, bucketForTimestamp } from "./age-groups";
+import { AGE_GROUPS, bucketForTimestamp, type AgeGroup } from "./age-groups";
 import type { DisplayRow } from "./forest";
 import { familyRootId } from "./standalone-groups";
 import {
@@ -21,7 +21,13 @@ import {
   type ThreadStatusKind,
 } from "./status";
 
-export const VIEW_GROUP_BY = ["workspace", "updated", "status", "environment"] as const;
+export const VIEW_GROUP_BY = [
+  "workspace",
+  "updated",
+  "status",
+  "environment",
+  "none",
+] as const;
 export type ViewGroupBy = (typeof VIEW_GROUP_BY)[number];
 
 /**
@@ -43,10 +49,27 @@ export type ViewStatusFilter = (typeof VIEW_STATUS_FILTERS)[number];
 export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = THREAD_STATUS_LABEL;
 
 /**
+ * The age filter is exactly the Updated grouping's buckets, so a selected
+ * bucket always matches a heading and a deselected one disappears with it.
+ */
+export const VIEW_AGE_FILTERS = AGE_GROUPS;
+export type ViewAgeFilter = AgeGroup;
+
+/** The bucket names double as their filter labels. */
+export const AGE_FILTER_LABELS: Record<ViewAgeFilter, string> = {
+  Today: "Today",
+  Yesterday: "Yesterday",
+  "Last 7 days": "Last 7 days",
+  "Last 30 days": "Last 30 days",
+  Older: "Older",
+};
+
+/**
  * Defaults recover the agreed view: native Projects / Chats homes with date
  * buckets on the pooled ordinary homes, the existing stored
- * conversation order, and every ordinary status and environment shown.
- * Projects / Updated / Status / Environment grouping is one exclusive choice.
+ * conversation order, and every ordinary status, environment and project shown.
+ * Projects / Updated / Status / Environment / None grouping is one exclusive
+ * choice.
  */
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   groupBy: "workspace",
@@ -54,13 +77,16 @@ export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   sortGroupsBy: "manual",
   sortProjectsBy: "manual",
   statusFilter: [...VIEW_STATUS_FILTERS],
+  ageFilter: [...VIEW_AGE_FILTERS],
   environmentFilter: null,
+  projectFilter: null,
   show: {
     updated: true,
     environment: true,
     branch: true,
     host: true,
     pr: true,
+    projectIcons: true,
   },
 };
 
@@ -132,11 +158,41 @@ function coerceStatusFilter(raw: unknown): ViewStatusFilter[] {
   return [...new Set(valid)];
 }
 
+function isAgeFilter(value: unknown): value is ViewAgeFilter {
+  return VIEW_AGE_FILTERS.some((supported) => supported === value);
+}
+
+/**
+ * Same contract as the status filter: a missing list (an older stored view) is
+ * every bucket, a full set is all, a subset narrows and an empty list is none.
+ * Only a list that named values but kept none of them falls back to the default.
+ */
+function coerceAgeFilter(raw: unknown): ViewAgeFilter[] {
+  if (!Array.isArray(raw)) return [...VIEW_AGE_FILTERS];
+  const valid = raw.filter(isAgeFilter);
+  if (raw.length > 0 && valid.length === 0) return [...VIEW_AGE_FILTERS];
+  return [...new Set(valid)];
+}
+
 /**
  * `null` is "all environments"; an array selects a subset and an empty array is
  * "none". An array that named values but kept none of them falls back to all.
  */
 function coerceEnvironmentFilter(raw: unknown): string[] | null {
+  if (raw === null || raw === undefined) return null;
+  if (!Array.isArray(raw)) return null;
+  const valid = raw.filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  if (raw.length > 0 && valid.length === 0) return null;
+  return [...new Set(valid)];
+}
+
+/**
+ * `null` is "all projects"; an array selects a subset and an empty array is
+ * "none". An array that named values but kept none of them falls back to all.
+ */
+function coerceProjectFilter(raw: unknown): string[] | null {
   if (raw === null || raw === undefined) return null;
   if (!Array.isArray(raw)) return null;
   const valid = raw.filter(
@@ -159,10 +215,15 @@ export function coerceSidebarView(value: unknown): SidebarView {
     return {
       ...DEFAULT_SIDEBAR_VIEW,
       statusFilter: [...DEFAULT_SIDEBAR_VIEW.statusFilter],
+      ageFilter: [...DEFAULT_SIDEBAR_VIEW.ageFilter],
       environmentFilter:
         DEFAULT_SIDEBAR_VIEW.environmentFilter === null
           ? null
           : [...DEFAULT_SIDEBAR_VIEW.environmentFilter],
+      projectFilter:
+        DEFAULT_SIDEBAR_VIEW.projectFilter === null
+          ? null
+          : [...DEFAULT_SIDEBAR_VIEW.projectFilter],
       show: { ...DEFAULT_SIDEBAR_VIEW.show },
     };
   }
@@ -188,13 +249,16 @@ export function coerceSidebarView(value: unknown): SidebarView {
     sortGroupsBy,
     sortProjectsBy,
     statusFilter: coerceStatusFilter(raw.statusFilter),
+    ageFilter: coerceAgeFilter(raw.ageFilter),
     environmentFilter: coerceEnvironmentFilter(raw.environmentFilter),
+    projectFilter: coerceProjectFilter(raw.projectFilter),
     show: {
       updated: showFlag("updated"),
       environment: showFlag("environment"),
       branch: showFlag("branch"),
       host: showFlag("host"),
       pr: showFlag("pr"),
+      projectIcons: showFlag("projectIcons"),
     },
   };
 }
@@ -275,6 +339,30 @@ export function environmentGroupOf(thread: PluginSidebarThread): EnvironmentIden
 }
 
 export const NO_ENVIRONMENT_KEY = "__none__";
+
+/** A project option in the filter menu: the native BB project id and its label. */
+export interface ProjectIdentity {
+  id: string;
+  label: string;
+}
+
+/** The filter key for a thread with no native project at all. */
+export const NO_PROJECT_KEY = "__no_project__";
+
+/**
+ * The native BB project a thread belongs to. Projected sidebar threads carry
+ * the real id on `nativeProjectId`; a raw feed already has it on `projectId`.
+ * A blank one is a real "no project", never a made-up id.
+ */
+export function projectKeyOf(thread: PluginSidebarThread): string {
+  const native = (thread as PluginSidebarThread & { nativeProjectId?: string | null })
+    .nativeProjectId;
+  const id =
+    typeof native === "string" && native.trim() !== ""
+      ? native.trim()
+      : thread.projectId?.trim() ?? "";
+  return id === "" ? NO_PROJECT_KEY : id;
+}
 
 /**
  * The authoritative display parent within one ordinary home. A parent that
@@ -403,6 +491,8 @@ export function familyAwareComparator(
 export interface OrdinaryFilterFacts {
   /** Pinned or current family: shown with an explanation, never filtered out. */
   bypass: (thread: PluginSidebarThread) => boolean;
+  /** Current time for the calendar age buckets. */
+  now: number;
 }
 
 /**
@@ -424,12 +514,28 @@ function environmentAllowed(
 }
 
 /**
- * Filter ordinary conversations by status and environment while keeping the
- * ancestry a surviving child needs. A pinned or current family is always
- * kept. Every ancestor of a kept row is kept, so a match never detaches from
- * its parent or loses its tree rails. Nothing here mutates pin, folder or
- * manual-order state. The caller decides whether native project interiors
- * bypass the filter.
+ * Whether a filter lets one project's rows through. `null` is every project;
+ * an explicit list keeps only the named native project ids, and `__no_project__`
+ * keeps threads with no project.
+ */
+function projectAllowed(
+  filter: readonly string[] | null,
+  thread: PluginSidebarThread,
+): boolean {
+  if (filter === null) return true;
+  return filter.includes(projectKeyOf(thread));
+}
+
+/**
+ * Filter ordinary conversations by status, age, environment and project while
+ * keeping the ancestry a surviving child needs. A pinned or current family is
+ * always kept. Every ancestor of a kept row is kept, so a match never detaches
+ * from its parent or loses its tree rails. Age is judged for the whole family
+ * from the same latest activity the Updated grouping uses for its heading, so a
+ * child never lands in a different bucket from its top-level thread. Nothing
+ * here mutates pin, folder or manual-order state. The caller decides whether
+ * native project interiors bypass the filter, and drops the groups of
+ * filtered-out projects.
  */
 export function filterOrdinaryThreads(
   threads: readonly PluginSidebarThread[],
@@ -437,6 +543,24 @@ export function filterOrdinaryThreads(
   facts: OrdinaryFilterFacts,
 ): PluginSidebarThread[] {
   const byId = new Map(threads.map((thread) => [thread.id, thread]));
+  // Age is a family fact, exactly like the Updated grouping: the root owns one
+  // bucket, computed from the family's latest activity at the same `now`.
+  const parentOf = homeDisplayParentOf(threads);
+  const rootOf = new Map<string, string>();
+  const familyLatest = new Map<string, number>();
+  for (const thread of threads) {
+    const root = familyRootId(parentOf, thread.id);
+    rootOf.set(thread.id, root);
+    familyLatest.set(
+      root,
+      Math.max(familyLatest.get(root) ?? thread.updatedAt, thread.updatedAt),
+    );
+  }
+  const ageAllowed = (thread: PluginSidebarThread): boolean => {
+    const root = rootOf.get(thread.id) ?? thread.id;
+    const latest = familyLatest.get(root) ?? thread.updatedAt;
+    return view.ageFilter.includes(bucketForTimestamp(latest, facts.now));
+  };
   const keep = new Set<string>();
   const matches = new Set<string>();
   for (const thread of threads) {
@@ -445,7 +569,9 @@ export function filterOrdinaryThreads(
       continue;
     }
     if (!view.statusFilter.includes(ordinaryThreadStatus(thread))) continue;
+    if (!ageAllowed(thread)) continue;
     if (!environmentAllowed(view.environmentFilter, thread)) continue;
+    if (!projectAllowed(view.projectFilter, thread)) continue;
     matches.add(thread.id);
     keep.add(thread.id);
   }
@@ -461,11 +587,13 @@ export function filterOrdinaryThreads(
   return threads.filter((thread) => keep.has(thread.id));
 }
 
-/** True when a status or environment filter is narrowing the ordinary rows. */
+/** True when a status, age, environment or project filter is narrowing the ordinary rows. */
 export function viewHasActiveFilters(view: SidebarView): boolean {
   return (
     view.statusFilter.length < VIEW_STATUS_FILTERS.length ||
-    view.environmentFilter !== null
+    view.ageFilter.length < VIEW_AGE_FILTERS.length ||
+    view.environmentFilter !== null ||
+    view.projectFilter !== null
   );
 }
 
@@ -487,6 +615,26 @@ export function statusFilterPatch(
 /** The status-filter patch for the All/None controls. */
 export function allStatusFilterPatch(on: boolean): Partial<SidebarView> {
   return { statusFilter: on ? [...VIEW_STATUS_FILTERS] : [] };
+}
+
+/**
+ * The age-filter patch one checkbox produces, with the same explicit-state
+ * contract: unchecking the last bucket is a real "none".
+ */
+export function ageFilterPatch(
+  view: SidebarView,
+  bucket: ViewAgeFilter,
+  on: boolean,
+): Partial<SidebarView> {
+  const next = on
+    ? [...new Set([...view.ageFilter, bucket])]
+    : view.ageFilter.filter((entry) => entry !== bucket);
+  return { ageFilter: next };
+}
+
+/** The age-filter patch for the All/None controls. */
+export function allAgeFilterPatch(on: boolean): Partial<SidebarView> {
+  return { ageFilter: on ? [...VIEW_AGE_FILTERS] : [] };
 }
 
 /**
@@ -513,6 +661,30 @@ export function allEnvironmentFilterPatch(on: boolean): Partial<SidebarView> {
   return { environmentFilter: on ? null : [] };
 }
 
+/**
+ * The project-filter patch one checkbox produces. `null` means every project;
+ * selecting every known key collapses back to `null`, clearing them is a real
+ * "none", and `__no_project__` selects threads with no project.
+ */
+export function projectFilterPatch(
+  view: SidebarView,
+  id: string,
+  keys: readonly string[],
+  on: boolean,
+): Partial<SidebarView> {
+  const selected = view.projectFilter === null ? [...keys] : view.projectFilter;
+  const next = on
+    ? [...new Set([...selected, id])]
+    : selected.filter((entry) => entry !== id);
+  const coversAll = keys.length > 0 && keys.every((key) => next.includes(key));
+  return { projectFilter: coversAll ? null : next };
+}
+
+/** The project-filter patch for the All/None controls. */
+export function allProjectFilterPatch(on: boolean): Partial<SidebarView> {
+  return { projectFilter: on ? null : [] };
+}
+
 /** One home's data needed to enumerate its real collapsible targets. */
 export interface CollapsibleHome {
   id: string;
@@ -526,7 +698,7 @@ export interface CollapsibleHome {
 export interface CollapsibleTargets {
   /** Keys held by the collapsed-groups store (pinned, folders, generated). */
   groupKeys: ReadonlySet<string>;
-  /** Date keys held by the expanded-ages store. */
+  /** Date keys held by the collapsed-ages store. */
   ageKeys: ReadonlySet<string>;
   /** Threads with children, held by the expanded-parents store. */
   parentIds: ReadonlySet<string>;
@@ -536,7 +708,8 @@ export interface CollapsibleTargets {
  * The real collapsible targets a view renders, using the same group keys the
  * renderer derives. Date keys exist only for the Updated grouping and only for
  * buckets that actually appear; generated Status/Environment keys only for
- * their grouping; pinned keys only when a pinned family renders.
+ * their grouping; pinned keys only when a pinned family renders. The flat None
+ * grouping renders only child threads, so it holds no section keys at all.
  */
 export function ordinaryCollapsibleTargets(
   homes: readonly CollapsibleHome[],
@@ -554,6 +727,9 @@ export function ordinaryCollapsibleTargets(
     for (const thread of home.members) {
       if (home.childrenOf(thread.id).length > 0) parentIds.add(thread.id);
     }
+    // The flat None grouping draws no folder, date, status or environment
+    // heading, so the only collapsible targets it renders are child threads.
+    if (view.groupBy === "none") continue;
     const pinnedRoots = new Set<string>();
     const filedRoots = new Set<string>();
     for (const thread of home.members) {
@@ -572,11 +748,6 @@ export function ordinaryCollapsibleTargets(
     // Extra grouping wraps the pooled ordinary section; per-home calls still
     // wrap standalone threads only. Project folders stay unsplit.
     if (home.isPersonal === false) continue;
-    if (view.groupBy === "updated") {
-      // Today exists as a group even when empty, so bulk collapse/expand and
-      // reveal always have its key.
-      ageKeys.add(`age:${home.id}:Today`);
-    }
     const keys = ordinaryFamilyGroupKeys(home.members, view, {
       now: options.now,
       parentOf: home.parentOf,
@@ -652,6 +823,11 @@ export function ordinaryFamilyGroupKeys(
   if (view.groupBy === "workspace") {
     return new Map(threads.map((thread) => [thread.id, "__workspace__"]));
   }
+  if (view.groupBy === "none") {
+    // One flat list: every family shares the single group, so a drag never
+    // crosses a visible heading because there is none.
+    return new Map(threads.map((thread) => [thread.id, "__flat__"]));
+  }
   const { rootOf, aggregates } = familyAggregates(threads, facts);
   const keyOfRoot = new Map<string, string>();
   for (const [root, aggregate] of aggregates) {
@@ -678,16 +854,17 @@ export function groupOrdinaryRows(
   facts: OrdinaryGroupFacts,
 ): OrdinaryGroup[] {
   if (rows.length === 0) {
-    // Today stays a standalone Updated group even with nothing in it, so the
-    // heading and its New thread affordance never vanish. Other empty date
-    // buckets stay hidden. Non-Updated groupings render no empty groups.
-    if (view.groupBy === "updated") {
-      return [{ key: "updated:Today", label: "Today", rows: [] }];
-    }
+    // No thread renders no heading in any grouping. A group with nothing under
+    // it reads as a bug, so every empty bucket is dropped.
     return [];
   }
   if (view.groupBy === "workspace") {
     return [{ key: "__workspace__", label: null, rows: [...rows] }];
+  }
+  if (view.groupBy === "none") {
+    // One flat list with no heading at all; the caller still sorts whole
+    // families by the selected conversation order before this runs.
+    return [{ key: "__flat__", label: null, rows: [...rows] }];
   }
 
   const complete = facts.members ?? rows.map((row) => row.thread);
@@ -731,13 +908,32 @@ export function groupOrdinaryRows(
     }
     return left.canonical - right.canonical || left.key.localeCompare(right.key);
   });
-  if (view.groupBy === "updated" && !groups.has("updated:Today")) {
-    // No family landed in Today: keep the standalone empty Today group at its
-    // canonical head so the heading and its New thread affordance stay put.
-    // Other empty date buckets stay hidden.
-    sorted.unshift({ key: "updated:Today", label: "Today", canonical: AGE_GROUPS.indexOf("Today"), latestUpdatedAt: 0, rows: [] });
-  }
   return sorted.map((group) => ({ key: group.key, label: group.label, rows: group.rows }));
+}
+
+/**
+ * One flat conversation list, sorted by the selected conversation order. The
+ * rows arrive as contiguous families (a root then its rendered descendants), so
+ * each chunk is moved whole: sorting never splits a family from its parent or
+ * reorders children. Used by the None grouping, where there is no heading to
+ * carry a bucket's own order.
+ */
+export function flattenOrdinaryFamilies(
+  rows: readonly DisplayRow[],
+  order: ViewConversationOrder,
+  facts: OrdinaryGroupFacts,
+): DisplayRow[] {
+  if (rows.length <= 1) return [...rows];
+  const complete = facts.members ?? rows.map((row) => row.thread);
+  const familyFacts = ordinaryFamilyFacts(complete, facts);
+  const compare = familyAwareComparator(order, familyFacts);
+  const chunks: DisplayRow[][] = [];
+  for (const row of rows) {
+    if (row.depth === 0 || chunks.length === 0) chunks.push([row]);
+    else chunks[chunks.length - 1]!.push(row);
+  }
+  chunks.sort((left, right) => compare(left[0]!.thread, right[0]!.thread));
+  return chunks.flat();
 }
 
 /** Every distinct environment *group* in the loaded ordinary conversations. */
@@ -753,6 +949,35 @@ export function environmentFilterOptions(
   return [...byId.values()].sort((left, right) =>
     left.label.localeCompare(right.label),
   );
+}
+
+/**
+ * The native projects the loaded ordinary conversations belong to, in the
+ * sidebar's own project order (the personal project reads as "Chats" there).
+ * A project with no visible thread is never offered, and an unknown id falls
+ * back to its own id as the label.
+ */
+export function projectFilterOptions(
+  threads: readonly PluginSidebarThread[],
+  projects: readonly { id: string; name: string; isPersonal?: boolean }[],
+): ProjectIdentity[] {
+  const present = new Set<string>();
+  for (const thread of threads) {
+    const id = projectKeyOf(thread);
+    if (id !== NO_PROJECT_KEY) present.add(id);
+  }
+  const known = projects
+    .filter((project) => present.has(project.id))
+    .map((project) => ({
+      id: project.id,
+      label: project.isPersonal === true ? "Chats" : project.name,
+    }));
+  const knownIds = new Set(known.map((project) => project.id));
+  const unknown = [...present]
+    .filter((id) => !knownIds.has(id))
+    .sort((left, right) => left.localeCompare(right))
+    .map((id) => ({ id, label: id }));
+  return [...known, ...unknown];
 }
 
 /**

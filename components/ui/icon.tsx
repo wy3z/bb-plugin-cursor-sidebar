@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import type { ComponentType } from "react";
+import * as sdkApp from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Alert02Icon,
@@ -55,6 +57,7 @@ import {
   getExtendedIcons,
   subscribeExtendedIcons,
 } from "./icon-registry";
+import { HOST_ICON_NAMES } from "./host-icon-names";
 
 const SectionAddStrokeRoundedIcon: IconSvgElement = [
   [
@@ -186,6 +189,35 @@ const CHEVRON_ICON_NAMES: ReadonlySet<string> = new Set([
 /** Chevron paths are a short stroke; 2.75 reads heavier than the 1.5 default. */
 const CHEVRON_STROKE_WIDTH = 2.75;
 
+/** Old local names whose meaning now has a real host built-in name. */
+const ICON_ALIASES: Readonly<Record<string, string>> = {
+  ListFilter: "FilterHorizontal",
+  Orbit: "Target",
+  User: "UserRound",
+};
+
+interface HostIconProps {
+  name: string;
+  className?: string;
+  style?: CSSProperties;
+  "aria-hidden"?: boolean | "true" | "false";
+  "aria-label"?: string;
+}
+
+/**
+ * The plugin's SDK pin predates the typed export, but BB 0.48.1 still provides
+ * the shared icon registry at runtime. Look it up once and keep the local
+ * Hugeicons artwork as the fallback for an older host.
+ */
+const HostIcon = (
+  sdkApp as unknown as { experimental_Icon?: ComponentType<HostIconProps> }
+).experimental_Icon;
+
+function resolveHostName(name: string): string | undefined {
+  const mapped = ICON_ALIASES[name] ?? name;
+  return HOST_ICON_NAMES.has(mapped) ? mapped : undefined;
+}
+
 export interface IconProps {
   name: IconName;
   className?: string;
@@ -203,6 +235,20 @@ export function Icon({
   "aria-hidden": ariaHidden,
   "aria-label": ariaLabel,
 }: IconProps) {
+  const hostName = resolveHostName(name);
+  if (HostIcon !== undefined && hostName !== undefined) {
+    const Icon = HostIcon;
+    return (
+      <Icon
+        name={hostName}
+        className={cn(className)}
+        style={style}
+        aria-hidden={ariaHidden}
+        aria-label={ariaLabel}
+      />
+    );
+  }
+
   const resolvedStroke =
     strokeWidth ?? (CHEVRON_ICON_NAMES.has(name) ? CHEVRON_STROKE_WIDTH : undefined);
   const coreIcon = CORE_ICON_LOOKUP[name];

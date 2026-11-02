@@ -1,7 +1,7 @@
 # Cursor Sidebar
 
-A port of Cursor's sidebar to BB, with four view modes: group chats by project,
-status, environment or date.
+A port of Cursor's sidebar to BB, with five view modes: group chats by project,
+status, environment or date, or draw one flat list.
 
 Chats nest under the chat that spawned them, pinned chats gather in one block,
 and standalone chats file into folders. The view settings live in the plugin's
@@ -12,28 +12,64 @@ leaves your threads alone.
 
 ![The same chats grouped by Projects, Updated, Status and Environment](docs/media/grouping-demo.webp)
 
-Sample chats, grouped four ways. The [mp4 is here](docs/media/grouping-demo.mp4)
+Sample chats, grouped by Projects, Updated, Status and Environment. **None**
+draws one flat list instead: no headings at all, pinned chats still first under
+**Pinned**, child chats still nested, and the rows follow the conversation order
+picked under **Ordering**. The [mp4 is here](docs/media/grouping-demo.mp4)
 if your browser will not play the WebP.
+
+## The toolbar and the headings
+
+One fixed row sits above the thread list and never scrolls: the project switcher
+on the left and the view menu trigger on the right. Section headings below it
+carry no controls of their own; a heading is only a small muted label that folds
+its block, and a project or folder heading keeps its glyph.
+
+Every grouping uses the same sections. Pinned always comes first, then the
+group's own headings (project names, dated buckets, statuses), then **Chats** for
+standalone conversations. **None** has no sections at all: folders included,
+every chat sits in one list, so only **Pinned** and the child-thread trees keep
+a heading. There is no umbrella "Projects" or "Threads" heading,
+and an empty heading is never drawn: a project with no visible thread is hidden
+in Projects grouping, except the one picked in the switcher, which says
+**No threads**.
 
 ## The view menu
 
 | Control | What it changes |
 | --- | --- |
-| **Grouping** | Projects, Updated, Status or Environment. One at a time, never stacked |
+| **Grouping** | Projects, Updated, Status, Environment or None. One at a time, never stacked |
 | **Chat order** | By last activity, or by status |
 | **Project order** | By hand, or by worst status and then by the project used most recently. Projects grouping only |
-| **Group order** | Most recent first, or the grouping's own default order |
-| **Show** | Updated time, environment, branch, machine and the pull request mark |
+| **Group order** | Most recent first, or the grouping's own default order. Hidden under None, which has no groups |
+| **Show** | Updated time, environment, branch, machine, the pull request mark and project icons on rows outside Projects grouping |
 | **Status filter** | Needs your input, Failed, Working, Unread, Idle |
+| **Age filter** | Today, Yesterday, Last 7 days, Last 30 days, Older |
 | **Environment filter** | Which environments appear, including chats with none |
 | **Expand All / Collapse All** | Every section and group at once |
 | **Mark All as Read** | Every loaded chat that is unread |
 
-The three order controls live under Ordering and the two filters live under
-Filters.
+The three order controls live under Ordering and the three filters live under
+Filters. None offers only the conversation order, since it has no sections to
+arrange.
 
 The menu button shows a warning mark when a view change has not reached the
 server. The notice inside the menu has a Retry button.
+
+## Project switcher
+
+The left side of the toolbar row. It reads **All projects**, one project's name,
+or **N projects**, and wears that project's icon when it has one. The chevron
+sits straight after the label; the row is plain, with a hover background like
+the sidebar's other rows. Click it for every project, All projects first.
+**New project…** is the last item, under a separator, and opens BB's own Add
+project dialog.
+
+Picking one project narrows the list in every grouping, and under Projects
+grouping the row drops that project's heading: its chats read as one flat list
+instead of a section you can fold away. Picking **All projects** brings every
+group back. The switcher only appears when there are two or more projects to
+switch between; with fewer, the toolbar keeps the view menu on the right.
 
 ## Project icons
 
@@ -125,3 +161,7 @@ that has the SDK installed.
 
 MIT. Portions adapted from bb-plugin-thread-inbox. See
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Compact navigation
+
+An optional Zeron-style sidebar header: back, forward and New thread on the left, a menu of every navigation destination on the right, and no navigation rows. BB's own back/forward buttons are hidden while it is active. Pick **Compact** under Settings → Appearance.
