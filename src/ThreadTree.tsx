@@ -10,7 +10,6 @@ import {
   Fragment,
 } from "react";
 import {
-  experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
@@ -44,6 +43,7 @@ import type { DropPlacement } from "./thread-order";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import { PullRequestMark } from "./PullRequestMark";
 import { RowContextMenu } from "./RowContextMenu";
+import { useArchiveThread, useThreadMutations } from "./thread-actions";
 import {
   ThreadAge,
   ThreadLeadStatus,
@@ -761,7 +761,8 @@ function ThreadRow({
   activeRailLevels?: ReadonlySet<number> | undefined;
   activeElbow?: boolean;
 }) {
-  const actions = useSidebarThreadActions();
+  const actions = useThreadMutations();
+  const archiveThread = useArchiveThread(row.thread);
   const { splitProps, layout } = useSidebarThreadSplit(row.thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
 
@@ -916,6 +917,7 @@ function ThreadRow({
         onRemoveFromFolder={inFolderId !== null ? () => ctx.onRemoveFromFolder(thread.id) : undefined}
         onRename={() => setIsRenaming(true)}
         onOpen={() => ctx.onNavigate()}
+        onArchive={archiveThread}
         swipeDisabled={isRenaming}
         onReorderStart={
           ctx.canDragThreads
@@ -1098,7 +1100,7 @@ function ThreadRow({
             />
           ) : null}
 
-          {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
+          {ctx.view.show.pr ? <PullRequestMark environmentId={thread.environment?.id ?? null} /> : null}
 
           <div className={cn("pointer-events-none flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
           <InlineThreadTitle
@@ -1159,7 +1161,7 @@ function ThreadRow({
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    void actions.archive(thread.id);
+                    archiveThread();
                   }}
                   className="cs-row-action pointer-events-none flex size-5 items-center justify-center rounded text-sidebar-foreground/73 group-hover/row:pointer-events-auto group-focus-within/row:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                 >

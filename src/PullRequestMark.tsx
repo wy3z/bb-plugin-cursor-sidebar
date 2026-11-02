@@ -1,8 +1,36 @@
-import {
-  experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
-} from "@get-bb/plugin-sdk/app";
+import { defineRpcContract } from "@get-bb/plugin-sdk";
+import { experimental_useRpcKeyedQuery } from "@get-bb/plugin-sdk/app";
+import { z } from "zod";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+
+/**
+ * The bundled GitHub PR Status plugin's `pullRequests` read, copied from
+ * references/frontend-pull-requests.md. Keys are environment ids, so rows
+ * sharing a worktree share one read.
+ */
+const githubPrStatus = defineRpcContract({
+  pullRequests: {
+    input: z.object({ keys: z.array(z.string()) }),
+    output: z.record(
+      z.string(),
+      z.discriminatedUnion("outcome", [
+        z.object({
+          outcome: z.literal("available"),
+          pullRequest: z.object({
+            number: z.number(),
+            title: z.string(),
+            url: z.string(),
+            state: z.enum(["draft", "open", "merged", "closed"]),
+            attention: z.string(),
+          }),
+        }),
+        z.object({ outcome: z.literal("absent") }),
+        z.object({ outcome: z.literal("unavailable"), message: z.string() }),
+      ]),
+    ),
+  },
+});
 
 type PullRequestState = "open" | "draft" | "merged" | "closed";
 
@@ -34,13 +62,20 @@ const PRESENTATION: Record<PullRequestState, Presentation> = {
 };
 
 /**
- * Reads the host's cached pull-request state for one thread. The lookup is
- * per-row and host-owned (threads sharing an environment share one query), so
- * the sidebar never shells out to Git for the whole list.
+ * Reads the GitHub PR Status plugin's cached pull-request state for one row's
+ * environment. The host owns the polling and staleness rules; a query error,
+ * `absent` and `unavailable` all mean "nothing to show", never an error.
  */
-export function PullRequestMark({ threadId }: { threadId: string }) {
-  const { pullRequest } = useSidebarThreadPullRequest(threadId);
-  if (pullRequest === null) return null;
+export function PullRequestMark({ environmentId }: { environmentId: string | null }) {
+  const { data } = experimental_useRpcKeyedQuery({
+    pluginId: "bb--github-pr-status",
+    contract: githubPrStatus,
+    method: "pullRequests",
+    keys: environmentId === null ? [] : [environmentId],
+  });
+  const row = environmentId === null ? undefined : data?.[environmentId];
+  if (row?.outcome !== "available") return null;
+  const pullRequest = row.pullRequest;
 
   const presentation = PRESENTATION[pullRequest.state];
   const failing =
