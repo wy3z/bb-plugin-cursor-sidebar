@@ -981,15 +981,20 @@ export function groupOrdinaryRows(
     }
     return left.canonical - right.canonical || left.key.localeCompare(right.key);
   });
-  return sorted.map((group) => ({ key: group.key, label: group.label, rows: group.rows }));
+  // Pooling concatenates homes whose siblings were sorted independently.
+  // Compare families across homes inside each bucket as well.
+  return sorted.map((group) => ({
+    key: group.key,
+    label: group.label,
+    rows: flattenOrdinaryFamilies(group.rows, view.sortConversationsBy, facts),
+  }));
 }
 
 /**
  * One flat conversation list, sorted by the selected conversation order. The
  * rows arrive as contiguous families (a root then its rendered descendants), so
  * each chunk is moved whole: sorting never splits a family from its parent or
- * reorders children. Used by the None grouping, where there is no heading to
- * carry a bucket's own order.
+ * reorders children. Used within ordinary buckets and by the None grouping.
  */
 export function flattenOrdinaryFamilies(
   rows: readonly DisplayRow[],
