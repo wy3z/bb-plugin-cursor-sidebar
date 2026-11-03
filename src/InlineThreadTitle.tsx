@@ -40,6 +40,25 @@ export function InlineThreadTitle({
   const finished = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wasEditing = useRef(false);
+  const userLeft = useRef(false);
+  const selected = useRef(false);
+  const reclaims = useRef(0);
+
+  useEffect(() => {
+    if (!editing) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target !== inputRef.current) userLeft.current = true;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") userLeft.current = true;
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [editing]);
 
   useEffect(() => {
     const entering = editing && !wasEditing.current;
@@ -49,6 +68,9 @@ export function InlineThreadTitle({
     if (!entering) return;
     setDraft(editableTitle);
     finished.current = false;
+    userLeft.current = false;
+    selected.current = false;
+    reclaims.current = 0;
     // Commit-time autoFocus loses to the closing menu's focus restoration in
     // the same flush, leaving typed text nowhere; take focus after commit.
     inputRef.current?.focus({ preventScroll: true });
@@ -90,7 +112,11 @@ export function InlineThreadTitle({
       ref={inputRef}
       aria-label={`Rename ${title}`}
       value={draft}
-      onFocus={(event) => event.currentTarget.select()}
+      onFocus={(event) => {
+        if (selected.current) return;
+        selected.current = true;
+        event.currentTarget.select();
+      }}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
@@ -103,7 +129,16 @@ export function InlineThreadTitle({
           finish(false);
         }
       }}
-      onBlur={() => finish(true)}
+      onBlur={() => {
+        if (!userLeft.current && document.hasFocus() && reclaims.current < 3) {
+          reclaims.current += 1;
+          requestAnimationFrame(() => {
+            if (!finished.current) inputRef.current?.focus({ preventScroll: true });
+          });
+          return;
+        }
+        finish(true);
+      }}
       className={cn(
         "pointer-events-auto relative z-10 h-6 w-full min-w-0 rounded border border-border bg-background px-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring",
         className,
