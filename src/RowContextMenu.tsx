@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { SidebarActions, type SidebarAction } from "./SidebarActions";
 import { threadDisplayTitle } from "./inbox";
@@ -49,6 +50,18 @@ export function RowContextMenu({
   const items: SidebarAction[] = [];
   items.push({ label: "Open in split", run: () => { actions.open(thread.id, { split: true }); onOpen?.(); } });
   if (onRename) items.push({ label: "Rename", run: onRename });
+  if (onRename) {
+    items.push({
+      label: "Regenerate name",
+      run: () => {
+        actions.regenerateTitle(thread.id).catch((error: unknown) => {
+          toast.error("Couldn't regenerate the name", {
+            description: error instanceof Error ? error.message : String(error),
+          });
+        });
+      },
+    });
+  }
   if (onToggleChildren) items.push({ label: expanded ? "Collapse children" : "Expand children", run: onToggleChildren });
   items.push({ label: thread.isUnread ? "Mark read" : "Mark unread", run: () => void actions.setRead(thread.id, thread.isUnread), separatorBefore: true });
   if (onTogglePin) {
