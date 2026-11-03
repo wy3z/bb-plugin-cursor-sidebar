@@ -1,7 +1,7 @@
 # Cursor Sidebar
 
-A port of Cursor's sidebar to BB, with four view modes: group chats by project,
-status, environment or date.
+A port of Cursor's sidebar to BB, with five groupings: Projects, Updated,
+Status, Environment or None.
 
 Chats nest under the chat that spawned them, pinned chats gather in one block,
 and standalone chats file into folders. The view settings live in the plugin's
@@ -12,34 +12,105 @@ leaves your threads alone.
 
 ![The same chats grouped by Projects, Updated, Status and Environment](docs/media/grouping-demo.webp)
 
-Sample chats, grouped four ways. The [mp4 is here](docs/media/grouping-demo.mp4)
+Sample chats, grouped by Projects, Updated, Status and Environment. **None**
+draws one flat list instead: no headings at all, pinned chats still first under
+**Pinned**, child chats still nested, and the rows follow the conversation order
+picked under **Ordering**. The [mp4 is here](docs/media/grouping-demo.mp4)
 if your browser will not play the WebP.
+
+Projects nests chats under their project. Updated groups them by last activity:
+Today, Yesterday, Last 7 days, Last 30 days, Older. Status groups them by the
+strongest status in the group, in this fixed order: Needs your input, Failed,
+Unread, Working, Idle. Environment groups by the machine the chat ran on,
+including chats with none.
+
+## The toolbar and the headings
+
+One fixed row sits above the thread list and never scrolls: the project switcher
+on the left and the view menu trigger on the right. Section headings below it
+carry no controls of their own; a heading is only a small muted label that folds
+its block, and a project or folder heading keeps its glyph.
+
+Every grouping uses the same sections. Pinned always comes first, then the
+group's own headings (project names, dated buckets, statuses), then **Chats** for
+standalone conversations. **None** has no sections at all: folders included,
+every chat sits in one list, so only **Pinned** and the child-thread trees keep
+a heading. There is no umbrella "Projects" or "Threads" heading,
+and an empty heading is never drawn: a project with no visible thread is hidden
+in Projects grouping, except the one picked in the switcher, which says
+**No threads**.
+
+A row can wear its project's icon, a status glyph and its metadata line. When a
+chat has child chats that are working, the age at the end of the row becomes a
+small accent pill with their count. The pill disappears as soon as nothing
+under it is running; it is the only static mark a parent row gets for its
+children.
 
 ## The view menu
 
 | Control | What it changes |
 | --- | --- |
-| **Grouping** | Projects, Updated, Status or Environment. One at a time, never stacked |
-| **Chat order** | By last activity, or by status |
-| **Project order** | By hand, or by worst status and then by the project used most recently. Projects grouping only |
-| **Group order** | Most recent first, or the grouping's own default order |
-| **Show** | Updated time, environment, branch, machine and the pull request mark |
-| **Status filter** | Needs your input, Failed, Working, Unread, Idle |
-| **Environment filter** | Which environments appear, including chats with none |
+| **Grouping** | Projects, Updated, Status, Environment or None. One at a time, never stacked |
+| **Chat order** | Updated, or Status |
+| **Project order** | Manual, or by worst status and then by the project used most recently. Projects grouping only |
+| **Group order** | Updated (most recent first), or Default (the grouping's own order). Every grouping except Projects and None |
+| **Threads per group** | How many inactive chats a section previews: 5, 10, 20, 50 or All. The default is 10 |
+| **Show** | Updated time, environment, branch, machine, the pull request mark and project icons on rows |
+| **Status filter** | Needs your input, Failed, Unread, Working, Idle. All or None |
+| **Age filter** | Today, Yesterday, Last 7 days, Last 30 days, Older. All or None |
+| **Environment filter** | Which environments appear, including chats with none. All or None |
 | **Expand All / Collapse All** | Every section and group at once |
 | **Mark All as Read** | Every loaded chat that is unread |
 
-The three order controls live under Ordering and the two filters live under
-Filters.
+Ordering offers the chat order everywhere, plus project order under Projects or
+group order under the other groupings. None offers only the chat order, since
+it has no sections to arrange. The filters live under Filters in the same menu.
+
+Project icons are hidden on a row under its own project heading, and while the
+switcher is narrowed to one project, since the heading or the switcher already
+says which project it is.
+
+**Threads per group** bounds every section in every grouping: project sections,
+date, status and environment groups, the flat None list and Chats, plus the
+child chats nested under a parent. Each group previews one page and **Show N more**
+reveals the next, where N is the chosen page. A family counts once,
+and a chat that is working, needs your input, selected or pinned always shows
+whatever the limit. **All** drops the limit and the button.
 
 The menu button shows a warning mark when a view change has not reached the
 server. The notice inside the menu has a Retry button.
 
+## Project switcher
+
+The left side of the toolbar row. It reads **All projects**, one project's name,
+or **N projects**, and wears that project's icon when it has one. Click it for
+every project, All projects first. **New project…** is the last item, under a
+separator, and opens BB's own Add project dialog. The switcher stays visible
+when there is only one project, because **New project…** lives there.
+
+Picking one project narrows the list in every grouping, and under Projects
+grouping the row drops that project's heading: its chats read as one flat list
+instead of a section you can fold away. Picking **All projects** brings every
+group back. While one real project is picked, the switcher menu also offers
+**Set icon…**, which opens the icon picker for that project.
+
 ## Project icons
 
-Click a project's folder icon to pick a glyph, or choose **Upload image** to
-use your own. Transparent PNGs keep their transparency. The image is shrunk to
-64px before it is saved.
+A project can wear a glyph, an emoji, a one or two letter monogram or an
+uploaded image. Open the picker from a project heading's **Actions** menu
+(**Set icon…**), the project switcher while one project is picked, or a chat
+row's right-click menu (**Set project icon…**, which uses that chat's project).
+
+The dialog has three tabs: **Icons** with a searchable glyph grid, **Emoji**
+with a grid and a paste-any-emoji field, and **Monogram** with the letters typed
+by hand. Every mode shares an 18-colour palette and a live preview. **Upload
+image** uses your own picture, keeps PNG transparency and shrinks it to 64px
+before saving. **Reset to default** returns the folder. Save and Cancel close
+the dialog.
+
+The icon model, colour palette, popular-icon list and picker layout are ported
+from [T3 Code](https://github.com/pingdotgg/t3code); see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Chats can set icons too, from a shell:
 
@@ -52,6 +123,13 @@ bb cursor-sidebar icon get                 # what the project wears now
 
 Run from a chat, these act on that chat's project. Anywhere else, add
 `--project <id or name>`. The PNG is read on the BB server's machine.
+
+The same icons replace BB's folder in the composer: the project label under a
+thread's prompt box, the project button on the New thread screen, and that
+button's project picker. Projects without an icon keep the folder, and the view
+menu's **Project icons** switch turns these off too. BB has no project icon
+field, so the label and button are matched by project name; two projects with
+the same name keep the folder there.
 
 ## Mobile
 
@@ -78,7 +156,9 @@ Letting go of a lifted row without moving opens its menu, and that menu holds
 Expand children or Collapse children for a chat that has any. A lifted drag
 drops where you leave it: a folder heading files the chat, the middle of another
 chat in the same project nests it, and a project heading between two others
-reorders the projects.
+reorders the projects. Hovering the middle half of a chat to nest shows an
+elbow into a child slot and a **Make child** label, so a nest never reads as a
+reorder line.
 
 The pin and archive icons stay hidden on touch. Nothing reveals them without
 hover, and the 44px targets a phone needs do not fit in a row, so a swipe or
@@ -92,10 +172,24 @@ chats nest under their parent, and that row shows the workspace's name when it
 has one. Top-level chats that share a worktree count as one workspace too.
 Without that plugin nothing changes.
 
+## Compact navigation
+
+An optional Zeron-style navigation surface, registered as
+`cursor-sidebar/compact`. It replaces the navigation rows with a header: back,
+forward and New thread on the left, and a menu of every navigation destination
+on the right. BB's own back and forward buttons are hidden while it is active;
+the header draws its own and leaves them out when the sidebar is too narrow.
+Pick **Compact** under Settings → Appearance, or run:
+
+```sh
+bb settings ui set sidebar.navigationProvider cursor-sidebar/compact
+```
+
 ## Requirements
 
-BB 0.42 or newer. The plugin fills BB's experimental thread-list slot, which
-replaces BB's own thread list. Turn it off with `bb plugin disable cursor-sidebar`.
+BB 0.48.1 or newer, with plugin SDK 0.6.104 or newer. The plugin fills BB's
+experimental thread-list slot, which replaces BB's own thread list. Turn it off
+with `bb plugin disable cursor-sidebar`.
 
 ## Install
 
@@ -118,10 +212,10 @@ Frontend modules must import them from there, and may only `import type` from
 dependency: a git install prunes dev dependencies and the host only hands the
 SDK to the server bundle, so a value import of `./server` from frontend code
 drags the backend into `app.js` and fails `bb plugin install git:...` with
-`Could not resolve "@get-bb/plugin-sdk"` — while still building on a machine
+`Could not resolve "@get-bb/plugin-sdk"`, while still building on a machine
 that has the SDK installed.
 
 ## License
 
-MIT. Portions adapted from bb-plugin-thread-inbox. See
+MIT. Portions adapted from bb-plugin-thread-inbox and T3 Code. See
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

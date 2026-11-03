@@ -5,7 +5,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import { PROJECT_ICON_NAMES } from "./project-icons";
+import { PROJECT_ICON_NAMES, parseProjectIcon } from "./project-icons";
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 /** Raw bytes that still fit the server's 256KB data-URL cap once base64'd. */
@@ -68,8 +68,20 @@ export function registerIconCli(bb: BbPluginApi, store: IconStore): void {
 
       switch (command) {
         case "get": {
-          const icon = store.read(project.id);
-          const shown = icon === null ? "folder (default)" : icon.startsWith("data:") ? "uploaded image" : `glyph ${icon}`;
+          const stored = store.read(project.id);
+          const icon = stored === null ? null : parseProjectIcon(stored);
+          const shown =
+            stored === null
+              ? "folder (default)"
+              : icon === null
+                ? `unrecognised value ${JSON.stringify(stored)}`
+                : icon.kind === "image"
+                  ? "uploaded image"
+                  : icon.kind === "emoji"
+                    ? `emoji ${icon.emoji}`
+                    : icon.kind === "monogram"
+                      ? `monogram ${icon.text} (${icon.color})`
+                      : `glyph ${icon.name}${icon.color === undefined ? "" : ` (${icon.color})`}`;
           return { exitCode: 0, stdout: `${project.name}: ${shown}\n` };
         }
         case "clear":

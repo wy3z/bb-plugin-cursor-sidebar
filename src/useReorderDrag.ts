@@ -422,7 +422,7 @@ export function useReorderDrag(
         ) {
           const nestRect = nestRow.getBoundingClientRect();
           const ratio = (y - nestRect.top) / nestRect.height;
-          if (ratio > 0.3 && ratio < 0.7) {
+          if (ratio > 0.25 && ratio < 0.75) {
             commit({
               ...current,
               parentTargetId: nestTargetId,

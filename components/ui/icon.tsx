@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { experimental_Icon as HostIcon } from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Alert02Icon,
@@ -55,6 +56,7 @@ import {
   getExtendedIcons,
   subscribeExtendedIcons,
 } from "./icon-registry";
+import { HOST_ICON_NAMES } from "./host-icon-names";
 
 const SectionAddStrokeRoundedIcon: IconSvgElement = [
   [
@@ -186,6 +188,18 @@ const CHEVRON_ICON_NAMES: ReadonlySet<string> = new Set([
 /** Chevron paths are a short stroke; 2.75 reads heavier than the 1.5 default. */
 const CHEVRON_STROKE_WIDTH = 2.75;
 
+/** Old local names whose meaning now has a real host built-in name. */
+const ICON_ALIASES: Readonly<Record<string, string>> = {
+  ListFilter: "FilterHorizontal",
+  Orbit: "Target",
+  User: "UserRound",
+};
+
+function resolveHostName(name: string): string | undefined {
+  const mapped = ICON_ALIASES[name] ?? name;
+  return HOST_ICON_NAMES.has(mapped) ? mapped : undefined;
+}
+
 export interface IconProps {
   name: IconName;
   className?: string;
@@ -203,6 +217,19 @@ export function Icon({
   "aria-hidden": ariaHidden,
   "aria-label": ariaLabel,
 }: IconProps) {
+  const hostName = resolveHostName(name);
+  if (hostName !== undefined) {
+    return (
+      <HostIcon
+        name={hostName}
+        className={cn(className)}
+        style={style}
+        aria-hidden={ariaHidden}
+        aria-label={ariaLabel}
+      />
+    );
+  }
+
   const resolvedStroke =
     strokeWidth ?? (CHEVRON_ICON_NAMES.has(name) ? CHEVRON_STROKE_WIDTH : undefined);
   const coreIcon = CORE_ICON_LOOKUP[name];

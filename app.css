@@ -1,3 +1,8 @@
+/* The plugin owns scrolling; the host's reserved gutter adds an extra right inset. */
+[data-sidebar="content"]:has([data-cursor-sidebar-root]) {
+  scrollbar-gutter: auto;
+}
+
 /* Scoped phone/touch affordances; fine-pointer desktop density is unchanged. */
 @media (max-width: 767px), (pointer: coarse) {
   [data-cursor-sidebar-root] { min-width: 0; overflow-x: clip; }
@@ -5,7 +10,7 @@
   [data-cursor-sidebar-root] select,
   .cs-move-dialog button,
   .cs-move-dialog select { min-height: 44px; touch-action: manipulation; }
-  [data-cursor-sidebar-root] button:has(> svg:only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action) { min-width: 44px; }
+  [data-cursor-sidebar-root] button:has(> :is(svg, [data-icon-root]):only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action) { min-width: 44px; }
   [data-cursor-sidebar-root] button[aria-expanded] { opacity: 1; }
   [data-cursor-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
   [data-cursor-sidebar-root] .cs-project-glyph { width: 16px; height: 16px; }
@@ -107,10 +112,10 @@
 }
 
 /* Chevrons are a short stroke; 2.75 reads heavier than the 1.5 default. */
-[data-cursor-sidebar-root] svg[data-icon="ChevronDown"] path,
-[data-cursor-sidebar-root] svg[data-icon="ChevronRight"] path,
-[data-cursor-sidebar-root] svg[data-icon="ChevronLeft"] path,
-[data-cursor-sidebar-root] svg[data-icon="ChevronUp"] path {
+[data-cursor-sidebar-root] [data-icon="ChevronDown"] path,
+[data-cursor-sidebar-root] [data-icon="ChevronRight"] path,
+[data-cursor-sidebar-root] [data-icon="ChevronLeft"] path,
+[data-cursor-sidebar-root] [data-icon="ChevronUp"] path {
   stroke-width: 2.75;
 }
 
@@ -118,8 +123,8 @@
    for pin/archive (padding) so those icons are not sitting on the glyphs. */
 [data-cursor-sidebar-root] [data-thread-row] .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row] .cs-thread-info {
-  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 8px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 8px), transparent);
 }
 [data-cursor-sidebar-root] [data-thread-row]:hover .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-thread-title,
@@ -133,8 +138,7 @@
 /* The open thread's text reads brighter than its siblings, so the selection
    separates from the rest the way a selected row should. */
 [data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-title,
-[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-info,
-[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-time {
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-info {
   color: oklch(from var(--sidebar-accent-foreground) min(1, calc(l + 0.14)) c h);
 }
 
@@ -234,6 +238,14 @@
   will-change: transform;
 }
 
+.cs-drag-ghost {
+  transition: translate 120ms ease-out, opacity 120ms ease-out;
+}
+.cs-drag-ghost[data-nesting] {
+  translate: 22px 28px;
+  opacity: 0.6 !important;
+}
+
 /* BB's own sidebar chrome — the nav rows and the top-bar controls (toggle,
    back/forward) — is not rendered here, but it shares the column and should
    shade like our rows. The colours derive from the theme's sidebar foreground,
@@ -273,7 +285,7 @@
   border-radius: 6px;
   pointer-events: none;
 }
-.cs-icon-btn > svg {
+.cs-icon-btn > :is(svg, [data-icon-root]) {
   position: relative;
   z-index: 1;
 }
@@ -298,10 +310,9 @@
   mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent);
 }
 
-/* Every heading that carries the view tools shares one right edge. The
-   phone/touch layout adds a little right padding above these rows, so pull the
-   row flush with the top-bar controls there; the desktop sidebar needs no
-   change. */
+/* Section headings share one right edge. The phone/touch layout adds a little
+   right padding above these rows, so pull the row flush with the top-bar
+   controls there; the desktop sidebar needs no change. */
 @media (max-width: 767px) and (pointer: coarse) {
   [data-cursor-sidebar-root] .cs-heading { margin-right: -8px; }
 }
@@ -380,6 +391,74 @@
   .cs-grouping-swap {
     animation: none !important;
   }
+}
+
+/*
+ * Compact navigation proxies BB's own history buttons, so BB's copies are
+ * hidden only inside the exact header row this plugin's header mounted in.
+ * The row is marked by CompactNavigationHeader, never globally, so Settings
+ * and other sidebars — app sidebar hidden behind them or not — keep their own
+ * back/forward buttons. The hidden buttons still receive .click().
+ */
+[data-cursor-sidebar-compact-nav-row]
+  button[aria-label="Go back"]:not([data-cursor-sidebar-compact-nav-control]),
+[data-cursor-sidebar-compact-nav-row]
+  button[aria-label="Go forward"]:not([data-cursor-sidebar-compact-nav-control]) {
+  display: none !important;
+}
+
+/*
+ * Project-icon colours, ported from T3 Code's projectIconColors.ts.
+ * `color` is the glyph/monogram ink (600 in light, 400 in dark);
+ * `--cs-pi-swatch` is the picker's 500-weight dot. BB marks dark mode with
+ * `html.dark`, which Tailwind's default `dark:` variant (prefers-color-scheme)
+ * does not follow, so the switch is a plain descendant rule.
+ */
+.cs-pi-gray { --cs-pi-fg: oklch(44.6% 0.03 256.802); --cs-pi-swatch: oklch(55.1% 0.027 264.364); color: var(--cs-pi-fg); }
+.cs-pi-red { --cs-pi-fg: oklch(57.7% 0.245 27.325); --cs-pi-swatch: oklch(63.7% 0.237 25.331); color: var(--cs-pi-fg); }
+.cs-pi-orange { --cs-pi-fg: oklch(64.6% 0.222 41.116); --cs-pi-swatch: oklch(70.5% 0.213 47.604); color: var(--cs-pi-fg); }
+.cs-pi-amber { --cs-pi-fg: oklch(66.6% 0.179 58.318); --cs-pi-swatch: oklch(76.9% 0.188 70.08); color: var(--cs-pi-fg); }
+.cs-pi-yellow { --cs-pi-fg: oklch(68.1% 0.162 75.834); --cs-pi-swatch: oklch(79.5% 0.184 86.047); color: var(--cs-pi-fg); }
+.cs-pi-lime { --cs-pi-fg: oklch(64.8% 0.2 131.684); --cs-pi-swatch: oklch(76.8% 0.233 130.85); color: var(--cs-pi-fg); }
+.cs-pi-green { --cs-pi-fg: oklch(62.7% 0.194 149.214); --cs-pi-swatch: oklch(72.3% 0.219 149.579); color: var(--cs-pi-fg); }
+.cs-pi-emerald { --cs-pi-fg: oklch(59.6% 0.145 163.225); --cs-pi-swatch: oklch(69.6% 0.17 162.48); color: var(--cs-pi-fg); }
+.cs-pi-teal { --cs-pi-fg: oklch(60% 0.118 184.704); --cs-pi-swatch: oklch(70.4% 0.14 182.503); color: var(--cs-pi-fg); }
+.cs-pi-cyan { --cs-pi-fg: oklch(60.9% 0.126 221.723); --cs-pi-swatch: oklch(71.5% 0.143 215.221); color: var(--cs-pi-fg); }
+.cs-pi-sky { --cs-pi-fg: oklch(58.8% 0.158 241.966); --cs-pi-swatch: oklch(68.5% 0.169 237.323); color: var(--cs-pi-fg); }
+.cs-pi-blue { --cs-pi-fg: oklch(54.6% 0.245 262.881); --cs-pi-swatch: oklch(62.3% 0.214 259.815); color: var(--cs-pi-fg); }
+.cs-pi-indigo { --cs-pi-fg: oklch(51.1% 0.262 276.966); --cs-pi-swatch: oklch(58.5% 0.233 277.117); color: var(--cs-pi-fg); }
+.cs-pi-violet { --cs-pi-fg: oklch(54.1% 0.281 293.009); --cs-pi-swatch: oklch(60.6% 0.25 292.717); color: var(--cs-pi-fg); }
+.cs-pi-purple { --cs-pi-fg: oklch(55.8% 0.288 302.321); --cs-pi-swatch: oklch(62.7% 0.265 303.9); color: var(--cs-pi-fg); }
+.cs-pi-fuchsia { --cs-pi-fg: oklch(59.1% 0.293 322.896); --cs-pi-swatch: oklch(66.7% 0.295 322.15); color: var(--cs-pi-fg); }
+.cs-pi-pink { --cs-pi-fg: oklch(59.2% 0.249 0.584); --cs-pi-swatch: oklch(65.6% 0.241 354.308); color: var(--cs-pi-fg); }
+.cs-pi-rose { --cs-pi-fg: oklch(58.6% 0.253 17.585); --cs-pi-swatch: oklch(64.5% 0.246 16.439); color: var(--cs-pi-fg); }
+
+html.dark .cs-pi-gray { --cs-pi-fg: oklch(70.7% 0.022 261.325); }
+html.dark .cs-pi-red { --cs-pi-fg: oklch(70.4% 0.191 22.216); }
+html.dark .cs-pi-orange { --cs-pi-fg: oklch(75% 0.183 55.934); }
+html.dark .cs-pi-amber { --cs-pi-fg: oklch(82.8% 0.189 84.429); }
+html.dark .cs-pi-yellow { --cs-pi-fg: oklch(85.2% 0.199 91.936); }
+html.dark .cs-pi-lime { --cs-pi-fg: oklch(84.1% 0.238 128.85); }
+html.dark .cs-pi-green { --cs-pi-fg: oklch(79.2% 0.209 151.711); }
+html.dark .cs-pi-emerald { --cs-pi-fg: oklch(76.5% 0.177 163.223); }
+html.dark .cs-pi-teal { --cs-pi-fg: oklch(77.7% 0.152 181.912); }
+html.dark .cs-pi-cyan { --cs-pi-fg: oklch(78.9% 0.154 211.53); }
+html.dark .cs-pi-sky { --cs-pi-fg: oklch(74.6% 0.16 232.661); }
+html.dark .cs-pi-blue { --cs-pi-fg: oklch(70.7% 0.165 254.624); }
+html.dark .cs-pi-indigo { --cs-pi-fg: oklch(67.3% 0.182 276.935); }
+html.dark .cs-pi-violet { --cs-pi-fg: oklch(70.2% 0.183 293.541); }
+html.dark .cs-pi-purple { --cs-pi-fg: oklch(71.4% 0.203 305.504); }
+html.dark .cs-pi-fuchsia { --cs-pi-fg: oklch(74% 0.238 322.16); }
+html.dark .cs-pi-pink { --cs-pi-fg: oklch(71.8% 0.202 349.761); }
+html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
+
+.cs-pi-swatch { background-color: var(--cs-pi-swatch); }
+
+/* The composer's project label and New thread project button draw the
+   sidebar's project icon (src/ComposerProjectIcons.tsx); hide BB's folder
+   beside it. */
+[data-cs-has-project-icon] [data-icon="Folder"]:not([data-cs-composer-project-icon] *) {
+  display: none !important;
 }
 
 /* Phone layout, grouped cards: a project with chats opens as one rounded

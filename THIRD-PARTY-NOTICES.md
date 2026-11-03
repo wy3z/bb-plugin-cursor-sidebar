@@ -38,6 +38,45 @@ target. Without it, a reorder drag that keeps crossing rows visibly rewinds
 before each move. Re-apply the patch if this file is ever refreshed from
 upstream.
 
+## T3 Code
+
+The project-icon model, colour palette, popular-icon list, default identity
+derivation and selector layout are ported from **T3 Code**
+(https://github.com/pingdotgg/t3code), used under the MIT License. That
+project's checkout was treated as read-only; only source was read and adapted
+into this plugin's own package. The icon set itself is drawn with this plugin's
+own Hugeicons/host registry, not T3's lucide components.
+
+The following files contain adapted source from that project:
+
+- `src/project-icons.ts` (the 18-colour palette, popular icons, emoji list,
+  monogram validation and default monogram/colour derivation)
+- `src/ProjectMonogram.tsx` (the monogram tile)
+- `src/ProjectIconPicker.tsx` (the tabs, grids, search, colour row and
+  Save/Cancel layout of `ProjectIconPickerDialog.tsx`)
+
+### T3 Code MIT License
+
+Copyright (c) 2026 T3 Tools Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ## Inbox Sidebar MIT License
 
 Copyright (c) 2026 Michael Yong

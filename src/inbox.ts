@@ -10,9 +10,11 @@ import type {
   PluginSidebarThreadIndicator,
 } from "@get-bb/plugin-sdk/app";
 
-interface DisplayThread extends PluginSidebarThread {
-  displayTitle?: string;
-}
+/**
+ * A sidebar row. SDK 0.6 gives every thread a resolved `displayTitle`, so the
+ * row is the host's thread: this alias keeps the row code's vocabulary.
+ */
+type DisplayThread = PluginSidebarThread;
 
 export function threadDisplayTitle(thread: DisplayThread): string {
   return thread.displayTitle ?? threadEditableTitle(thread);

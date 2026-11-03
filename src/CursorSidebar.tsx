@@ -6,11 +6,9 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from "react";
 import { toast } from "sonner";
 import {
-  experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
   useRpc,
   type PluginSidebarThread,
@@ -19,7 +17,6 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { SidebarActions } from "./SidebarActions";
-import { NewProjectAction } from "./NewProjectAction";
 import { isProtectedInteractionTarget } from "./settle-shortcut";
 import {
   activePathIds,
@@ -47,15 +44,12 @@ import {
   type ThreadStatusKind,
 } from "./status";
 import { pinAllowed, planPinWrites } from "./pin-scope";
-import {
-  CONVERSATION_PAGE_SIZE,
-  DEFAULT_INACTIVE_CONVERSATIONS,
-  planConversations,
-} from "./conversations";
+import { planConversations } from "./conversations";
 import { useWorkspaces } from "./useWorkspaces";
 import { useWorkspaceNesting } from "./workspace-tabs";
 import { usePrimaryHost } from "./usePrimaryHost";
 import { useProjectIcons } from "./useProjectIcons";
+import { ComposerProjectIcons } from "./ComposerProjectIcons";
 import { ProjectIconPicker } from "./ProjectIconPicker";
 import type { ProjectIcon } from "./project-icons";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
@@ -67,16 +61,18 @@ import {
   orderByStoredIds,
 } from "./thread-order";
 import {
-  EXPANDED_AGES_KEY,
+  COLLAPSED_AGES_KEY,
   COLLAPSED_GROUPS_KEY,
-  EXPANDED_THREADS_KEY,
+  COLLAPSED_SECTIONS_KEY,
   usePersistentIds,
 } from "./collapse";
 import { useThreadSections } from "./useThreadSections";
+import { useThreadMutations } from "./thread-actions";
 import { useSidebarView } from "./useSidebarView";
 import type { cursorSidebarRpcContract } from "./server";
 import { SidebarViewMenuRoot, SidebarViewMenuTrigger, SidebarViewSyncNotice } from "./SidebarViewMenu";
 import { MobileStatusChips } from "./MobileStatusChips";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 import {
   environmentFilterOptions,
   familyAwareComparator,
@@ -87,7 +83,11 @@ import {
   ordinaryFamilyGroupKeys,
   ordinaryThreadStatus,
   environmentGroupOf,
+  viewHasActiveFilters,
   NO_ENVIRONMENT_KEY,
+  projectFilterOptions,
+  projectKeyOf,
+  threadsPerGroupPage,
   unreadOrdinaryThreadIds,
 } from "./sidebar-view";
 import { DeleteFolderDialog, FolderNameDialog } from "./FolderDialogs";
@@ -105,6 +105,11 @@ import { AnimatedList } from "./AnimatedList";
 import { Drawer } from "./Drawer";
 import { useShortcutGuide } from "./useShortcutGuide";
 import { ICON_BTN } from "./icon-btn";
+import {
+  SectionHeading,
+  SECTION_HEADING_LABEL,
+  SECTION_HEADING_ROW,
+} from "./SectionDivider";
 import { openHostAddProject } from "./open-host-add-project";
 import { ShowMoreButton } from "./ShowMoreButton";
 
@@ -118,8 +123,8 @@ const COLLAPSED_ROW_EXIT_MS = 220;
 
 /**
  * Project-grouped thread list. BB's projects are the only containers, the
- * native personal container is shown as Threads, and settled threads sit in
- * one collapsed section under the thread list rather than a shelf per project.
+ * native personal container is shown as Chats, and settled threads sit in one
+ * collapsed section under the thread list rather than a shelf per project.
  */
 export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
   const { status, threads: rawThreads, projects: nativeProjects } = useSidebarThreads();
@@ -128,7 +133,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     [nativeProjects],
   );
   const projects = useMemo(
-    () => [...nativeProjectSections, { id: STANDALONE, name: "Chats", isPersonal: true }],
+    () => [...nativeProjectSections, { id: STANDALONE, name: "Threads", isPersonal: true }],
     [nativeProjectSections],
   );
   const nativeProjectedThreads = useMemo(() => projectThreadView(rawThreads, nativeProjects), [rawThreads, nativeProjects]);
@@ -148,7 +153,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const threadOrders = useThreadOrders();
   const threadOrdersRef = useRef(threadOrders);
   threadOrdersRef.current = threadOrders;
-  const actions = useSidebarThreadActions();
+  const actions = useThreadMutations();
   const rpc = useRpc<typeof cursorSidebarRpcContract>();
   const projectIcons = useProjectIcons();
 
@@ -160,6 +165,17 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () => nativeProjects.find((project) => project.isPersonal)?.id ?? null,
     [nativeProjects],
   );
+  /** Native project id to display name, for the row project icon's tooltip. */
+  const projectLabelById = useMemo(
+    () =>
+      new Map(
+        nativeProjects.map((project) => [
+          project.id,
+          project.isPersonal ? "Chats" : project.name,
+        ]),
+      ),
+    [nativeProjects],
+  );
   const onNewThread = useCallback(() => {
     actions.openNewThread({
       ...(personalProjectId === null ? {} : { projectId: personalProjectId }),
@@ -167,15 +183,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     });
     onNavigate();
   }, [actions, onNavigate, personalProjectId]);
-
-  const nativeChatProjects = useMemo(
-    () => nativeProjects.filter((project) => !project.isPersonal).map((project) => ({ id: project.id, name: project.name })),
-    [nativeProjects],
-  );
-  const openNativeProjectChat = useCallback((project: { id: string; name: string }) => {
-    actions.openNewThread({ projectId: project.id, focusPrompt: true });
-    onNavigate();
-  }, [actions, onNavigate]);
 
   // The list fades its bottom edge while rows remain below the fold, so the
   // last visible row dissolves instead of meeting the next section with a cut.
@@ -210,20 +217,15 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   }, []);
   const now = nowMinute * 60_000;
 
-  const expandedProjects = usePersistentIds("bb-plugin-cursor-sidebar:expanded-projects:v1");
-  // Fresh devices open Today/Yesterday so populated recency is visible. Any
-  // stored value, including an explicitly empty one, is kept and never
-  // reseeded; a fold afterwards sticks for the whole mount.
-  const expandedAges = usePersistentIds(EXPANDED_AGES_KEY, [
-    ageGroupKey(STANDALONE, "Today"),
-    ageGroupKey(STANDALONE, "Yesterday"),
-  ]);
+  // Every dated bucket defaults open; this set holds only the explicitly folded
+  // ones. The previous open-allow-list made any populated bucket other than
+  // Today/Yesterday render as a heading with nothing under it.
+  const collapsedAges = usePersistentIds(COLLAPSED_AGES_KEY);
   const collapsedGroups = usePersistentIds(COLLAPSED_GROUPS_KEY);
-  // Top-level group headings (Projects) default open; this set holds the
-  // folded ones and is a device preference, not shared state. Loose chats
-  // under Projects grouping sit in a Threads subheading that defaults closed.
+  // Top-level group headings (Pinned, projects, Chats) default open; these sets
+  // hold the folded ones and are device preferences, not shared state.
   const topGroupCollapsed = usePersistentIds("bb-plugin-cursor-sidebar:collapsed-top-groups:v1");
-  const expandedThreads = usePersistentIds(EXPANDED_THREADS_KEY);
+  const collapsedSections = usePersistentIds(COLLAPSED_SECTIONS_KEY);
   const folderStore = useThreadSections();
   const knownFolderIds = useMemo(
     () => new Set(folderStore.sections.map((folder) => folder.id)),
@@ -237,7 +239,35 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState<{ id: string; name: string; chats: number } | null>(null);
-  const [iconPicker, setIconPicker] = useState<{ projectId: string; name: string; anchor: HTMLElement } | null>(null);
+  const [iconPicker, setIconPicker] = useState<{ projectId: string; name: string; anchor: HTMLElement | null } | null>(null);
+  const iconPickerFrame = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (iconPickerFrame.current !== null) cancelAnimationFrame(iconPickerFrame.current);
+    },
+    [],
+  );
+  // One dialog for every entry point: a heading, a thread row or the switcher.
+  // The open is deferred a frame so the menu that asked for it has finished
+  // closing (and restoring focus) before the dialog claims focus for itself.
+  const openIconPicker = useCallback(
+    (projectId: string, anchor?: HTMLElement | null) => {
+      if (iconPickerFrame.current !== null) cancelAnimationFrame(iconPickerFrame.current);
+      const explicit = anchor ?? null;
+      iconPickerFrame.current = requestAnimationFrame(() => {
+        iconPickerFrame.current = null;
+        const restore =
+          explicit ??
+          (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+        setIconPicker({
+          projectId,
+          name: projectLabelById.get(projectId) ?? "",
+          anchor: restore,
+        });
+      });
+    },
+    [projectLabelById],
+  );
 
   const [announcement, setAnnouncement] = useState("");
   const [markReadBusy, setMarkReadBusy] = useState(false);
@@ -270,6 +300,17 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     }
     return map;
   }, [visible]);
+  // One set of family aggregates for the complete loaded set, reused by the
+  // age filter, the Updated headings, the Status groups and the conversation
+  // order. Filtering out a descendant can never move its family elsewhere.
+  const familyFacts = useMemo(
+    () =>
+      ordinaryFamilyFacts(visible, {
+        parentOf: homeDisplayParentOf(visible),
+        statusOf: ordinaryThreadStatus,
+      }),
+    [visible],
+  );
 
   // Defined after the section memos; the drag commit reads it at drop time.
   const commitFolderPinDropRef = useRef<(movingId: string, moveToSection: string | null | undefined, pin: boolean | undefined) => Promise<void>>(async () => {});
@@ -346,6 +387,14 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     [descendantsById, rawById],
   );
   const drag = useReorderDrag(onDragCommit, canNest);
+  // While a drop would nest, the lifted ghost steps aside (right and down, and
+  // fainter) so the target row and its "Make child" preview stay visible.
+  const nestTargetId = drag.state?.kind === "thread" ? drag.state.parentTargetId : null;
+  useEffect(() => {
+    const ghost = document.querySelector<HTMLElement>(".cs-drag-ghost");
+    if (ghost === null) return;
+    ghost.toggleAttribute("data-nesting", nestTargetId !== null);
+  }, [nestTargetId]);
 
   // Project order is a plugin overlay; native storage projects stay unchanged.
   // A project drag holds the list still and commits on release, so there is no
@@ -428,7 +477,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () =>
       orderedProjects.map((project) => ({
         id: project.id,
-        name: project.isPersonal ? "Chats" : project.name,
+        name: project.isPersonal ? "Threads" : project.name,
         isPersonal: project.isPersonal,
       })),
     [orderedProjects],
@@ -441,12 +490,14 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const viewVisible = useMemo(
     () =>
       filterOrdinaryThreads(visible, view, {
+        now,
+        familyFacts,
         bypass: (thread) => {
           const root = familyRootOfId(thread.id);
           return pinnedFamilyRoots.has(root) || root === activeFamilyRoot;
         },
       }),
-    [activeFamilyRoot, familyRootOfId, pinnedFamilyRoots, visible, view],
+    [activeFamilyRoot, familyFacts, familyRootOfId, now, pinnedFamilyRoots, visible, view],
   );
   const viewEnvironmentOptions = useMemo(
     () => environmentFilterOptions(visible),
@@ -459,20 +510,24 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       ),
     [visible],
   );
+  const viewProjectOptions = useMemo(
+    () => projectFilterOptions(visible, nativeProjects, view.projectFilter),
+    [nativeProjects, visible, view.projectFilter],
+  );
   const unreadOrdinary = useMemo(
     () => unreadOrdinaryThreadIds(visible),
     [visible],
   );
   // Automatic ordering reads the same family facts the grouping shows, so a
   // family sorts by the activity its divider shows. Facts come from the complete
-  // visible set with same-home display parents, before any fold or preview.
-  const siblingOrdering = useMemo<SiblingOrdering>(() => {
-    const facts = ordinaryFamilyFacts(viewVisible, {
-      parentOf: homeDisplayParentOf(viewVisible),
-      statusOf: ordinaryThreadStatus,
-    });
-    return { compare: familyAwareComparator(view.sortConversationsBy, facts) };
-  }, [view.sortConversationsBy, viewVisible]);
+  // visible set with same-home display parents, before any filter, fold or
+  // preview.
+  const siblingOrdering = useMemo<SiblingOrdering>(
+    () => ({
+      compare: familyAwareComparator(view.sortConversationsBy, familyFacts),
+    }),
+    [familyFacts, view.sortConversationsBy],
+  );
   // Conversations always take the selected automatic order; only projects and
   // folders keep a manual arrangement.
   const orderingFor = useCallback(
@@ -490,6 +545,23 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       ),
     [displayProjects, orderingFor, viewVisible],
   );
+  // A project filter hides its whole group in Projects grouping, header
+  // included. The sections still feed the Pinned block, so a pinned family from
+  // a filtered-out project is lifted and stays visible; only its group goes.
+  const projectSectionsVisible = useMemo(() => {
+    const projectFilter = view.projectFilter;
+    if (projectFilter === null) return sections;
+    return sections.filter((section) => {
+      const nativeId =
+        section.members.length > 0
+          ? projectKeyOf(section.members[0]!)
+          : section.id.startsWith(NATIVE_PROJECT_PREFIX)
+            ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
+            : personalProjectId;
+      if (nativeId === null) return true;
+      return projectFilter.includes(nativeId);
+    });
+  }, [personalProjectId, sections, view.projectFilter]);
   // Pooled ordinary section for Updated / Status / Environment. Presentation
   // only: homes, pins, folders and order are untouched.
   const pooledSection = useMemo(
@@ -718,6 +790,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             now,
             parentOf: (id) => commitSection.forest.parent.get(id) ?? null,
             statusOf: ordinaryThreadStatus,
+            familyFacts,
           });
       const groupKeyOf = memberById === null || groupKeys === null ? null : (threadId: string): string => {
         return standaloneGroupKey({
@@ -736,7 +809,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         .map((row) => row.thread.id);
       return { commitSection, scope, ids };
     },
-    [expandedParents, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
+    [expandedParents, familyFacts, knownFolderIds, now, projectsGrouping, sectionByThreadId, sectionsById, view],
   );
 
   const onThreadDragStart = useCallback(
@@ -804,6 +877,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         now,
         parentOf: (id) => keyScope.forest.parent.get(id) ?? null,
         statusOf: ordinaryThreadStatus,
+        familyFacts,
       });
       const key = keys.get(activeThreadId) ?? null;
       if (key !== null && view.groupBy === "updated") {
@@ -819,7 +893,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       shelf: section.shelfById.get(activeThreadId) ?? "active",
       ancestors,
     };
-  }, [activeThreadId, now, projectsGrouping, sectionByThreadId, sectionsById, view]);
+  }, [activeThreadId, familyFacts, now, projectsGrouping, sectionByThreadId, sectionsById, view]);
 
   // Reveal once per navigation (and once when the store finishes loading).
   // Pending is tracked separately: if data has not arrived, the request stays
@@ -834,22 +908,16 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     }
     if (lastSeenThread.current === activeThreadId || reveal === null) return;
     lastSeenThread.current = activeThreadId;
-    // A hidden/filtered thread reveals its existing home and ancestors, so the
-    // group heading that contains it opens rather than duplicating the row.
-    if (projectsGrouping && homeKindOf(reveal.sectionId) === "project") {
-      topGroupCollapsed.remove("projects");
-    } else if (projectsGrouping) {
-      topGroupCollapsed.remove("projects");
-      expandedThreads.add("threads");
-    }
-    // Never permanently open a collapsed project on selection: a collapsed
-    // project shows only the selected conversation (the exception row) and
-    // keeps its stored expansion. Per-conversation ancestor folding below is
-    // transient view state, not the persisted project expansion.
-    if (reveal.updatedAgeKey) expandedAges.add(reveal.updatedAgeKey);
+    // A hidden/filtered thread reveals the heading that contains it, so the row
+    // is found where it belongs rather than being duplicated. A folded project
+    // is never opened by selection: it shows the selected exception row and
+    // keeps its stored expansion.
+    // Never permanently open a collapsed project on selection; per-conversation
+    // ancestor folding below is transient view state, not a stored preference.
+    if (reveal.updatedAgeKey) collapsedAges.remove(reveal.updatedAgeKey);
     if (reveal.collapsedGroupKey) collapsedGroups.remove(reveal.collapsedGroupKey);
     setExpandedParents((current) => new Set([...current, ...reveal.ancestors]));
-  }, [activeThreadId, reveal, expandedAges, collapsedGroups, expandedThreads, topGroupCollapsed, projectsGrouping]);
+  }, [activeThreadId, reveal, collapsedAges, collapsedGroups]);
 
   const moveProjectWithinNative = useCallback(
     (projectId: string, offset: -1 | 1) => {
@@ -908,12 +976,12 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       workspacePaths,
       primaryHostId,
       visibleById,
+      familyFacts,
       descendantsById,
       activeThreadId,
       expandedParents,
-      expandedAgeGroups: expandedAges.ids,
-      onToggleAgeGroup: expandedAges.toggle,
-      onNewThread,
+      collapsedAgeGroups: collapsedAges.ids,
+      onToggleAgeGroup: collapsedAges.toggle,
       now,
       onNavigate,
       onToggleChildren: toggleChildren,
@@ -944,6 +1012,15 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       },
       canPin,
       view,
+      // Under a project heading the row icon only repeats the heading, and a
+      // switcher narrowed to one project has nothing left to distinguish.
+      showProjectIcons:
+        view.show.projectIcons &&
+        !(view.projectFilter !== null && view.projectFilter.length === 1),
+      projectIconFor: (projectId: string) => projectIcons.iconFor(projectId),
+      projectLabelFor: (projectId: string) => projectLabelById.get(projectId) ?? null,
+      personalProjectId,
+      openIconPicker,
       statusOf: (threadId: string) => {
         const thread = visibleById.get(threadId);
         if (thread === undefined) return undefined;
@@ -960,21 +1037,25 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       canPin,
       collapsedGroups,
       togglePin,
-      expandedAges,
+      collapsedAges,
       descendantsById,
       drag.consumeSuppressedClick,
       drag.state,
       expandedParents,
+      familyFacts,
       folderStore.sections,
       now,
       onNavigate,
-      onNewThread,
       onThreadDragStart,
       onThreadDragPickUp,
       onProjectDragPickUp,
       toggleChildren,
       visibleById,
       view,
+      personalProjectId,
+      projectIcons,
+      projectLabelById,
+      openIconPicker,
     ],
   );
 
@@ -1007,18 +1088,18 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   // Environment group keys and the date buckets that actually appear, plus the
   // descendant trees. A key for a group the view does not render is never
   // touched, so unrelated hidden preferences survive.
-  const bulkTopGroupKeys = liftedPins.length > 0
-    ? ["pinned", "projects"]
-    : ["projects"];
+  const bulkTopGroupKeys = liftedPins.length > 0 ? ["pinned"] : [];
   const collapseSections = useMemo(
-    () => (projectsGrouping ? sections : [pooledSection]),
-    [pooledSection, projectsGrouping, sections],
+    () => (projectsGrouping ? projectSectionsVisible : [pooledSection]),
+    [pooledSection, projectsGrouping, projectSectionsVisible],
   );
   const bulkSectionIds = useMemo(
-    () => collapseSections.map((section) => section.id),
-    [collapseSections],
-  );
-  const bulkTargets = useMemo(
+    () =>
+      // The flat None grouping draws no section heading, so a bulk toggle
+      // there only folds child threads; it never writes a section key.
+      view.groupBy === "none" ? [] : collapseSections.map((section) => section.id),
+    [collapseSections, view.groupBy],
+  );  const bulkTargets = useMemo(
     () =>
       ordinaryCollapsibleTargets(
         collapseSections.map((section) => ({
@@ -1034,30 +1115,29 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
           now,
           folderIds: knownFolderIds,
           statusOf: ordinaryThreadStatus,
+          familyFacts,
         },
       ),
-    [collapseSections, knownFolderIds, now, view],
+    [collapseSections, familyFacts, knownFolderIds, now, view],
   );
   const expandAll = useCallback(() => {
     topGroupCollapsed.removeMany(bulkTopGroupKeys);
-    expandedThreads.add("threads");
-    expandedProjects.addMany(bulkSectionIds);
+    collapsedSections.removeMany(bulkSectionIds);
     collapsedGroups.removeMany(bulkTargets.groupKeys);
-    expandedAges.addMany(bulkTargets.ageKeys);
+    collapsedAges.removeMany(bulkTargets.ageKeys);
     setExpandedParents((current) => new Set([...current, ...bulkTargets.parentIds]));
-  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, expandedThreads, topGroupCollapsed]);
+  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedAges, collapsedGroups, collapsedSections, topGroupCollapsed]);
   const collapseAll = useCallback(() => {
     topGroupCollapsed.addMany(bulkTopGroupKeys);
-    expandedThreads.remove("threads");
-    expandedProjects.removeMany(bulkSectionIds);
+    collapsedSections.addMany(bulkSectionIds);
     collapsedGroups.addMany(bulkTargets.groupKeys);
-    expandedAges.removeMany(bulkTargets.ageKeys);
+    collapsedAges.addMany(bulkTargets.ageKeys);
     setExpandedParents((current) => {
       const next = new Set(current);
       for (const id of bulkTargets.parentIds) next.delete(id);
       return next;
     });
-  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedGroups, expandedAges, expandedProjects, expandedThreads, topGroupCollapsed]);
+  }, [bulkSectionIds, bulkTargets, bulkTopGroupKeys, collapsedAges, collapsedGroups, collapsedSections, topGroupCollapsed]);
 
   if (status === "loading") {
     return (
@@ -1078,13 +1158,50 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     );
   }
 
-  const nativeSectionsVisible = sections.filter(
-    (section) =>
-      !section.personal &&
-      (section.byShelf.active.length > 0 || section.byShelf.settled.length > 0 ||
-        (section.known && section.members.length === 0)),
+  // A project's heading only renders when something under it actually renders.
+  // Pinned families are lifted into the Pinned block, so a project holding only
+  // pins would otherwise draw an empty heading. The one exception is the
+  // project picked in the switcher: it stays put and says "No threads".
+  const nativeProjectIdOfSection = (section: ProjectSectionData): string | null =>
+    section.members.length > 0
+      ? projectKeyOf(section.members[0]!)
+      : section.id.startsWith(NATIVE_PROJECT_PREFIX)
+        ? section.id.slice(NATIVE_PROJECT_PREFIX.length)
+        : section.personal
+          ? personalProjectId
+          : null;
+  const selectedProjectId =
+    view.projectFilter !== null && view.projectFilter.length === 1
+      ? view.projectFilter[0]!
+      : null;
+  // An empty project picked in the switcher says "No threads" rather than
+  // blaming the current filters for hiding every row.
+  const selectedProjectEmpty =
+    selectedProjectId !== null &&
+    !visible.some((thread) => projectKeyOf(thread) === selectedProjectId);
+  const sectionHasVisibleThreads = (section: ProjectSectionData): boolean =>
+    section.byShelf.active.some(
+      (thread) => !pinnedFamilyRoots.has(familyRootOfId(thread.id)),
+    );
+  const sectionShown = (section: ProjectSectionData): boolean =>
+    sectionHasVisibleThreads(section) ||
+    (selectedProjectId !== null && nativeProjectIdOfSection(section) === selectedProjectId);
+  const nativeSectionsVisible = projectSectionsVisible.filter(
+    (section) => !section.personal && sectionShown(section),
   );
-  const chatSectionsVisible = sections.filter((section) => section.personal);
+  const chatSectionsVisible = projectSectionsVisible.filter(
+    (section) => section.personal && sectionShown(section),
+  );
+  // One project's chats read as one flat list, Zeron's way: with a single
+  // project selected under Projects grouping the lone home loses its header
+  // (and so cannot be folded away), leaving just its threads under the
+  // switcher.
+  const singleProjectSection =
+    projectsGrouping &&
+    view.projectFilter !== null &&
+    nativeSectionsVisible.length + chatSectionsVisible.length === 1
+      ? nativeSectionsVisible[0] ?? chatSectionsVisible[0]!
+      : null;
 
   const renamingFolder = renamingFolderId
     ? folderStore.sections.find((folder) => folder.id === renamingFolderId) ?? null
@@ -1118,11 +1235,16 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
 
   const anyCollapsed =
     bulkTopGroupKeys.some((key) => topGroupCollapsed.ids.has(key)) ||
-    (projectsGrouping && !expandedThreads.ids.has("threads")) ||
-    bulkSectionIds.some((id) => !expandedProjects.ids.has(id)) ||
+    bulkSectionIds.some((id) => collapsedSections.ids.has(id)) ||
     [...bulkTargets.groupKeys].some((key) => collapsedGroups.ids.has(key)) ||
-    [...bulkTargets.ageKeys].some((key) => !expandedAges.ids.has(key)) ||
+    [...bulkTargets.ageKeys].some((key) => collapsedAges.ids.has(key)) ||
     [...bulkTargets.parentIds].some((id) => !expandedParents.has(id));
+
+  const nothingToShow =
+    liftedPins.length === 0 &&
+    (projectsGrouping
+      ? nativeSectionsVisible.length === 0 && chatSectionsVisible.length === 0
+      : pooledSection.byShelf.active.length === 0);
 
   const viewMenu = (
     <SidebarViewMenuTrigger
@@ -1130,19 +1252,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       triggerClassName={`${ICON_BTN} data-[state=open]:text-sidebar-foreground/90`}
     />
   );
-  const newChatAction = (
-    <NewProjectAction
-      projects={nativeChatProjects}
-      onSelect={openNativeProjectChat}
-      onAddProject={(trigger) => {
-        if (!openHostAddProject(trigger)) toast.error("Couldn't open Add project.");
-      }}
-    />
-  );
 
-  const renderSection = (section: ProjectSectionData) => {
+  const renderSection = (section: ProjectSectionData, flat = false) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
-    const sectionOpen = expandedProjects.ids.has(section.id);
+    const sectionOpen = !collapsedSections.ids.has(section.id);
+    const toggleSection = () => collapsedSections.toggle(section.id);
     // Pinned rows are lifted into the global Pinned block, so their activity
     // must not also light the home they came from: a working pinned thread
     // would otherwise put a spinner on a closed project that is already
@@ -1184,11 +1298,11 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             : undefined
         }
         sectionOpen={sectionOpen}
-        onToggleProject={() => expandedProjects.toggle(section.id)}
+        onToggleProject={toggleSection}
         icon={nativeId !== null ? projectIcons.iconFor(nativeId) : null}
         onSetIcon={
           kind === "project" && nativeId !== null
-            ? (anchor) => setIconPicker({ projectId: nativeId, name: section.name, anchor })
+            ? (anchor) => openIconPicker(nativeId, anchor)
             : undefined
         }
         onDeleteProject={
@@ -1203,6 +1317,8 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             : undefined
         }
         isDragging={drag.state?.kind === "project" && drag.state.movingId === section.id}
+        flat={flat}
+        empty={!sectionHasVisibleThreads(section)}
         onHeadingDragStart={(event) => {
           drag.startProject(event, reorderableProjectIds, section.id, section.name);
         }}
@@ -1228,7 +1344,37 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       onMarkAllRead={() => { void markAllRead(); }}
     >
     <div data-cursor-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
+      <ComposerProjectIcons
+        enabled={view.show.projectIcons}
+        projects={nativeProjects}
+        iconFor={projectIcons.iconFor}
+      />
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
+      {/* One fixed toolbar above the scroll area: the project switcher on the
+          left, the view menu on the right. No section heading carries controls. */}
+      <div className="flex shrink-0 items-center gap-1 px-1.5 pt-2">
+        <div className="flex min-w-0 flex-1 items-center">
+          <ProjectSwitcher
+            projects={viewProjectOptions}
+            selected={view.projectFilter}
+            iconFor={(projectId) => projectIcons.iconFor(projectId)}
+            onSelect={(projectId) =>
+              sidebarView.update({ projectFilter: projectId === null ? null : [projectId] })
+            }
+            onSetIcon={
+              selectedProjectId !== null && selectedProjectId !== personalProjectId
+                ? (anchor) => openIconPicker(selectedProjectId, anchor)
+                : undefined
+            }
+            onNewProject={(trigger) => {
+              if (!openHostAddProject(trigger)) toast.error("Couldn't open Add project.");
+            }}
+          />
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {viewMenu}
+        </div>
+      </div>
 
       <div
         ref={listRef}
@@ -1271,15 +1417,17 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             onPick={(icon) => {
               if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
               setIconPicker(null);
-            }}
-          />
+            }}          />
+          <MobileStatusChips threads={visible} view={view} onUpdate={sidebarView.update} />
           <AnimatedList
             as="div"
             key={view.groupBy}
             className="cs-grouping-swap"
           >
             {liftedPins.length > 0 ? (
-              <>
+              // The block after Pinned starts with its own `first:mt-0`
+              // section, so Pinned carries the gap rather than relying on it.
+              <div className="mb-3">
                 <GroupHeading
                   label="Pinned"
                   open={!topGroupCollapsed.ids.has("pinned")}
@@ -1288,57 +1436,66 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 <Drawer open={!topGroupCollapsed.ids.has("pinned")}>
                   <PinnedList items={liftedPins} ctx={ctx} />
                 </Drawer>
-              </>
+              </div>
             ) : null}
             {projectsGrouping ? (
-              <>
-                <GroupHeading
-                  label="Projects"
-                  open={!topGroupCollapsed.ids.has("projects")}
-                  onToggle={() => topGroupCollapsed.toggle("projects")}
-                  onCreate={() => {
-                    toast.error("Couldn't open Add project.");
-                  }}
-                  createLabel="New Project"
-                  tools={viewMenu}
-                />
-                <Drawer open={!topGroupCollapsed.ids.has("projects")}>
-                  <MobileStatusChips threads={visible} view={view} onUpdate={sidebarView.update} />
-                  {/* The drawer body is not animated, so the projects need
-                      their own list. A heading drag moves these sections on
-                      its own transforms, so the list holds its slides until
-                      the drop has landed. */}
+              singleProjectSection !== null ? (
+                // One project: no section header and no fold, so its threads
+                // read as the single list under the switcher.
+                renderSection(singleProjectSection, true)
+              ) : (
+                <>
+                  {/* Project headings and the Chats heading are the sections;
+                      no umbrella heading restates the grouping. A heading drag
+                      moves these sections on its own transforms, so the list
+                      holds its slides until the drop has landed. */}
                   <AnimatedList as="div" paused={drag.state?.kind === "project"}>
                     {nativeSectionsVisible.map((section) => renderSection(section))}
                   </AnimatedList>
-                  <GroupHeading
-                    label="Threads"
-                    open={expandedThreads.ids.has("threads")}
-                    onToggle={() => expandedThreads.toggle("threads")}
-                  />
-                  <Drawer open={expandedThreads.ids.has("threads")}>
-                    {chatSectionsVisible.map((section) => renderSection(section))}
-                  </Drawer>
-                </Drawer>
-              </>
+                  {chatSectionsVisible.map((section) => renderSection(section))}
+                </>
+              )
             ) : (
-              <>
-                <section aria-label="Threads" className="mb-1 mt-3 min-h-8 first:mt-0">
+              <section aria-label={view.groupBy === "none" ? "Threads" : "Chats"} className="mb-1 min-h-8">
+                {/* The other groupings head each group themselves; the flat
+                    list gets one heading so it reads apart from Pinned. */}
+                {view.groupBy === "none" && pooledSection.byShelf.active.length > 0 ? (
+                  <>
+                    <GroupHeading
+                      label="Threads"
+                      open={!topGroupCollapsed.ids.has("threads")}
+                      onToggle={() => topGroupCollapsed.toggle("threads")}
+                    />
+                    <Drawer open={!topGroupCollapsed.ids.has("threads")}>
+                      <ShelfList
+                        section={pooledSection}
+                        shelf="active"
+                        ctx={ctx}
+                        grouped
+                      />
+                    </Drawer>
+                  </>
+                ) : (
                   <ShelfList
                     section={pooledSection}
                     shelf="active"
                     ctx={ctx}
                     grouped
-                    firstGroupTools={
-                      <>
-                        {viewMenu}
-                        {newChatAction}
-                      </>
-                    }
                   />
-                </section>
-              </>
+                )}
+              </section>
             )}
+            {/* No heading is ever drawn empty; when nothing renders at all the
+                list still says why, rather than going blank. */}
+            {nothingToShow ? (
+              <p className="px-3 py-2 text-xs text-sidebar-foreground/73">
+                {selectedProjectEmpty
+                  ? "No threads"
+                  : viewHasActiveFilters(view)
+                    ? "No threads match the current filters."
+                    : "No threads"}
+              </p>
+            ) : null}
           </AnimatedList>
       </div>
     </div>
@@ -1350,53 +1507,18 @@ function GroupHeading({
   label,
   open,
   onToggle,
-  onCreate,
-  createLabel,
-  tools,
 }: {
   label: string;
   open: boolean;
   onToggle: () => void;
-  onCreate?: (() => void) | undefined;
-  createLabel?: string | undefined;
-  tools?: ReactNode;
 }) {
   return (
-    <div className="cs-heading group/section mt-3 first:mt-0 flex items-center gap-1 pl-3 pr-2 max-md:pointer-coarse:pr-0.5">
-      <button
-        type="button"
-        aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
-        aria-expanded={open}
-        onClick={onToggle}
-        className="flex min-h-7 min-w-0 items-center gap-0.5 rounded py-1 text-left text-xs font-medium text-sidebar-foreground/73 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
-      >
-        <span className="truncate">{label}</span>
-        <Icon
-          name="ChevronRight"
-          aria-hidden="true"
-          className={cn(
-            "size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
-            open && "rotate-90",
-          )}
-        />
-      </button>
-      <span aria-hidden className="min-w-0 flex-1" />
-      {tools}
-      {onCreate ? (
-        <button
-          type="button"
-          aria-label={createLabel ?? `New ${label}`}
-          title={createLabel ?? `New ${label}`}
-          onClick={(event) => {
-            if (openHostAddProject(event.currentTarget)) return;
-            onCreate();
-          }}
-          className={`ml-3 ${ICON_BTN} max-md:pointer-coarse:ml-0`}
-        >
-          <Icon name="Plus" className="size-3.5" />
-        </button>
-      ) : null}
-    </div>
+    <SectionHeading
+      label={label}
+      open={open}
+      onToggle={onToggle}
+      className="mt-3 first:mt-0"
+    />
   );
 }
 
@@ -1416,6 +1538,8 @@ function ProjectSection({
   status,
   statusLabel,
   chatCount,
+  flat = false,
+  empty,
 }: {
   section: ProjectSectionData;
   status?: ThreadStatusKind | null;
@@ -1433,10 +1557,24 @@ function ProjectSection({
   /** Hand-order the project one place, the same write the drag commits. */
   onMoveProject?: ((offset: -1 | 1) => void) | undefined;
   isDragging: boolean;
+  /**
+   * Render the threads only: no heading, no disclosure, always open. The
+   * single-project view uses this so its one home cannot be folded away.
+   */
+  flat?: boolean;
+  /**
+   * Nothing under this heading would render: no visible thread, and no family
+   * lifted into Pinned either. The selected project keeps its heading and says
+   * "No threads".
+   */
+  empty?: boolean;
   onHeadingDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const headingRef = useRef<HTMLDivElement>(null);
-  const [inactiveLimit, setInactiveLimit] = useState(DEFAULT_INACTIVE_CONVERSATIONS);
+  // The project previews one page of its inactive conversations. "All" is no
+  // limit, so the reveal control never appears.
+  const pageSize = threadsPerGroupPage(ctx.view.threadsPerGroup);
+  const [inactiveLimit, setInactiveLimit] = useState(pageSize);
   const conversationPlan = useMemo(
     () =>
       planConversations(section, {
@@ -1446,11 +1584,18 @@ function ProjectSection({
     [ctx.activeThreadId, inactiveLimit, section],
   );
   const revealedConversations = conversationPlan.visible;
+  // A new page size applies in the same render: resetting in an effect would
+  // paint one frame of the old limit's extra rows first.
+  const [lastPageSize, setLastPageSize] = useState(pageSize);
+  if (lastPageSize !== pageSize) {
+    setLastPageSize(pageSize);
+    setInactiveLimit(pageSize);
+  }
   // Collapsing a native project returns it to the first page, so reopening it
   // never silently dumps every historical conversation.
   useEffect(() => {
-    if (!sectionOpen) setInactiveLimit(DEFAULT_INACTIVE_CONVERSATIONS);
-  }, [sectionOpen]);
+    if (!sectionOpen) setInactiveLimit(pageSize);
+  }, [pageSize, sectionOpen]);
   // Minimal selected ancestor path, render-only: force-open collapsed
   // ancestors so the active row stays reachable without touching the stored
   // expansion preference.
@@ -1479,21 +1624,31 @@ function ProjectSection({
   const showMore = (
     <ShowMoreButton
       hiddenConversations={conversationPlan.hiddenConversations}
-      onShowMore={() => setInactiveLimit((current) => current + CONVERSATION_PAGE_SIZE)}
+      pageSize={pageSize}
+      onShowMore={() => setInactiveLimit((current) => current + pageSize)}
     />
   );
 
-  if (section.personal) {
+  const isEmpty = empty ?? conversationPlan.visible.size === 0;
+  if (flat) {
+    // No heading means nothing to fold, so the lone project's threads stay put
+    // under the switcher however the stored expansion preference reads.
     return (
-      <section aria-label="Standalone chats" className="mb-1 mt-1 min-h-8 first:mt-0">
-        <ShelfList
-          section={section}
-          shelf="active"
-          ctx={ctx}
-          grouped
-          keepIds={revealedConversations}
-        />
-        {showMore}
+      <section aria-label={section.name} className="mb-1 mt-1 min-h-8 first:mt-0">
+        {isEmpty ? (
+          <p className="px-3 py-1 text-xs text-sidebar-foreground/73">No threads</p>
+        ) : (
+          <>
+            <ShelfList
+              section={section}
+              shelf="active"
+              ctx={ctx}
+              grouped
+              keepIds={revealedConversations}
+            />
+            {showMore}
+          </>
+        )}
       </section>
     );
   }
@@ -1502,7 +1657,6 @@ function ProjectSection({
   const disclosureLabel = sectionOpen
     ? `Collapse ${section.name}`
     : `Expand ${section.name}`;
-  const isEmpty = conversationPlan.visible.size === 0;
   return (
     <section
       aria-label={section.name}
@@ -1544,14 +1698,18 @@ function ProjectSection({
       ]}>
       <div
         ref={headingRef}
+        tabIndex={-1}
         data-reorder-id={canDragProject ? section.id : undefined}
         data-reorder-kind={canDragProject ? "project" : undefined}
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
         className={cn(
-          "cs-project-heading group/heading relative flex min-h-7 items-center gap-1.5 rounded-md py-1 pl-3 pr-1 max-md:min-h-11 pointer-coarse:min-h-11",
+          SECTION_HEADING_ROW,
+          "cs-project-heading group/heading relative",
           sectionOpen && "mb-1",
         )}
       >
+        {/* Threads without a project read as a plain heading: no glyph slot. */}
+        {section.personal ? null : (
         <span className="cs-status-slot relative flex w-4 shrink-0 items-center justify-center">
           <span className="flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
             <ProjectStatusGlyph
@@ -1585,6 +1743,7 @@ function ProjectSection({
             />
           </button>
         </span>
+        )}
         <button
           type="button"
           title={section.name}
@@ -1592,9 +1751,9 @@ function ProjectSection({
             if (ctx.consumeSuppressedClick(section.id)) return;
             onToggleProject();
           }}
-          className="flex min-h-5 min-w-0 flex-1 items-center rounded py-0.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
+          className="flex min-h-5 min-w-0 flex-1 items-center rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
         >
-          <span className="cs-project-name min-w-0 truncate text-sm font-normal text-sidebar-foreground/95">
+          <span className={cn(SECTION_HEADING_LABEL, "cs-project-name")}>
             {section.name}
             {section.known ? null : (
               <span className="text-sidebar-foreground/73"> (unknown)</span>
@@ -1606,25 +1765,17 @@ function ProjectSection({
               <Icon name="ChevronRight" className="size-3" />
             </span>
           ) : null}
+          {section.personal ? (
+            <Icon
+              name="ChevronRight"
+              aria-hidden="true"
+              className={cn(
+                "ml-1 size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
+                sectionOpen && "rotate-90",
+              )}
+            />
+          ) : null}
         </button>
-        {onNewThread ? (
-          <button
-            type="button"
-            aria-label={`New thread in ${section.name}`}
-            title={`New thread in ${section.name}`}
-            onClick={() => {
-              if (ctx.consumeSuppressedClick(section.id)) return;
-              onNewThread();
-            }}
-            className={cn(
-              "cs-project-new flex size-4 items-center justify-center rounded-md text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
-              "max-md:size-9 pointer-coarse:size-9",
-              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
-            )}
-          >
-            <Icon name="Plus" className="size-3.5 max-md:size-5 pointer-coarse:size-5" />
-          </button>
-        ) : null}
       </div>
 
       </SidebarActions>

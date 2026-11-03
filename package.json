@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-cursor-sidebar",
-  "version": "0.2.4",
+  "version": "0.3.2",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -8,8 +8,8 @@
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "bb": ">=0.42",
-    "bbPluginSdk": ">=0.4.47"
+    "bb": ">=0.48.1",
+    "bbPluginSdk": ">=0.6.104"
   },
   "bb": {
     "name": "Cursor Sidebar",
@@ -27,7 +27,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@get-bb/plugin-sdk": "0.4.47",
+    "@get-bb/plugin-sdk": "0.6.104",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

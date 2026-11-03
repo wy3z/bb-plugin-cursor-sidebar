@@ -1,5 +1,6 @@
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import { ProjectIconMark } from "./ProjectIconMark";
 import type { ProjectIcon } from "./project-icons";
 import type { ThreadStatusKind } from "./status";
 
@@ -50,7 +51,7 @@ export function ProjectStatusGlyph({
 }) {
   // Folder (closed) and FolderOpen are Hugeicons' matched single-weight pair
   // (Folder01 / Folder02). The heavier stroke keeps both crisp at 14px.
-  const name: IconName = icon?.kind === "glyph" ? icon.name : open ? "FolderOpen" : "Folder";
+  const fallback: IconName = open ? "FolderOpen" : "Folder";
   // A closed folder hides its rows, so an active status keeps a small badge on
   // the glyph's bottom-right. An open folder shows the status on the rows.
   const badge = !open && status !== "idle" ? status : null;
@@ -64,29 +65,55 @@ export function ProjectStatusGlyph({
       data-heading-kind="project"
       className={cn("cs-project-glyph relative", className)}
     >
-      {icon?.kind === "image" ? (
-        <img
-          src={icon.src}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          className="size-4 shrink-0 object-contain"
-        />
-      ) : (
-        <Icon
-          name={name}
-          aria-hidden="true"
-          className="size-4 shrink-0 text-sidebar-foreground/73"
-          strokeWidth={2}
-        />
-      )}
+      <ProjectIconMark
+        icon={icon ?? null}
+        fallback={fallback}
+        className="size-4"
+        mutedClassName="text-sidebar-foreground/73"
+      />
       {badge !== null ? <ProjectStatusBadge status={badge} /> : null}
     </span>
   );
 }
 
-/** The mini status on a closed project: a spinner for work, a dot otherwise. */
-function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
+/**
+ * The project's identity at the start of a thread row, for groupings that are
+ * not already under a project heading. Same icon the heading wears (a chosen
+ * glyph, an uploaded image, or the folder) drawn at 14px in a muted tone, so it
+ * reads as context rather than a control. A personal "Chats" thread carries a
+ * chat glyph instead, since it has no project identity to name.
+ */
+export function ProjectRowIcon({
+  icon,
+  label,
+  chats = false,
+}: {
+  icon: ProjectIcon | null;
+  label: string;
+  /** True for a personal-project row: draw a muted chat glyph, not a folder. */
+  chats?: boolean;
+}) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn(
+        "pointer-events-none flex size-3.5 shrink-0 items-center justify-center",
+        chats ? "text-sidebar-foreground/45" : "text-sidebar-foreground/55",
+      )}
+    >
+      <ProjectIconMark
+        icon={icon}
+        fallback={chats ? "Chat" : "Folder"}
+        className="size-3.5"
+        mutedClassName={chats ? "text-sidebar-foreground/45" : "text-sidebar-foreground/55"}
+      />
+    </span>
+  );
+}
+
+/** The mini status on a closed project: a spinner for work, a dot otherwise. */function ProjectStatusBadge({ status }: { status: ThreadStatusKind }) {
   const tone =
     status === "failed"
       ? "bg-destructive"

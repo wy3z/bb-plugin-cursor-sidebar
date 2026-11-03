@@ -6,17 +6,25 @@ import { cn } from "@/lib/utils";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import type { SidebarView } from "./server";
 import {
+  AGE_FILTER_LABELS,
   NO_ENVIRONMENT_KEY,
   STATUS_FILTER_LABELS,
+  THREADS_PER_GROUP_VALUES,
+  VIEW_AGE_FILTERS,
   VIEW_GROUP_BY,
   VIEW_STATUS_FILTERS,
+  ageFilterPatch,
+  allAgeFilterPatch,
   allEnvironmentFilterPatch,
   allStatusFilterPatch,
   environmentFilterPatch,
   sidebarViewSyncNotice,
   statusFilterPatch,
+  threadsPerGroupLabel,
   type EnvironmentIdentity,
   type SidebarViewSync,
+  type ThreadsPerGroup,
+  type ViewAgeFilter,
   type ViewConversationOrder,
   type ViewGroupBy,
   type ViewProjectOrder,
@@ -52,10 +60,16 @@ export interface SidebarViewMenuRootProps {
   onMarkAllRead: () => void;
 }
 
-const CONTENT =
+/**
+ * The menu surface and row shared with the project switcher, so a second menu
+ * in the same sidebar cannot drift from this one's look and focus treatment.
+ */
+export const VIEW_MENU_CONTENT =
   `cs-view-menu z-50 w-max max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${ANCHORED_OVERLAY_MOTION}`;
-const ITEM =
+export const VIEW_MENU_ITEM =
   "flex min-h-7 cursor-pointer select-none items-center gap-2 rounded py-1 pl-2 pr-3 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground";
+const CONTENT = VIEW_MENU_CONTENT;
+const ITEM = VIEW_MENU_ITEM;
 const OPTION =
   "relative flex min-h-7 cursor-pointer select-none items-center gap-2 rounded py-1 pl-2 pr-6 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground text-muted-foreground data-[state=checked]:text-foreground";
 const SECTION_LABEL =
@@ -154,6 +168,7 @@ const GROUPING_LABELS: Record<ViewGroupBy, string> = {
   updated: "Updated",
   status: "Status",
   environment: "Environment",
+  none: "None",
 };
 
 const GROUPING_ICONS: Record<ViewGroupBy, IconName> = {
@@ -161,6 +176,7 @@ const GROUPING_ICONS: Record<ViewGroupBy, IconName> = {
   updated: "Clock",
   status: "Spinner",
   environment: "Cloud",
+  none: "ListView",
 };
 
 const STATUS_ICONS: Record<ViewStatusFilter, IconName> = {
@@ -220,11 +236,11 @@ export function SidebarViewSyncNotice({
 
 /**
  * The compact view menu. It mirrors Cursor's organization as submenus
- * (Grouping, Ordering, Show, Filters) over the one persisted SidebarView, using
- * BB's theme tokens. Grouping is one radio: Projects, Updated, Status, or
- * Environment — selecting one replaces the current extra grouping; they never
- * stack. Ordering chooses how conversations, projects and group sections are
- * sorted. Radix menu primitives supply real arrow-key navigation, roving focus
+ * (Grouping, Ordering, Threads per group, Show, Filters) over the one persisted
+ * SidebarView, using BB's theme tokens. Grouping is one radio: Projects, Updated, Status,
+ * Environment or None — selecting one replaces the current extra grouping; they
+ * never stack. Ordering chooses how conversations, projects and group sections
+ * are sorted; None has no sections, so it offers only the conversation order. Radix menu primitives supply real arrow-key navigation, roving focus
  * and typeahead, so the radio and checkbox semantics work from the keyboard,
  * not from role attributes alone.
  *
@@ -246,7 +262,7 @@ export function SidebarViewMenuTrigger({ sync, triggerClassName }: SidebarViewMe
           "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
         }
       >
-        <Icon name="ListFilter" className="size-3.5" />
+        <Icon name="SlidersHorizontal" className="size-3.5" />
         {notice !== null ? (
           <Icon
             name={notice.tone === "warning" ? "AlertTriangle" : "CircleX"}
@@ -285,6 +301,9 @@ export function SidebarViewMenuRoot({
   const toggleStatus = (status: ViewStatusFilter, on: boolean) =>
     onUpdate(statusFilterPatch(view, status, on));
   const setAllStatuses = (on: boolean) => onUpdate(allStatusFilterPatch(on));
+  const toggleAge = (bucket: ViewAgeFilter, on: boolean) =>
+    onUpdate(ageFilterPatch(view, bucket, on));
+  const setAllAges = (on: boolean) => onUpdate(allAgeFilterPatch(on));
   const environmentSelected = (id: string) =>
     view.environmentFilter === null || view.environmentFilter.includes(id);
   const toggleEnvironment = (id: string, on: boolean) =>
@@ -294,6 +313,12 @@ export function SidebarViewMenuRoot({
     view.statusFilter.length === VIEW_STATUS_FILTERS.length
       ? "All"
       : `${view.statusFilter.length} selected`;
+  const ageFilterValue =
+    view.ageFilter.length === VIEW_AGE_FILTERS.length
+      ? "All"
+      : view.ageFilter.length === 1
+        ? AGE_FILTER_LABELS[view.ageFilter[0]!]
+        : `${view.ageFilter.length} selected`;
   const environmentFilterValue = (() => {
     if (view.environmentFilter === null) return "All";
     if (view.environmentFilter.length === 1) {
@@ -357,40 +382,69 @@ export function SidebarViewMenuRoot({
                   <ChoiceItem value="updated" label="Updated" icon="Clock" />
                   <ChoiceItem value="status" label="Status" icon="Spinner" />
                 </DropdownMenu.RadioGroup>
-                <DropdownMenu.Separator className="my-1 h-px bg-border" />
-                {view.groupBy === "workspace" ? (
+                {view.groupBy === "none" ? null : (
                   <>
-                    <DropdownMenu.Label className={SECTION_LABEL}>
-                      Projects
-                    </DropdownMenu.Label>
-                    <DropdownMenu.RadioGroup
-                      value={view.sortProjectsBy}
-                      onValueChange={(value) =>
-                        onUpdate({ sortProjectsBy: value as ViewProjectOrder })
-                      }
-                    >
-                      <ChoiceItem value="manual" label="Manual" icon="ArrowUpDown" />
-                      <ChoiceItem value="status" label="Status" icon="Spinner" />
-                    </DropdownMenu.RadioGroup>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenu.Label className={SECTION_LABEL}>
-                      Groups
-                    </DropdownMenu.Label>
-                    <DropdownMenu.RadioGroup
-                      value={view.sortGroupsBy}
-                      onValueChange={(value) =>
-                        onUpdate({ sortGroupsBy: value as "manual" | "updated" })
-                      }
-                    >
-                      <ChoiceItem value="updated" label="Updated" icon="Clock" />
-                      {/* "manual" is the persisted default; no drag writes a
-                          group order, so it reads as the canonical one. */}
-                      <ChoiceItem value="manual" label="Default" icon="ArrowUpDown" />
-                    </DropdownMenu.RadioGroup>
+                    <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                    {view.groupBy === "workspace" ? (
+                      <>
+                        <DropdownMenu.Label className={SECTION_LABEL}>
+                          Projects
+                        </DropdownMenu.Label>
+                        <DropdownMenu.RadioGroup
+                          value={view.sortProjectsBy}
+                          onValueChange={(value) =>
+                            onUpdate({ sortProjectsBy: value as ViewProjectOrder })
+                          }
+                        >
+                          <ChoiceItem value="manual" label="Manual" icon="ArrowUpDown" />
+                          <ChoiceItem value="status" label="Status" icon="Spinner" />
+                        </DropdownMenu.RadioGroup>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownMenu.Label className={SECTION_LABEL}>
+                          Groups
+                        </DropdownMenu.Label>
+                        <DropdownMenu.RadioGroup
+                          value={view.sortGroupsBy}
+                          onValueChange={(value) =>
+                            onUpdate({ sortGroupsBy: value as "manual" | "updated" })
+                          }
+                        >
+                          <ChoiceItem value="updated" label="Updated" icon="Clock" />
+                          {/* "manual" is the persisted default; no drag writes a
+                              group order, so it reads as the canonical one. */}
+                          <ChoiceItem value="manual" label="Default" icon="ArrowUpDown" />
+                        </DropdownMenu.RadioGroup>
+                      </>
+                    )}
                   </>
                 )}
+              </DropdownMenu.SubContent>
+            </DropdownMenu.Portal>
+          </Section>
+
+          <Section>
+            <SubTrigger
+              label="Threads per group"
+              value={threadsPerGroupLabel(view.threadsPerGroup)}
+            />
+            <DropdownMenu.Portal>
+              <DropdownMenu.SubContent {...scope} sideOffset={4} alignOffset={-4} className={CONTENT}>
+                <DropdownMenu.RadioGroup
+                  value={view.threadsPerGroup === null ? "all" : String(view.threadsPerGroup)}
+                  onValueChange={(value) =>
+                    onUpdate({
+                      threadsPerGroup:
+                        value === "all" ? null : (Number(value) as ThreadsPerGroup),
+                    })
+                  }
+                >
+                  {THREADS_PER_GROUP_VALUES.map((count) => (
+                    <ChoiceItem key={count} value={String(count)} label={String(count)} />
+                  ))}
+                  <ChoiceItem value="all" label="All" />
+                </DropdownMenu.RadioGroup>
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </Section>
@@ -404,6 +458,7 @@ export function SidebarViewMenuRoot({
                 <ToggleItem checked={view.show.branch} label="Branch" icon="GitBranch" onToggle={(next) => onUpdate({ show: { ...view.show, branch: next } })} />
                 <ToggleItem checked={view.show.host} label="Machine" icon="Monitor" onToggle={(next) => onUpdate({ show: { ...view.show, host: next } })} />
                 <ToggleItem checked={view.show.pr} label="Pull request" icon="GitPullRequest" onToggle={(next) => onUpdate({ show: { ...view.show, pr: next } })} />
+                <ToggleItem checked={view.show.projectIcons} label="Project icons" icon="Folder" onToggle={(next) => onUpdate({ show: { ...view.show, projectIcons: next } })} />
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </Section>
@@ -426,6 +481,28 @@ export function SidebarViewMenuRoot({
                     label={STATUS_FILTER_LABELS[status]}
                     icon={STATUS_ICONS[status]}
                     onToggle={(next) => toggleStatus(status, next)}
+                  />
+                ))}
+              </DropdownMenu.SubContent>
+            </DropdownMenu.Portal>
+          </Section>
+
+          <Section>
+            <SubTrigger label="Age" value={ageFilterValue} />
+            <DropdownMenu.Portal>
+              <DropdownMenu.SubContent {...scope} sideOffset={4} alignOffset={-4} className={CONTENT}>
+                <FilterHeader
+                  label="Age"
+                  onAll={() => setAllAges(true)}
+                  onNone={() => setAllAges(false)}
+                />
+                {VIEW_AGE_FILTERS.map((bucket) => (
+                  <ToggleItem
+                    key={bucket}
+                    checked={view.ageFilter.includes(bucket)}
+                    label={AGE_FILTER_LABELS[bucket]}
+                    icon="Calendar"
+                    onToggle={(next) => toggleAge(bucket, next)}
                   />
                 ))}
               </DropdownMenu.SubContent>
