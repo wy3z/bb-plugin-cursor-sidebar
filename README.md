@@ -136,6 +136,15 @@ the same name keep the folder there.
 Touch uses the same list. A phone has no hover, so gestures carry the actions
 instead.
 
+On a phone the list is laid out as grouped cards. A project with chats opens as
+one rounded card, and collapsed projects become one-line rows with a chat
+count. A row of chips at the top filters by status (All, Working, Needs input,
+Unread) and writes the same Status filter as the view menu. Each chat leads
+with its agent's logo in a tile. While the chat works, the logo itself moves:
+Claude blooms, Codex turns, Gemini twinkles, Cursor flips and the rest hop.
+Needs input, Failed and Unread show as a dot on the tile's corner. Reduced
+motion stops the animation. Desktop is unchanged.
+
 | | Do this |
 | --- | --- |
 | Open a chat | Tap the row |
