@@ -381,3 +381,122 @@
     animation: none !important;
   }
 }
+
+/* Phone layout, grouped cards: a project with chats opens as one rounded
+   card, and every collapsed or empty project is a one-line row with a count.
+   Consecutive rows share one card. Desktop density is unchanged. */
+@media (max-width: 767px), (pointer: coarse) {
+  [data-cursor-sidebar-root] {
+    --cs-card: color-mix(in oklab, var(--sidebar-accent) 38%, var(--sidebar));
+    --cs-tile: color-mix(in oklab, var(--sidebar-accent) 85%, var(--sidebar));
+    --cs-line: color-mix(in oklab, var(--sidebar-border) 80%, transparent);
+    --cs-muted: color-mix(in oklab, var(--sidebar-foreground) 55%, transparent);
+    --cs-run: oklch(0.72 0.13 255);
+    --cs-input: oklch(0.82 0.15 85);
+    --cs-failed: oklch(0.66 0.2 25);
+    --cs-unread: oklch(0.76 0.15 150);
+  }
+
+  [data-cursor-sidebar-root] .cs-heading > button:first-child {
+    font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+    color: var(--sidebar-foreground);
+  }
+
+  [data-cursor-sidebar-root] .cs-mobile-chips {
+    display: flex; gap: 6px; padding: 4px 6px 12px; overflow-x: auto; scrollbar-width: none;
+  }
+  [data-cursor-sidebar-root] .cs-mobile-chips::-webkit-scrollbar { display: none; }
+  [data-cursor-sidebar-root] .cs-mobile-chips .cs-chip {
+    display: inline-flex; flex: none; align-items: center; gap: 6px;
+    min-height: 36px; padding: 0 12px; border-radius: 18px;
+    border: 1px solid var(--cs-line); background: var(--cs-card);
+    color: var(--sidebar-foreground); font-size: 13px; font-weight: 500;
+  }
+  [data-cursor-sidebar-root] .cs-chip-count { color: var(--cs-muted); font-variant-numeric: tabular-nums; }
+  [data-cursor-sidebar-root] .cs-chip[data-empty="true"]:not(.cs-chip-on) { opacity: 0.55; }
+  [data-cursor-sidebar-root] .cs-mobile-chips .cs-chip.cs-chip-on {
+    background: var(--sidebar-foreground); border-color: var(--sidebar-foreground); color: var(--sidebar);
+  }
+  [data-cursor-sidebar-root] .cs-chip-on .cs-chip-count { color: inherit; opacity: 0.6; }
+
+  [data-cursor-sidebar-root] .cs-empty-note { display: none; }
+  [data-cursor-sidebar-root] .cs-project-count {
+    display: inline-flex; align-items: center; gap: 2px; margin-left: auto; padding-left: 8px;
+    color: var(--cs-muted); font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  [data-cursor-sidebar-root] .cs-project-heading { border-radius: 0; }
+  [data-cursor-sidebar-root] .cs-project-heading:hover { background-color: transparent; }
+
+  /* Open card. */
+  [data-cursor-sidebar-root] .cs-project-section[data-open="true"] {
+    margin: 12px 0 0; padding-bottom: 4px;
+    background: var(--cs-card); border: 1px solid var(--cs-line); border-radius: 16px; overflow: hidden;
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="true"] .cs-project-heading {
+    min-height: 40px; margin-bottom: 0; padding-left: 14px;
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="true"] .cs-project-name {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cs-muted);
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="true"] .cs-project-count svg { display: none; }
+
+  /* Collapsed and empty projects: rows that join into one card. */
+  [data-cursor-sidebar-root] .cs-project-section[data-open="false"] {
+    position: relative; margin: 0;
+    background: var(--cs-card); border: 1px solid var(--cs-line); border-block-width: 0;
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="false"]:first-child,
+  [data-cursor-sidebar-root] :not(.cs-project-section[data-open="false"]) + .cs-project-section[data-open="false"] {
+    margin-top: 12px; border-top-width: 1px; border-top-left-radius: 16px; border-top-right-radius: 16px;
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="false"]:not(:has(+ .cs-project-section[data-open="false"])) {
+    border-bottom-width: 1px; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="false"] + .cs-project-section[data-open="false"]::before {
+    content: ""; position: absolute; top: 0; left: 40px; right: 0; height: 1px; background: var(--cs-line);
+  }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="false"] .cs-project-heading { padding-left: 14px; }
+  [data-cursor-sidebar-root] .cs-project-section[data-open="false"] .cs-project-name { font-size: 15px; }
+
+  /* Rows inside a card. */
+  [data-cursor-sidebar-root] .cs-project-section [data-thread-row] {
+    border-radius: 0; min-height: 56px; padding: 8px 14px 8px 12px; gap: 10px;
+  }
+  [data-cursor-sidebar-root] .cs-project-section [data-thread-row] > a { border-radius: 0; }
+  [data-cursor-sidebar-root] .cs-project-section li + li [data-thread-row]::after {
+    content: ""; position: absolute; top: 0; left: 52px; right: 0; height: 1px; background: var(--cs-line);
+  }
+  [data-cursor-sidebar-root] .cs-project-section [data-thread-row]:has(a[aria-current="true"]) {
+    box-shadow: inset 3px 0 0 var(--sidebar-foreground);
+  }
+  [data-cursor-sidebar-root] .cs-thread-title { font-size: 15px; line-height: 1.25; }
+  [data-cursor-sidebar-root] .cs-thread-info { display: none; }
+  [data-cursor-sidebar-root] .cs-row-sub {
+    display: block; width: 100%; margin-top: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    color: var(--cs-muted); font-size: 12px; line-height: 1.3;
+  }
+  [data-cursor-sidebar-root] .cs-thread-time { color: var(--cs-muted); font-size: 12px; align-self: flex-start; padding-top: 3px; }
+
+  /* One lead glyph: the agent logo in a tile, with the status on its edge. */
+  [data-cursor-sidebar-root] [data-thread-row][data-depth="0"]:has(.cs-provider-tile) .cs-status-slot { display: none; }
+  [data-cursor-sidebar-root] .cs-provider-tile {
+    position: relative; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--cs-tile);
+  }
+  [data-cursor-sidebar-root] .cs-provider-tile .cs-provider-mark { width: 16px; height: 16px; margin: 0; }
+  [data-cursor-sidebar-root] .cs-provider-tile::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 12px; border: 1.5px solid transparent;
+  }
+  [data-cursor-sidebar-root] [data-thread-row][data-status="working"] .cs-provider-tile::after {
+    border-top-color: var(--cs-run); border-right-color: var(--cs-run); animation: cs-tile-spin 1.1s linear infinite;
+  }
+  [data-cursor-sidebar-root] [data-thread-row][data-status="input"] .cs-provider-tile::after { border-color: var(--cs-input); }
+  [data-cursor-sidebar-root] [data-thread-row][data-status="failed"] .cs-provider-tile::after { border-color: var(--cs-failed); }
+  [data-cursor-sidebar-root] [data-thread-row][data-status="unread"] .cs-provider-tile::before {
+    content: ""; position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--cs-unread); box-shadow: 0 0 0 2px var(--cs-card);
+  }
+}
+@keyframes cs-tile-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  [data-cursor-sidebar-root] .cs-provider-tile::after { animation: none !important; }
+}

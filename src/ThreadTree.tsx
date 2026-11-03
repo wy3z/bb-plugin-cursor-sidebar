@@ -54,7 +54,7 @@ import {
 } from "./conversations";
 import { ShowMoreButton } from "./ShowMoreButton";
 import { statusSourceForGroup, threadDisplayTitle } from "./inbox";
-import { resolveRowStatus, type ThreadStatusKind } from "./status";
+import { resolveRowStatus, THREAD_STATUS_LABEL, type ThreadStatusKind } from "./status";
 
 /** Everything a row needs that is the same for every row in a section. */
 export interface TreeContext {
@@ -918,6 +918,8 @@ function ThreadRow({
           data-reorder-id={thread.id}
           data-reorder-kind="thread"
           data-reorder-scope={scope}
+          data-status={rowStatus.kind}
+          data-depth={depth}
           className={cn(
             "group/row relative flex items-center gap-1.5 rounded-md py-1 pl-3 pr-2",
             secondary && "cs-workspace-row",
@@ -1077,7 +1079,11 @@ function ThreadRow({
 
           {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
 
-          {native.providerId ? <ProviderMark providerId={native.providerId} className="mr-1.5" /> : null}
+          {native.providerId ? (
+            <span className="cs-provider-tile pointer-events-none flex shrink-0 items-center">
+              <ProviderMark providerId={native.providerId} className="mr-1.5" />
+            </span>
+          ) : null}
 
           <div className={cn("pointer-events-none flex min-w-0 flex-1 flex-col items-start", secondary ? "gap-0 leading-none" : "gap-0")}>
           <InlineThreadTitle
@@ -1099,6 +1105,14 @@ function ThreadRow({
             )}
           />
           {secondary ? <span className="cs-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="cs-secondary-desktop">{secondary}</span><span className="cs-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          <span className="cs-row-sub hidden">
+            {[
+              THREAD_STATUS_LABEL[rowStatus.kind],
+              ctx.view.show.environment && !hideGroupedWorkspace && !labelsMatch(workspace, section.name) ? workspace : null,
+              ctx.view.show.branch ? branch : null,
+              ctx.view.show.host && !hideGroupedHost ? location : null,
+            ].filter(Boolean).join(" · ")}
+          </span>
           </div>
 
           <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">

@@ -76,6 +76,7 @@ import { useThreadSections } from "./useThreadSections";
 import { useSidebarView } from "./useSidebarView";
 import type { cursorSidebarRpcContract } from "./server";
 import { SidebarViewMenuRoot, SidebarViewMenuTrigger, SidebarViewSyncNotice } from "./SidebarViewMenu";
+import { MobileStatusChips } from "./MobileStatusChips";
 import {
   environmentFilterOptions,
   familyAwareComparator,
@@ -1173,6 +1174,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         ctx={ctx}
         status={aggregate.status}
         statusLabel={aggregate.statusLabel}
+        chatCount={sectionThreads.length}
         onNewThread={
           nativeId !== null && section.known
             ? () => {
@@ -1301,6 +1303,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   tools={viewMenu}
                 />
                 <Drawer open={!topGroupCollapsed.ids.has("projects")}>
+                  <MobileStatusChips threads={visible} view={view} onUpdate={sidebarView.update} />
                   {/* The drawer body is not animated, so the projects need
                       their own list. A heading drag moves these sections on
                       its own transforms, so the list holds its slides until
@@ -1412,10 +1415,13 @@ function ProjectSection({
   onHeadingDragStart,
   status,
   statusLabel,
+  chatCount,
 }: {
   section: ProjectSectionData;
   status?: ThreadStatusKind | null;
   statusLabel?: string | undefined;
+  /** Chats in this project, shown as the phone layout's row count. */
+  chatCount?: number | undefined;
   ctx: TreeContext;
   sectionOpen: boolean;
   onToggleProject: () => void;
@@ -1501,8 +1507,10 @@ function ProjectSection({
     <section
       aria-label={section.name}
       data-dragging={isDragging ? "true" : undefined}
+      data-open={sectionOpen && !isEmpty ? "true" : "false"}
+      data-status={status ?? "idle"}
       className={cn(
-        "mt-2 first:mt-0",
+        "cs-project-section mt-2 first:mt-0",
         sectionOpen && "mb-1.5 [&+section]:mt-4",
       )}
     >
@@ -1592,6 +1600,12 @@ function ProjectSection({
               <span className="text-sidebar-foreground/73"> (unknown)</span>
             )}
           </span>
+          {chatCount !== undefined ? (
+            <span aria-hidden="true" className="cs-project-count hidden">
+              {chatCount}
+              <Icon name="ChevronRight" className="size-3" />
+            </span>
+          ) : null}
         </button>
         {onNewThread ? (
           <button
@@ -1635,7 +1649,7 @@ function ProjectSection({
            shrinks the interior instead of unmounting it in one frame. */
         <Drawer open={sectionOpen}>
           {isEmpty ? (
-            <p className="px-3 py-1 text-xs text-sidebar-foreground/73">No threads</p>
+            <p className="cs-empty-note px-3 py-1 text-xs text-sidebar-foreground/73">No threads</p>
           ) : (
             <>
               <ShelfList
