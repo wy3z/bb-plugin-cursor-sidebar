@@ -108,6 +108,7 @@ export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
     branch: true,
     host: true,
     pr: true,
+    providerIcons: true,
     projectIcons: true,
   },
 };
@@ -294,6 +295,7 @@ export function coerceSidebarView(value: unknown): SidebarView {
       branch: showFlag("branch"),
       host: showFlag("host"),
       pr: showFlag("pr"),
+      providerIcons: showFlag("providerIcons"),
       projectIcons: showFlag("projectIcons"),
     },
   };
