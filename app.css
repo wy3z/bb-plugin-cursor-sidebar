@@ -1,3 +1,8 @@
+/* The plugin owns scrolling; the host's reserved gutter adds an extra right inset. */
+[data-sidebar="content"]:has([data-cursor-sidebar-root]) {
+  scrollbar-gutter: auto;
+}
+
 /* Scoped phone/touch affordances; fine-pointer desktop density is unchanged. */
 @media (max-width: 767px), (pointer: coarse) {
   [data-cursor-sidebar-root] { min-width: 0; overflow-x: clip; }
@@ -118,8 +123,8 @@
    for pin/archive (padding) so those icons are not sitting on the glyphs. */
 [data-cursor-sidebar-root] [data-thread-row] .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row] .cs-thread-info {
-  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 8px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 8px), transparent);
 }
 [data-cursor-sidebar-root] [data-thread-row]:hover .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-thread-title,
