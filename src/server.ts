@@ -129,6 +129,7 @@ const sidebarViewSchema = z
       pr: z.boolean(),
       // Absent on a view written before the toggle existed; a missing flag is
       // the default (shown), never a validation failure.
+      providerIcons: z.boolean().default(true),
       projectIcons: z.boolean().default(true),
     }),
   })
