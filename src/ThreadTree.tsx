@@ -1191,7 +1191,7 @@ function ThreadRow({
           {secondary ? <span className="cs-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="cs-secondary-desktop">{secondary}</span><span className="cs-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
           </div>
 
-          <div className="relative ml-auto flex min-w-6 shrink-0 items-center justify-end gap-1 pl-1">
+          <div className="relative -ml-2 flex min-w-6 shrink-0 items-center justify-end gap-1">
             {shortcutKey !== null ? (
               /* While the guide is up the digit takes the row's right edge, so
                  the age and the hover actions clear out of its way. */
