@@ -35,6 +35,7 @@ import {
 } from "./sidebar-view";
 import type { SidebarView } from "./server";
 import { ProjectRowIcon } from "./ProjectStatusGlyph";
+import { ProjectIconMark } from "./ProjectIconMark";
 import type { ProjectIcon } from "./project-icons";
 import { isWorking } from "./activity";
 import { SectionDivider, SectionHeading } from "./SectionDivider";
@@ -57,7 +58,10 @@ import {
 } from "./conversations";
 import { ShowMoreButton } from "./ShowMoreButton";
 import { statusSourceForGroup, threadDisplayTitle } from "./inbox";
-import { resolveRowStatus, type ThreadStatusKind } from "./status";
+import { resolveRowStatus, THREAD_STATUS_LABEL, type ThreadStatusKind } from "./status";
+import { ThreadHoverCard, type ThreadHoverFact } from "./ThreadHoverCard";
+import { ThreadGitFacts } from "./ThreadGitFacts";
+import { relativeTimeLabel } from "./relative-time";
 
 /** Everything a row needs that is the same for every row in a section. */
 export interface TreeContext {
@@ -907,6 +911,46 @@ function ThreadRow({
   // the row highlight alone marks the selection.
   const railClass = (_level: number) => "bg-sidebar-border";
   const elbowClass = "bg-sidebar-border";
+  const ago = (timestamp: number) => {
+    const label = relativeTimeLabel(timestamp, ctx.now);
+    return label === "now" ? "just now" : `${label} ago`;
+  };
+  const showHoverWorkspace =
+    native.environment?.isWorktree === true && workspace !== null && !labelsMatch(workspace, projectLabel);
+  const hoverKind = exactStatus ?? rowStatus.kind;
+  const hoverTone =
+    hoverKind === "failed" || statusThread.indicator === "unread-error"
+      ? "bg-destructive"
+      : hoverKind === "input" || statusThread.indicator === "waiting-for-input"
+        ? "bg-warning-text"
+        : hoverKind === "working"
+          ? "bg-timeline-accent"
+          : statusThread.indicator === "unread-success"
+            ? "bg-timeline-accent"
+            : statusThread.isUnread
+              ? "bg-muted-foreground/65"
+              : "bg-muted-foreground/30";
+  const hoverFacts: ThreadHoverFact[] = [
+    {
+      icon: chatProject ? "MessageSquare" : "Folder",
+      glyph: (
+        <ProjectIconMark
+          icon={chatProject ? null : ctx.projectIconFor(projectId)}
+          fallback={chatProject ? "Chat" : "Folder"}
+          className="size-3.5"
+          mutedClassName="text-muted-foreground"
+        />
+      ),
+      text: projectLabel,
+      detail: showHoverWorkspace ? null : workspacePath ?? null,
+    },
+    ...(showHoverWorkspace && workspace !== null ? [{ icon: "Layers" as const, text: workspace, detail: workspacePath ?? null }] : []),
+    ...(branch !== null && !native.environment?.id ? [{ icon: "GitBranch" as const, text: branch }] : []),
+    ...(hostName !== null ? [{ icon: "Monitor" as const, text: hostName }] : []),
+    ...(nativeParent !== undefined ? [{ icon: "CornerDownRight" as const, text: `Child of ${threadDisplayTitle(nativeParent)}` }] : []),
+    ...(hasChildren ? [{ icon: "Layers" as const, text: `${children.length} child ${children.length === 1 ? "thread" : "threads"}${activeChildCount > 0 ? `, ${activeChildCount} running` : ""}` }] : []),
+    { icon: "Clock", text: `Updated ${ago(thread.updatedAt)} · created ${ago(thread.createdAt)}` },
+  ];
 
   return (
     <li
@@ -963,6 +1007,21 @@ function ThreadRow({
             : undefined
         }
       >
+        <ThreadHoverCard
+          disabled={isRenaming || ctx.draggingThreadId !== null || shortcutKey !== null}
+          title={title}
+          status={
+            <>
+              <span className="flex size-3.5 items-center justify-center">
+                <span className={cn("size-2 rounded-full", hoverTone)} />
+              </span>
+              <span>{rowStatus.label ?? THREAD_STATUS_LABEL[rowStatus.kind]}</span>
+              {rowPinned ? <Icon name="Pin" className="ml-auto size-3 opacity-70" /> : null}
+            </>
+          }
+          facts={hoverFacts}
+          extra={native.environment?.id ? <ThreadGitFacts environmentId={native.environment.id} fallbackBranch={branch} /> : null}
+        >
         <div
           data-thread-row=""
           data-thread-row-id={thread.id}
@@ -1188,7 +1247,7 @@ function ThreadRow({
               thread.isUnread && "font-medium",
             )}
           />
-          {secondary ? <span className="cs-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" title={secondaryTitle} aria-label={secondaryTitle}><span className="cs-secondary-desktop">{secondary}</span><span className="cs-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
+          {secondary ? <span className="cs-thread-info mt-px block w-full overflow-hidden whitespace-nowrap text-2xs leading-none text-sidebar-foreground/73" aria-label={secondaryTitle}><span className="cs-secondary-desktop">{secondary}</span><span className="cs-secondary-mobile hidden">{[ctx.view.show.environment && !hideGroupedWorkspace ? workspace : null, ctx.view.show.branch ? branch : null].filter(Boolean).join(" · ")}</span></span> : null}
           </div>
 
           <div className="relative -ml-2 flex min-w-6 shrink-0 items-center justify-end gap-1">
@@ -1259,6 +1318,7 @@ function ThreadRow({
             )}
           </div>
         </div>
+        </ThreadHoverCard>
       </RowContextMenu>
 
     </li>

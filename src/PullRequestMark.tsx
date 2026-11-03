@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * A plain object, not `defineRpcContract`: that lives in the server SDK root,
  * which a clean install does not provide to the frontend bundle.
  */
-const githubPrStatus = {
+export const githubPrStatus = {
   pullRequests: {
     input: z.object({ keys: z.array(z.string()) }),
     output: z.record(
@@ -48,7 +48,7 @@ interface Presentation {
  * one: a broken build is a fact about this PR, and a merged or closed PR's
  * checks are history. No PR means no mark — nothing is fabricated.
  */
-const PRESENTATION: Record<PullRequestState, Presentation> = {
+export const PRESENTATION: Record<PullRequestState, Presentation> = {
   open: { icon: "GitPullRequest", tone: "text-success", label: "Open pull request" },
   draft: {
     icon: "GitPullRequestDraft",

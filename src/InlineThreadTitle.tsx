@@ -79,7 +79,6 @@ export function InlineThreadTitle({
   if (!editing) {
     return (
       <span
-        title={title}
         className={cn(
           "pointer-events-auto relative z-10",
           className,
