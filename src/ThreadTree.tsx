@@ -1080,7 +1080,7 @@ function ThreadRow({
           {ctx.view.show.pr ? <PullRequestMark threadId={thread.id} /> : null}
 
           {native.providerId ? (
-            <span className="cs-provider-tile pointer-events-none flex shrink-0 items-center">
+            <span data-provider={native.providerId} className="cs-provider-tile pointer-events-none flex shrink-0 items-center">
               <ProviderMark providerId={native.providerId} className="mr-1.5" />
             </span>
           ) : null}
