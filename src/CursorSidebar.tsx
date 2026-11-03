@@ -1422,8 +1422,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             className="cs-grouping-swap"
           >
             {liftedPins.length > 0 ? (
-              // The block after Pinned starts with its own `first:mt-0`
-              // section, so Pinned carries the gap rather than relying on it.
               <div className="mb-3">
                 <GroupHeading
                   label="Pinned"
@@ -1454,8 +1452,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               )
             ) : (
               <section aria-label={view.groupBy === "none" ? "Threads" : "Chats"} className="mb-1 min-h-8">
-                {/* The other groupings head each group themselves; the flat
-                    list gets one heading so it reads apart from Pinned. */}
                 {view.groupBy === "none" && pooledSection.byShelf.active.length > 0 ? (
                   <>
                     <GroupHeading
