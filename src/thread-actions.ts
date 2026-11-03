@@ -22,10 +22,6 @@ export interface ThreadMutations {
   setRead(threadId: string, read: boolean): Promise<void>;
   /** Silent rename, for inline editing in the row. */
   rename(threadId: string, title: string): Promise<void>;
-  /**
-   * Ask bb's thread-title service (Settings → AI services) for a new title.
-   * bb keeps the current one when it still fits; rejects when generation fails.
-   */
   regenerateTitle(threadId: string): Promise<void>;
 }
 
