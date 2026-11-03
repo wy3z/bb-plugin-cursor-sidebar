@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { experimental_useProviders as useProviders } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
  */
 export function ProviderMark({ providerId, className }: { providerId: string; className?: string }) {
   const { providers } = useProviders();
+  const dark = useDarkTheme();
   const provider = providers.find((entry) => entry.id === providerId);
   if (!provider?.logoUrl) return null;
   const tint = provider.strings?.iconTint ?? null;
@@ -19,7 +21,7 @@ export function ProviderMark({ providerId, className }: { providerId: string; cl
       title={provider.displayName}
       className={cn("cs-provider-mark pointer-events-none inline-block size-3.5 shrink-0", className)}
       style={{
-        backgroundColor: tint ? (isDark() ? tint.dark : tint.light) : "currentColor",
+        backgroundColor: tint ? (dark ? tint.dark : tint.light) : "currentColor",
         mask,
         WebkitMask: mask,
       }}
@@ -27,7 +29,30 @@ export function ProviderMark({ providerId, className }: { providerId: string; cl
   );
 }
 
-/** True when bb is painting its dark theme. */
-function isDark(): boolean {
-  return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+const themeListeners = new Set<() => void>();
+let themeObserver: MutationObserver | null = null;
+
+function subscribeTheme(listener: () => void): () => void {
+  themeListeners.add(listener);
+  if (themeObserver === null) {
+    themeObserver = new MutationObserver(() => {
+      for (const notify of themeListeners) notify();
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  }
+  return () => {
+    themeListeners.delete(listener);
+    if (themeListeners.size === 0) {
+      themeObserver?.disconnect();
+      themeObserver = null;
+    }
+  };
+}
+
+function readDarkTheme(): boolean {
+  return document.documentElement.classList.contains("dark");
+}
+
+function useDarkTheme(): boolean {
+  return useSyncExternalStore(subscribeTheme, readDarkTheme, () => false);
 }
