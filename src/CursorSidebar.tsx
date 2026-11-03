@@ -1422,7 +1422,9 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             className="cs-grouping-swap"
           >
             {liftedPins.length > 0 ? (
-              <>
+              // The block after Pinned starts with its own `first:mt-0`
+              // section, so Pinned carries the gap rather than relying on it.
+              <div className="mb-3">
                 <GroupHeading
                   label="Pinned"
                   open={!topGroupCollapsed.ids.has("pinned")}
@@ -1431,7 +1433,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 <Drawer open={!topGroupCollapsed.ids.has("pinned")}>
                   <PinnedList items={liftedPins} ctx={ctx} />
                 </Drawer>
-              </>
+              </div>
             ) : null}
             {projectsGrouping ? (
               singleProjectSection !== null ? (
@@ -1451,13 +1453,33 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 </>
               )
             ) : (
-              <section aria-label="Chats" className="mb-1 min-h-8">
-                <ShelfList
-                  section={pooledSection}
-                  shelf="active"
-                  ctx={ctx}
-                  grouped
-                />
+              <section aria-label={view.groupBy === "none" ? "Threads" : "Chats"} className="mb-1 min-h-8">
+                {/* The other groupings head each group themselves; the flat
+                    list gets one heading so it reads apart from Pinned. */}
+                {view.groupBy === "none" && pooledSection.byShelf.active.length > 0 ? (
+                  <>
+                    <GroupHeading
+                      label="Threads"
+                      open={!topGroupCollapsed.ids.has("threads")}
+                      onToggle={() => topGroupCollapsed.toggle("threads")}
+                    />
+                    <Drawer open={!topGroupCollapsed.ids.has("threads")}>
+                      <ShelfList
+                        section={pooledSection}
+                        shelf="active"
+                        ctx={ctx}
+                        grouped
+                      />
+                    </Drawer>
+                  </>
+                ) : (
+                  <ShelfList
+                    section={pooledSection}
+                    shelf="active"
+                    ctx={ctx}
+                    grouped
+                  />
+                )}
               </section>
             )}
             {/* No heading is ever drawn empty; when nothing renders at all the

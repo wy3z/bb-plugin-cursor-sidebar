@@ -22,6 +22,11 @@ export interface ThreadMutations {
   setRead(threadId: string, read: boolean): Promise<void>;
   /** Silent rename, for inline editing in the row. */
   rename(threadId: string, title: string): Promise<void>;
+  /**
+   * Ask bb's thread-title service (Settings → AI services) for a new title.
+   * bb keeps the current one when it still fits; rejects when generation fails.
+   */
+  regenerateTitle(threadId: string): Promise<void>;
 }
 
 /** Navigation and silent thread writes, stable for a component's lifetime. */
@@ -44,6 +49,9 @@ export function useThreadMutations(): ThreadMutations {
       },
       rename: async (threadId, title) => {
         await sdk.threads.update({ threadId, title });
+      },
+      regenerateTitle: async (threadId) => {
+        await sdk.threads.experimental_regenerateTitle({ threadId });
       },
     }),
     [navigate, sdk],
