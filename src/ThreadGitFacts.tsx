@@ -2,7 +2,7 @@ import { experimental_useRpcKeyedQuery } from "@get-bb/plugin-sdk/app";
 import { z } from "zod";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
-import { githubPrStatus, PRESENTATION } from "./PullRequestMark";
+import { PRESENTATION, useChangeRequest } from "./PullRequestMark";
 
 const lineStats = z.object({
   lineStatsComplete: z.boolean(),
@@ -96,18 +96,11 @@ export function ThreadGitFacts({
     method: "status",
     keys,
   });
-  const pr = experimental_useRpcKeyedQuery({
-    pluginId: "bb--github-pr-status",
-    contract: githubPrStatus,
-    method: "pullRequests",
-    keys,
-  });
+  const pullRequest = useChangeRequest(environmentId);
 
   const gitRow = environmentId === null ? undefined : git.data?.[environmentId];
   const parsedGit = availableStatus.safeParse(gitRow);
   const workspace = parsedGit.success ? parsedGit.data.workspace : null;
-  const prRow = environmentId === null ? undefined : pr.data?.[environmentId];
-  const pullRequest = prRow?.outcome === "available" ? prRow.pullRequest : null;
 
   const branch = workspace?.branch.currentBranch ?? fallbackBranch;
   const base = workspace?.mergeBase ?? null;
@@ -117,10 +110,7 @@ export function ThreadGitFacts({
   if (branch === null && workspace === null && pullRequest === null) return null;
 
   const prPresentation = pullRequest ? PRESENTATION[pullRequest.state] : null;
-  const prFailing =
-    pullRequest?.attention === "checks_failed" &&
-    pullRequest.state !== "merged" &&
-    pullRequest.state !== "closed";
+  const prFailing = pullRequest?.failing ?? false;
 
   return (
     <ul className="grid gap-1 border-t border-border pt-2 text-xs text-muted-foreground">
@@ -170,10 +160,10 @@ export function ThreadGitFacts({
           iconClassName={prFailing ? "text-destructive" : prPresentation.tone}
           detail={pullRequest.title}
         >
-          <span>#{pullRequest.number}</span>
+          <span>{pullRequest.ref}</span>
           <span className="ml-auto shrink-0 opacity-75">
             {pullRequest.state}
-            {prFailing ? " · checks failing" : ""}
+            {prFailing ? (pullRequest?.provider === "gitlab" ? " · pipeline failing" : " · checks failing") : ""}
           </span>
         </Line>
       ) : null}

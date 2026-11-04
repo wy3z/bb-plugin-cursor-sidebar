@@ -457,7 +457,7 @@ export function SidebarViewMenuRoot({
                 <ToggleItem checked={view.show.environment} label="Environment" icon="Cloud" onToggle={(next) => onUpdate({ show: { ...view.show, environment: next } })} />
                 <ToggleItem checked={view.show.branch} label="Branch" icon="GitBranch" onToggle={(next) => onUpdate({ show: { ...view.show, branch: next } })} />
                 <ToggleItem checked={view.show.host} label="Machine" icon="Monitor" onToggle={(next) => onUpdate({ show: { ...view.show, host: next } })} />
-                <ToggleItem checked={view.show.pr} label="Pull request" icon="GitPullRequest" onToggle={(next) => onUpdate({ show: { ...view.show, pr: next } })} />
+                <ToggleItem checked={view.show.pr} label="Pull / merge request" icon="GitPullRequest" onToggle={(next) => onUpdate({ show: { ...view.show, pr: next } })} />
                 <ToggleItem checked={view.show.providerIcons} label="Provider icons" icon="Bot" onToggle={(next) => onUpdate({ show: { ...view.show, providerIcons: next } })} />
                 <ToggleItem checked={view.show.projectIcons} label="Project icons" icon="Folder" onToggle={(next) => onUpdate({ show: { ...view.show, projectIcons: next } })} />
               </DropdownMenu.SubContent>
