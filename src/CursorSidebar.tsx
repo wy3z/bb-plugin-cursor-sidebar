@@ -1350,7 +1350,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
       {/* One fixed toolbar above the scroll area: the project switcher on the
           left, the view menu on the right. No section heading carries controls. */}
-      <div className="flex shrink-0 items-center gap-1 px-1.5 pt-2">
+      <div className="flex shrink-0 items-center gap-1 pr-4 pl-2.5 pt-2">
         <div className="flex min-w-0 flex-1 items-center">
           <ProjectSwitcher
             projects={viewProjectOptions}

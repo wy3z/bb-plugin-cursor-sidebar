@@ -18,7 +18,7 @@ const MULTIPLE_PROJECTS = "__multiple_projects__";
  * no chevron.
  */
 const TRIGGER =
-  "group/switcher flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded px-2 py-1 text-left text-sm text-sidebar-foreground/95 hover:bg-accent/60 data-[state=open]:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9";
+  "group/switcher flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded pr-2 pl-1.5 py-1 text-left text-sm text-sidebar-foreground/95 hover:bg-accent/60 data-[state=open]:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9";
 
 /** A choice row: the tick leads, the way this plugin's other menus do. */
 const CHOICE = cn(
