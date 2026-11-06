@@ -24,6 +24,7 @@
     white-space: normal; overflow-wrap: anywhere; font-size: 13px;
   }
   [data-cursor-sidebar-root] [data-thread-row] { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+  [data-cursor-sidebar-root] .cs-board-row { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
   [data-cursor-sidebar-root] .cs-child-toggle,
   [data-cursor-sidebar-root] .cs-project-new,
   [data-cursor-sidebar-root] .cs-project-disclosure { display: none; }
