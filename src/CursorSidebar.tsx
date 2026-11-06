@@ -48,6 +48,8 @@ import {
 } from "./membership";
 import {
   aggregateSectionStatus,
+  resolveThreadStatus,
+  threadStatusFacts,
   summarizeSection,
   worstThreadStatus,
   THREAD_STATUS_RANK,
@@ -1494,7 +1496,15 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                           board={board}
                           icon={board.bbProjectId ? projectIcons.iconFor(board.bbProjectId) : null}
                           active={board.leadThreadId !== null && board.leadThreadId === activeThreadId}
-                          working={board.leadThreadId !== null && (rawById.get(board.leadThreadId)?.status === "active" || rawById.get(board.leadThreadId)?.status === "starting")}
+                          working={false}
+                          familyStatus={(() => {
+                            const lead = board.leadThreadId ? rawById.get(board.leadThreadId) : undefined;
+                            if (!lead) return "idle";
+                            const expandedNow = !topGroupCollapsed.ids.has(`manager:${lead.id}`);
+                            return expandedNow
+                              ? resolveThreadStatus(threadStatusFacts(lead))
+                              : aggregateSectionStatus(visible.filter((thread) => familyRootOfId(thread.id) === lead.id)).status;
+                          })()}
                           childCount={board.leadThreadId ? visible.filter((thread) => thread.id !== board.leadThreadId && familyRootOfId(thread.id) === board.leadThreadId).length : 0}
                           expanded={board.leadThreadId !== null && !topGroupCollapsed.ids.has(`manager:${board.leadThreadId}`)}
                           onToggle={() => {
@@ -1825,7 +1835,9 @@ function ProjectBoardRow({
   shortcutKey,
   renaming,
   onRenameDone,
+  familyStatus,
 }: {
+  familyStatus: ThreadStatusKind;
   renaming: boolean;
   onRenameDone: (name: string | null) => void;
   lead: PluginSidebarThread | null;
@@ -1841,14 +1853,6 @@ function ProjectBoardRow({
   onToggle: () => void;
   onOpen: (split: boolean) => void;
 }) {
-  const badge =
-    lead === null
-      ? null
-      : lead.hasPendingInteraction || lead.indicator === "waiting-for-input" || lead.indicator === "unread-error" || lead.indicator === "unread-success" || lead.isUnread
-        ? "attention"
-        : working
-          ? "working"
-          : null;
   return (
     <div
       role="link"
@@ -1871,8 +1875,7 @@ function ProjectBoardRow({
     >
       <span className="cs-board-row__lead">
         <span className={cn("cs-board-row__icon", childCount > 0 && "cs-board-row__icon--swap")}>
-          <ProjectRowIcon icon={icon} label={board.name} />
-          {badge ? <span className="cs-board-row__badge" data-tone={badge} aria-hidden="true" /> : null}
+          <ProjectStatusGlyph open={false} icon={icon} label={board.name} status={familyStatus} />
         </span>
         {childCount > 0 ? (
           <button
