@@ -1,3 +1,9 @@
+:root {
+  --cs-accent: var(--timeline-accent, #3b82f6);
+  --cs-green: var(--success, #3fb950);
+  --cs-pink: #e5577f;
+}
+
 /* The plugin owns scrolling; the host's reserved gutter adds an extra right inset. */
 [data-sidebar="content"]:has([data-cursor-sidebar-root]) {
   scrollbar-gutter: auto;
@@ -514,17 +520,17 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   height: 1rem;
   padding: 0 0.375rem;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--bbs-accent) 15%, transparent);
-  color: var(--bbs-accent);
+  background: color-mix(in srgb, var(--cs-accent) 15%, transparent);
+  color: var(--cs-accent);
 }
 .cs-board-row__dot {
   width: 6px;
   height: 6px;
   border-radius: 9999px;
-  background: var(--bbs-accent);
+  background: var(--cs-accent);
 }
 .cs-board-row__review {
-  color: var(--bbs-green);
+  color: var(--cs-green);
 }
 
 .cs-board-row__lead {
@@ -594,10 +600,10 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   box-shadow: 0 0 0 1.5px var(--sidebar, var(--background));
 }
 .cs-board-row__badge[data-tone="working"] {
-  background: var(--bbs-accent);
+  background: var(--cs-accent);
 }
 .cs-board-row__badge[data-tone="attention"] {
-  background: var(--bbs-pink);
+  background: var(--cs-pink);
 }
 .cs-board-row:hover .cs-board-row__badge,
 .cs-board-row:focus-within .cs-board-row__badge {
@@ -644,5 +650,5 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   outline: none;
 }
 .cs-board-row__rename:focus {
-  border-color: var(--bbs-accent);
+  border-color: var(--cs-accent);
 }

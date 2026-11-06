@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { experimental_useRpcQuery, useSdk } from "@get-bb/plugin-sdk/app";
-import { PROJECTS_PLUGIN, TASKS_PLUGIN, projectsContract, tasksContract } from "@wy3z/bb-suite/contracts";
+import { PROJECTS_PLUGIN, TASKS_PLUGIN, projectsContract, tasksContract } from "./suite-contracts";
 
 export interface ProjectBoard {
   id: string;
