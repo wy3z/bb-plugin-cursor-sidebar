@@ -71,10 +71,10 @@ export interface SidebarViewMenuRootProps {
  */
 export const GROUPING_HEADINGS: Record<ViewGroupBy, string> = {
   workspace: "Repositories",
-  updated: "Recent",
-  status: "Status",
-  environment: "Environments",
-  none: "Threads",
+  updated: "Chats",
+  status: "Chats",
+  environment: "Chats",
+  none: "Chats",
 };
 
 export const VIEW_MENU_CONTENT =
