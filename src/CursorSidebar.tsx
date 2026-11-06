@@ -1291,6 +1291,23 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       triggerClassName={`${ICON_BTN} data-[state=open]:text-sidebar-foreground/90`}
     />
   );
+  const standaloneHeading = view.groupBy === "workspace" || nothingToShow;
+  const listControls = (
+    <>
+      {viewMenu}
+      <button
+        type="button"
+        className={ICON_BTN}
+        aria-label="Add repository"
+        title="Add repository"
+        onClick={(event) => {
+          if (!openHostAddProject(event.currentTarget)) toast.error("Couldn't open Add project.");
+        }}
+      >
+        <Icon name="FolderPlus" className="size-3.5" />
+      </button>
+    </>
+  );
 
   const renderSection = (section: ProjectSectionData, flat = false) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
@@ -1450,30 +1467,22 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 </Drawer>
               </div>
       ) : null}
-      <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 mt-1")}>
-        <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          {viewMenu}
-          <button
-            type="button"
-            className={ICON_BTN}
-            aria-label="Add repository"
-            title="Add repository"
-            onClick={(event) => {
-              if (!openHostAddProject(event.currentTarget)) toast.error("Couldn't open Add project.");
-            }}
-          >
-            <Icon name="FolderPlus" className="size-3.5" />
-          </button>
+      {standaloneHeading ? (
+        <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 mt-1")}>
+          <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">{listControls}</div>
         </div>
-      </div>
+      ) : null}
 
       <div
         ref={listRef}
         data-fade-more={listHasMore ? "true" : undefined}
         onKeyDown={handleListKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
+        {standaloneHeading ? null : (
+          <div className="cs-list-controls absolute right-3 top-2 z-10 flex h-7 items-center gap-0.5">{listControls}</div>
+        )}
         <p aria-live="polite" className="sr-only">
           {announcement}
         </p>
