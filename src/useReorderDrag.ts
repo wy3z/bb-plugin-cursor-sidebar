@@ -405,6 +405,21 @@ export function useReorderDrag(
             return;
           }
         }
+        const managerRow = current.kind === "thread" ? hit.closest<HTMLElement>("[data-nest-target]") : null;
+        const managerLeadId = managerRow?.dataset.nestTarget;
+        if (managerLeadId) {
+          const allowed = managerLeadId !== current.movingId && canNestRef.current(managerLeadId, current.movingId);
+          commit({
+            ...current,
+            parentTargetId: allowed ? managerLeadId : null,
+            overId: null,
+            placement: null,
+            overTarget: null,
+            moveToSection: undefined,
+            pin: undefined,
+          });
+          return;
+        }
         // The center band of a thread row nests the dragged thread under it;
         // the edges still reorder. A nest target may sit outside the reorder
         // scope, so it is resolved before the sibling match.

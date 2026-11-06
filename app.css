@@ -487,6 +487,10 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   background: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);
 }
+.cs-board-row[data-nesting] {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
 .cs-board-row__name {
   flex: 1 1 auto;
   min-width: 0;
@@ -510,17 +514,17 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   height: 1rem;
   padding: 0 0.375rem;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--timeline-accent, #3b82f6) 15%, transparent);
-  color: var(--timeline-accent, #3b82f6);
+  background: color-mix(in srgb, var(--bbs-accent) 15%, transparent);
+  color: var(--bbs-accent);
 }
 .cs-board-row__dot {
   width: 6px;
   height: 6px;
   border-radius: 9999px;
-  background: var(--timeline-accent, #3b82f6);
+  background: var(--bbs-accent);
 }
 .cs-board-row__review {
-  color: #3fb27f;
+  color: var(--bbs-green);
 }
 
 .cs-board-row__lead {
@@ -590,10 +594,10 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   box-shadow: 0 0 0 1.5px var(--sidebar, var(--background));
 }
 .cs-board-row__badge[data-tone="working"] {
-  background: var(--timeline-accent, #3b82f6);
+  background: var(--bbs-accent);
 }
 .cs-board-row__badge[data-tone="attention"] {
-  background: #e5577f;
+  background: var(--bbs-pink);
 }
 .cs-board-row:hover .cs-board-row__badge,
 .cs-board-row:focus-within .cs-board-row__badge {

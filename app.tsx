@@ -3,6 +3,7 @@
 // Compiled by `bb plugin build` into dist/app.js + dist/app.css. React and
 // @get-bb/plugin-sdk/app are provided by the BB app at load time (never
 // bundled), so this file must be loaded by BB, not imported directly.
+import "@wy3z/bb-suite/tokens.css";
 import "./app.css";
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { CursorSidebar } from "./src/CursorSidebar";

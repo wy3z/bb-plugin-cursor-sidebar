@@ -1499,6 +1499,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                           }}
                           lead={board.leadThreadId ? rawById.get(board.leadThreadId) ?? null : null}
                           now={now}
+                          nestTarget={board.leadThreadId !== null && board.leadThreadId === nestTargetId}
                           shortcutKey={board.leadThreadId ? shortcutKeys?.get(board.leadThreadId) ?? null : null}
                           onOpen={(split) => {
                             if (!board.leadThreadId) return;
@@ -1745,10 +1746,12 @@ function ProjectBoardRow({
   onOpen,
   lead,
   now,
+  nestTarget,
   shortcutKey,
 }: {
   lead: PluginSidebarThread | null;
   now: number;
+  nestTarget: boolean;
   shortcutKey: string | null;
   board: ProjectBoard;
   icon: Parameters<typeof ProjectRowIcon>[0]["icon"];
@@ -1772,8 +1775,10 @@ function ProjectBoardRow({
       role="link"
       tabIndex={0}
       data-manager-row={board.id}
+      data-nest-target={board.leadThreadId ?? undefined}
       className="cs-board-row group/board"
       data-active={active || undefined}
+      data-nesting={nestTarget || undefined}
       title={board.focus ? `Focus: ${board.focus}` : `Open the ${board.name} manager`}
       onClick={(event) => onOpen(event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => {
