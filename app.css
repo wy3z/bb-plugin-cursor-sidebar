@@ -631,3 +631,18 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 .cs-managers::-webkit-scrollbar {
   display: none;
 }
+.cs-board-row__rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-foreground) 25%, transparent);
+  border-radius: 5px;
+  background: var(--sidebar, var(--background));
+  color: var(--sidebar-foreground);
+  font: inherit;
+  outline: none;
+}
+.cs-board-row__rename:focus {
+  border-color: var(--bbs-accent);
+}

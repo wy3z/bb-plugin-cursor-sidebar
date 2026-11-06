@@ -11,7 +11,72 @@ import {
   type RowSwipeBinding,
 } from "./useRowGesture";
 
-export interface SidebarAction { label: string; run: () => void; destructive?: boolean; separatorBefore?: boolean }
+export interface SidebarAction { label: string; run: () => void; destructive?: boolean; separatorBefore?: boolean; children?: readonly SidebarAction[] }
+
+const ACTION_ITEM = "rounded px-2.5 py-1 text-left text-sm whitespace-nowrap outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-ring max-md:py-2.5 pointer-coarse:py-2.5";
+
+function SubmenuItem({ action, scope, onDone }: { action: SidebarAction; scope: ReturnType<typeof usePortalScopeProps>; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onPointerEnter={() => setOpen(true)}
+          onClick={() => setOpen((value) => !value)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+          className={cn(ACTION_ITEM, "flex items-center justify-between gap-4", open && "bg-accent")}
+        >
+          <span>{action.label}</span>
+          <Icon name="ChevronRight" className="size-3.5 text-muted-foreground" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          {...scope}
+          side="right"
+          align="start"
+          sideOffset={6}
+          alignOffset={-6}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft" || event.key === "Escape") {
+              event.preventDefault();
+              setOpen(false);
+            }
+          }}
+          className={cn(
+            "cs-context-actions z-50 grid w-auto min-w-44 gap-0.5 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-md",
+            ANCHORED_OVERLAY_MOTION,
+          )}
+        >
+          {(action.children ?? []).map((child) => (
+            <button
+              key={child.label}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onDone();
+                child.run();
+              }}
+              className={ACTION_ITEM}
+            >
+              {child.label}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
 
 /** One context surface for right-click, keyboard, assistive technology and touch. */
 export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, children }: {
@@ -90,8 +155,12 @@ export function SidebarActions({ label, onHold, onReorderStart, actions, swipe, 
       )}>
       {actions.flatMap(action => [
         ...(action.separatorBefore ? [<div key={`${action.label}:separator`} aria-hidden className="mx-2 my-1 h-px bg-border" />] : []),
-        <button key={action.label} type="button" onClick={() => { setOpen(false); action.run(); }}
-          className={`rounded px-2.5 py-1.5 text-left text-sm whitespace-nowrap outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-ring max-md:py-2.5 pointer-coarse:py-2.5 ${action.destructive ? "text-destructive" : ""}`}>{action.label}</button>,
+        action.children ? (
+          <SubmenuItem key={action.label} action={action} scope={scope} onDone={() => setOpen(false)} />
+        ) : (
+          <button key={action.label} type="button" onClick={() => { setOpen(false); action.run(); }}
+            className={`${ACTION_ITEM} ${action.destructive ? "text-destructive" : ""}`}>{action.label}</button>
+        ),
       ])}
     </Popover.Content></Popover.Portal>
   </Popover.Root>;

@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import {
   experimental_useRpcKeyedQuery,
   experimental_useSidebarThreads as useSidebarThreads,
@@ -284,6 +285,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const shortcutKeys = useShortcutGuide();
   const sdk = useSdk();
+  const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.ctrlKey || !event.altKey || event.shiftKey || event.metaKey) return;
@@ -1460,7 +1462,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       {projectBoards.length > 0 ? (
         <div className="cs-managers shrink-0 px-1.5 pt-2">
                 <GroupHeading
-                  label="Managers"
+                  label="Projects"
                   open={!topGroupCollapsed.ids.has("projects-boards")}
                   onToggle={() => topGroupCollapsed.toggle("projects-boards")}
                 />
@@ -1486,6 +1488,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                               : undefined
                           }
                           onRemoved={reloadProjectBoards}
+                          onRename={() => setRenamingBoardId(board.id)}
                         >
                         <ProjectBoardRow
                           board={board}
@@ -1499,6 +1502,18 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                           }}
                           lead={board.leadThreadId ? rawById.get(board.leadThreadId) ?? null : null}
                           now={now}
+                          renaming={renamingBoardId === board.id}
+                          onRenameDone={(name) => {
+                            setRenamingBoardId(null);
+                            const next = name?.trim();
+                            if (!next || next === board.name) return;
+                            sdk.plugins
+                              .callRpc({ pluginId: "tasks", method: "updateProject", input: { projectId: board.id, name: next }, outputSchema: z.unknown() })
+                              .then(
+                                () => toast.success(`Renamed to ${next}`),
+                                (error: unknown) => toast.error("Couldn't rename the project", { description: error instanceof Error ? error.message : String(error) }),
+                              );
+                          }}
                           nestTarget={board.leadThreadId !== null && board.leadThreadId === nestTargetId}
                           shortcutKey={board.leadThreadId ? shortcutKeys?.get(board.leadThreadId) ?? null : null}
                           onOpen={(split) => {
@@ -1652,6 +1667,7 @@ function ManagerMenu({
   onNavigate,
   onSetIcon,
   onRemoved,
+  onRename,
   children,
 }: {
   board: ProjectBoard;
@@ -1661,6 +1677,7 @@ function ManagerMenu({
   onNavigate: () => void;
   onSetIcon?: () => void;
   onRemoved: () => void;
+  onRename: () => void;
   children: React.ReactNode;
 }) {
   if (lead === null) return <>{children}</>;
@@ -1673,6 +1690,7 @@ function ManagerMenu({
       onNavigate={onNavigate}
       onSetIcon={onSetIcon}
       onRemoved={onRemoved}
+      onRename={onRename}
     >
       {children}
     </ManagerMenuInner>
@@ -1687,8 +1705,10 @@ function ManagerMenuInner({
   onNavigate,
   onSetIcon,
   onRemoved,
+  onRename,
   children,
 }: {
+  onRename: () => void;
   board: ProjectBoard;
   lead: PluginSidebarThread;
   expanded: boolean;
@@ -1708,6 +1728,7 @@ function ManagerMenuInner({
       onSetProjectIcon={onSetIcon}
       swipeDisabled
       extraActions={[
+        { label: "Rename", run: onRename },
         { label: "Open board", run: () => openProjectBoard(board.id) },
         { label: expanded ? "Hide workers" : "Show workers", run: onToggle },
         {
@@ -1735,6 +1756,60 @@ function ManagerMenuInner({
   );
 }
 
+function ManagerRenameInput({ name, onDone }: { name: string; onDone: (name: string | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const userLeft = useRef(false);
+  const finished = useRef(false);
+  const finish = (value: string | null) => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone(value);
+  };
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target !== ref.current) userLeft.current = true;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") userLeft.current = true;
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, []);
+  return (
+    <input
+      ref={ref}
+      className="cs-board-row__rename"
+      defaultValue={name}
+      aria-label="Project name"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") finish(event.currentTarget.value);
+        if (event.key === "Escape") finish(null);
+      }}
+      onBlur={(event) => {
+        if (userLeft.current) {
+          finish(event.currentTarget.value);
+          return;
+        }
+        const input = event.currentTarget;
+        requestAnimationFrame(() => {
+          if (!finished.current && input.isConnected) input.focus();
+        });
+      }}
+    />
+  );
+}
+
 function ProjectBoardRow({
   board,
   icon,
@@ -1748,7 +1823,11 @@ function ProjectBoardRow({
   now,
   nestTarget,
   shortcutKey,
+  renaming,
+  onRenameDone,
 }: {
+  renaming: boolean;
+  onRenameDone: (name: string | null) => void;
   lead: PluginSidebarThread | null;
   now: number;
   nestTarget: boolean;
@@ -1826,7 +1905,11 @@ function ProjectBoardRow({
           }}
         />
       ) : null}
-      <span className="cs-board-row__name">{board.name}</span>
+      {renaming ? (
+        <ManagerRenameInput name={board.name} onDone={onRenameDone} />
+      ) : (
+        <span className="cs-board-row__name">{board.name}</span>
+      )}
       <span className="cs-board-row__meta">
         {shortcutKey !== null ? (
           <kbd className="cs-shortcut-key" aria-hidden="true">{shortcutKey}</kbd>

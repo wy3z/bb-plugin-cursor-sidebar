@@ -5,6 +5,7 @@ import {
   archiveMany,
   copyBranch,
   copyPullRequestLink,
+  copyThreadId,
   copyThreadLink,
   copyTranscript,
   exportTranscript,
@@ -97,10 +98,18 @@ export function RowContextMenu({
     items.push({ label: pinActionLabel(isPinned ?? false), run: onTogglePin });
   }
   if (onRemoveFromFolder) items.push({ label: "Remove family from folder", run: onRemoveFromFolder });
-  items.push({ label: "Copy link", run: () => void copyThreadLink(thread), separatorBefore: true });
-  if (thread.environment?.branchName) items.push({ label: "Copy branch name", run: () => void copyBranch(thread) });
-  if (thread.environment?.id) items.push({ label: "Copy pull request link", run: () => void copyPullRequestLink(sdk, thread) });
-  items.push({ label: "Copy transcript", run: () => void copyTranscript(sdk, thread) });
+  items.push({
+    label: "Copy",
+    run: () => undefined,
+    separatorBefore: true,
+    children: [
+      { label: "Link", run: () => void copyThreadLink(thread) },
+      ...(thread.environment?.branchName ? [{ label: "Branch name", run: () => void copyBranch(thread) }] : []),
+      ...(thread.environment?.id ? [{ label: "Pull request link", run: () => void copyPullRequestLink(sdk, thread) }] : []),
+      { label: "Transcript", run: () => void copyTranscript(sdk, thread) },
+      { label: "Thread ID", run: () => void copyThreadId(thread) },
+    ],
+  });
   items.push({ label: "Export transcript…", run: () => void exportTranscript(sdk, thread) });
   if (onSetProjectIcon) items.push({ label: "Set project icon…", run: onSetProjectIcon, separatorBefore: true });
   items.push({ label: "Archive", run: onArchive, separatorBefore: true });

@@ -131,3 +131,7 @@ export async function archiveMany(
   if (failed > 0) toast.error(`Archived ${targets.length - failed} of ${targets.length}`, { description: `${failed} could not be archived.` });
   else toast.success(`Archived ${targets.length} ${targets.length === 1 ? "thread" : "threads"}`);
 }
+
+export async function copyThreadId(thread: PluginSidebarThread) {
+  await copy(thread.id, "thread ID");
+}
