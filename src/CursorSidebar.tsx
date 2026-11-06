@@ -1355,6 +1355,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const listControls = viewMenu;
   const listCollapseKey = `list:${view.groupBy}`;
   const listCollapsed = topGroupCollapsed.ids.has(listCollapseKey);
+  const listOpen = !(standaloneHeading && listCollapsed);
 
   const renderSection = (section: ProjectSectionData, flat = false) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
@@ -1605,7 +1606,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
               setIconPicker(null);
             }}          />
-          <Drawer open={!(standaloneHeading && listCollapsed)}>
           <AnimatedList
             as="div"
             key={view.groupBy}
@@ -1627,27 +1627,31 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               singleProjectSection !== null ? (
                 // One project: no section header and no fold, so its threads
                 // read as the single list under the switcher.
-                renderSection(singleProjectSection, true)
+                <Drawer open={listOpen}>{renderSection(singleProjectSection, true)}</Drawer>
               ) : (
                 <>
                   {/* Project headings and the Chats heading are the sections;
                       no umbrella heading restates the grouping. A heading drag
                       moves these sections on its own transforms, so the list
                       holds its slides until the drop has landed. */}
-                  <AnimatedList as="div" paused={drag.state?.kind === "project"}>
-                    {nativeSectionsVisible.map((section) => renderSection(section))}
-                  </AnimatedList>
+                  <Drawer open={listOpen}>
+                    <AnimatedList as="div" paused={drag.state?.kind === "project"}>
+                      {nativeSectionsVisible.map((section) => renderSection(section))}
+                    </AnimatedList>
+                  </Drawer>
                   {chatSectionsVisible.map((section) => renderSection(section))}
                 </>
               )
             ) : (
               <section aria-label={view.groupBy === "none" ? "Threads" : "Chats"} className="mb-1 min-h-8">
-                <ShelfList
-                  section={pooledSection}
-                  shelf="active"
-                  ctx={ctx}
-                  grouped
-                />
+                <Drawer open={listOpen}>
+                  <ShelfList
+                    section={pooledSection}
+                    shelf="active"
+                    ctx={ctx}
+                    grouped
+                  />
+                </Drawer>
               </section>
             )}
             {/* No heading is ever drawn empty; when nothing renders at all the
@@ -1662,7 +1666,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               </p>
             ) : null}
           </AnimatedList>
-          </Drawer>
       </div>
     </div>
     </SidebarViewMenuRoot>
