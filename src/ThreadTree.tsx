@@ -998,6 +998,7 @@ function ThreadRow({
         }
         onRename={() => setIsRenaming(true)}
         onOpen={() => ctx.onNavigate()}
+        resolveThread={(id) => ctx.rawById.get(id)}
         onArchive={archiveThread}
         swipeDisabled={isRenaming}
         onReorderStart={

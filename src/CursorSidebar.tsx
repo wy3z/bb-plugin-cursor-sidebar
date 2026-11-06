@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   experimental_useSidebarThreads as useSidebarThreads,
   useRpc,
+  useSdk,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -29,6 +30,7 @@ import {
 } from "./forest";
 import { ShelfList, PinnedList, collectLiftedPins, type LiftedPin, type TreeContext } from "./ThreadTree";
 import { openProjectBoard, useProjectBoards, useRemoveManager, type ProjectBoard } from "./project-boards";
+import { archiveMany } from "./row-extras";
 import { RowContextMenu } from "./RowContextMenu";
 import { useArchiveThread } from "./thread-actions";
 import { ThreadAge } from "./StatusSlot";
@@ -277,6 +279,27 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   // trigger to another heading, leaves the open menu open.
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const shortcutKeys = useShortcutGuide();
+  const sdk = useSdk();
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || !event.altKey || event.shiftKey || event.metaKey) return;
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const ids = Array.from(document.querySelectorAll<HTMLElement>("[data-sidebar-thread-shortcut-target]"))
+        .map((element) => element.dataset.sidebarThreadId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+        .filter((id, index, list) => list.indexOf(id) === index);
+      if (ids.length === 0) return;
+      const current = activeThreadId ? ids.indexOf(activeThreadId) : -1;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = current === -1 ? (step === 1 ? 0 : ids.length - 1) : (current + step + ids.length) % ids.length;
+      event.preventDefault();
+      event.stopPropagation();
+      actions.open(ids[next]!);
+      onNavigate();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [actions, activeThreadId, onNavigate]);
   const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -1383,6 +1406,14 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       unreadOrdinaryCount={unreadOrdinary.length}
       markReadBusy={markReadBusy}
       onMarkAllRead={() => { void markAllRead(); }}
+      onArchiveAll={() => {
+        const listed = Array.from(document.querySelectorAll<HTMLElement>("[data-cursor-sidebar-root] [data-thread-row-id]"))
+          .map((element) => element.dataset.threadRowId!)
+          .filter((id) => !projectFamilyIds.has(id))
+          .map((id) => rawById.get(id))
+          .filter((thread): thread is PluginSidebarThread => thread !== undefined);
+        void archiveMany(sdk as never, listed, "in this list");
+      }}
     >
     <div data-cursor-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
       <ComposerProjectIcons

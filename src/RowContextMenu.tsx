@@ -1,6 +1,16 @@
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { useBbNavigate, useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import {
+  archiveMany,
+  copyBranch,
+  copyPullRequestLink,
+  copyThreadLink,
+  copyTranscript,
+  exportTranscript,
+  forkThread,
+  rowsBelow,
+} from "./row-extras";
 import { SidebarActions, type SidebarAction } from "./SidebarActions";
 import { threadDisplayTitle } from "./inbox";
 import { pinActionLabel } from "./pin-scope";
@@ -21,8 +31,11 @@ export function RowContextMenu({
   onReorderStart,
   onSetProjectIcon,
   extraActions,
+  resolveThread,
   children,
 }: {
+  /** Looks up a sidebar thread by id, for Archive all below. */
+  resolveThread?: (threadId: string) => PluginSidebarThread | undefined;
   /** Extra entries placed right after "Open in split". */
   extraActions?: readonly SidebarAction[];
   thread: PluginSidebarThread;
@@ -43,6 +56,8 @@ export function RowContextMenu({
   onReorderStart?: (pointerId: number, clientX: number, clientY: number) => boolean;
 }) {
   const actions = useThreadMutations();
+  const sdk = useSdk() as never;
+  const navigate = useBbNavigate();
   // Delete is bb's own thread action, so its confirmation and child count stay
   // the host's.
   const remove = useCoreThreadAction(thread, "delete");
@@ -53,6 +68,16 @@ export function RowContextMenu({
   const items: SidebarAction[] = [];
   items.push({ label: "Open in split", run: () => { actions.open(thread.id, { split: true }); onOpen?.(); } });
   if (extraActions) items.push(...extraActions);
+  items.push({
+    label: "New thread here",
+    run: () =>
+      navigate.toCompose({
+        projectId: thread.projectId,
+        ...(thread.environment?.id ? { environmentId: thread.environment.id } : {}),
+        focusPrompt: true,
+      }),
+  });
+  items.push({ label: "Fork", run: () => void forkThread(sdk, thread, (id) => actions.open(id)) });
   if (onRename) items.push({ label: "Rename", run: onRename });
   if (onRename) {
     items.push({
@@ -72,8 +97,24 @@ export function RowContextMenu({
     items.push({ label: pinActionLabel(isPinned ?? false), run: onTogglePin });
   }
   if (onRemoveFromFolder) items.push({ label: "Remove family from folder", run: onRemoveFromFolder });
+  items.push({ label: "Copy link", run: () => void copyThreadLink(thread), separatorBefore: true });
+  if (thread.environment?.branchName) items.push({ label: "Copy branch name", run: () => void copyBranch(thread) });
+  if (thread.environment?.id) items.push({ label: "Copy pull request link", run: () => void copyPullRequestLink(sdk, thread) });
+  items.push({ label: "Copy transcript", run: () => void copyTranscript(sdk, thread) });
+  items.push({ label: "Export transcript…", run: () => void exportTranscript(sdk, thread) });
   if (onSetProjectIcon) items.push({ label: "Set project icon…", run: onSetProjectIcon, separatorBefore: true });
   items.push({ label: "Archive", run: onArchive, separatorBefore: true });
+  if (resolveThread) {
+    items.push({
+      label: "Archive all below",
+      run: () => {
+        const below = rowsBelow(thread.id)
+          .map((id) => resolveThread(id))
+          .filter((item): item is PluginSidebarThread => item !== undefined);
+        void archiveMany(sdk, below, "below this one");
+      },
+    });
+  }
   // Deleting without bb's confirmation is never an option, so the entry only
   // exists while bb contributes the action that owns it.
   if (remove !== null) {

@@ -63,6 +63,8 @@ export interface SidebarViewMenuRootProps {
   unreadOrdinaryCount: number;
   markReadBusy: boolean;
   onMarkAllRead: () => void;
+  /** Archive every listed thread that is not pinned or working, after a confirm. */
+  onArchiveAll: () => void;
 }
 
 /**
@@ -305,6 +307,7 @@ export function SidebarViewMenuRoot({
   unreadOrdinaryCount,
   markReadBusy,
   onMarkAllRead,
+  onArchiveAll,
 }: SidebarViewMenuRootProps) {
   const scope = usePortalScopeProps();
   const notice = sidebarViewSyncNotice(sync);
@@ -600,6 +603,9 @@ export function SidebarViewMenuRoot({
             onSelect={() => onMarkAllRead()}
           >
             {markReadBusy ? "Marking as read…" : "Mark All as Read"}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item className={ITEM} onSelect={() => onArchiveAll()}>
+            Archive All…
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

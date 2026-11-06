@@ -7,6 +7,7 @@
 //
 // Derived from bb-plugin-thread-inbox (MIT, Copyright (c) 2026 Michael Yong);
 // see THIRD-PARTY-NOTICES.md at the repository root.
+import { execFile } from "node:child_process";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
@@ -171,6 +172,10 @@ async function workspacesPluginRunning(sdk: WorkspaceTabsSdk): Promise<boolean> 
 }
 
 export const cursorSidebarRpcContract = defineRpcContract({
+  transcript: {
+    input: z.object({ threadId: z.string().startsWith("thr_").max(100) }),
+    output: z.object({ text: z.string() }),
+  },
   listWorkspaces: {
     input: z.object({ environmentIds: z.array(z.string().min(1)).max(100) }),
     output: z.object({
@@ -381,6 +386,18 @@ export default function plugin(bb: BbPluginApi) {
   };
 
   bb.rpc.register(cursorSidebarRpcContract, {
+    transcript: ({ threadId }) =>
+      new Promise((resolve, reject) => {
+        execFile(
+          process.env.BB_CLI || "bb",
+          ["thread", "log", threadId, "--all", "--format", "minimal"],
+          { timeout: 30_000, maxBuffer: 8 * 1024 * 1024, encoding: "utf8" },
+          (error, stdout, stderr) => {
+            if (error) reject(new Error((stderr || error.message).trim().split("\n")[0] ?? "bb thread log failed"));
+            else resolve({ text: stdout });
+          },
+        );
+      }),
     async listWorkspaces({ environmentIds }) {
       const workspaces = await Promise.all(
         [...new Set(environmentIds)].map(async (environmentId) => {
