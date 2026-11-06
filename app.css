@@ -548,11 +548,11 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 }
 @media (hover: hover) {
   .cs-board-row:hover .cs-board-row__icon--swap,
-  .cs-board-row:focus-within .cs-board-row__icon--swap {
+  .cs-board-row:is(:focus-visible, :has(:focus-visible)) .cs-board-row__icon--swap {
     opacity: 0;
   }
   .cs-board-row:hover .cs-board-row__toggle,
-  .cs-board-row:focus-within .cs-board-row__toggle {
+  .cs-board-row:is(:focus-visible, :has(:focus-visible)) .cs-board-row__toggle {
     opacity: 1;
   }
 }
@@ -608,7 +608,7 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 }
 @media (hover: hover) {
   .cs-board-row:hover .cs-board-row__badge,
-  .cs-board-row:focus-within .cs-board-row__badge {
+  .cs-board-row:is(:focus-visible, :has(:focus-visible)) .cs-board-row__badge {
     opacity: 0;
   }
 }

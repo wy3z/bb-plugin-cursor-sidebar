@@ -1189,7 +1189,7 @@ function ThreadRow({
                 // the glyph gets a disc of the list surface. Without it a
                 // spinner's gaps show the line crossing the icon.
                 (depth > 0 || (hasChildren && expanded)) && "cs-status-glyph relative",
-                hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0",
+                hasChildren && "group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0",
               )}
             >
               {showProjectIcon && depth === 0 ? (
@@ -1218,7 +1218,7 @@ function ThreadRow({
                   event.stopPropagation();
                   ctx.onToggleChildren(thread.id);
                 }}
-                className="cs-child-toggle pointer-events-auto absolute inset-0 z-10 flex items-center justify-center text-sidebar-foreground/73 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:opacity-100 pointer-coarse:opacity-100"
+                className="cs-child-toggle pointer-events-auto absolute inset-0 z-10 flex items-center justify-center text-sidebar-foreground/73 opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:opacity-100 pointer-coarse:opacity-100"
               >
                 <Icon
                   name="ChevronRight"
@@ -1273,7 +1273,7 @@ function ThreadRow({
             <span className="relative flex items-center self-stretch">
               <span
                 data-thread-actions=""
-                className="cs-row-actions pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 focus-within:opacity-100"
+                className="cs-row-actions pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center gap-0.5 pr-0.5 opacity-0 transition-opacity duration-100 ease-out motion-reduce:transition-none group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-has-[:focus-visible]/row:opacity-100 focus-within:opacity-100"
               >
                 {pinnedCapable ? (
                   <button

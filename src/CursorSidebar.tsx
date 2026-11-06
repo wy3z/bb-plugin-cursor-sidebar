@@ -2130,7 +2130,7 @@ function ProjectSection({
         {/* Threads without a project read as a plain heading: no glyph slot. */}
         {section.personal ? null : (
         <span className="cs-status-slot relative flex w-4 shrink-0 items-center justify-center">
-          <span className="flex pointer-events-none group-hover/heading:opacity-0 group-focus-within/heading:opacity-0">
+          <span className="flex pointer-events-none group-hover/heading:opacity-0 group-has-[:focus-visible]/heading:opacity-0">
             <ProjectStatusGlyph
               open={sectionOpen}
               icon={icon}
@@ -2150,7 +2150,7 @@ function ProjectSection({
             }}
             className={cn(
               "cs-project-disclosure pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded text-sidebar-foreground/73 hover:text-sidebar-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
-              "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
+              "opacity-0 group-hover/heading:opacity-100 group-has-[:focus-visible]/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
             )}
           >
             <Icon
@@ -2183,7 +2183,7 @@ function ProjectSection({
               name="ChevronRight"
               aria-hidden="true"
               className={cn(
-                "ml-1 size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
+                "ml-1 size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/heading:opacity-100 group-has-[:focus-visible]/heading:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
                 sectionOpen && "rotate-90",
               )}
             />
