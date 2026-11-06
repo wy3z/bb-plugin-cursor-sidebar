@@ -652,3 +652,9 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 .cs-board-row__rename:focus {
   border-color: var(--cs-accent);
 }
+.cs-board-row:hover .cs-project-badge {
+  background: color-mix(in srgb, var(--sidebar-accent) 60%, var(--sidebar));
+}
+.cs-board-row[data-active] .cs-project-badge {
+  background: var(--sidebar-accent);
+}

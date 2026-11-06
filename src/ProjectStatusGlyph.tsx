@@ -121,7 +121,7 @@ export function ProjectRowIcon({
         ? "bg-warning-text"
         : "bg-timeline-accent";
   return (
-    <span className="pointer-events-none absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-sidebar">
+    <span className="cs-project-badge pointer-events-none absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-sidebar">
       {status === "working" ? (
         <Icon
           name="Loading"
