@@ -1504,6 +1504,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                           }}
                           lead={board.leadThreadId ? rawById.get(board.leadThreadId) ?? null : null}
                           now={now}
+                          shortcutKey={board.leadThreadId ? shortcutKeys?.get(board.leadThreadId) ?? null : null}
                           onOpen={(split) => {
                             if (!board.leadThreadId) return;
                             actions.open(board.leadThreadId, { split });
@@ -1699,9 +1700,11 @@ function ProjectBoardRow({
   onOpen,
   lead,
   now,
+  shortcutKey,
 }: {
   lead: PluginSidebarThread | null;
   now: number;
+  shortcutKey: string | null;
   board: ProjectBoard;
   icon: Parameters<typeof ProjectRowIcon>[0]["icon"];
   active: boolean;
@@ -1758,9 +1761,28 @@ function ProjectBoardRow({
           </button>
         ) : null}
       </span>
+      {lead ? (
+        <a
+          data-sidebar-thread-shortcut-target=""
+          data-sidebar-thread-id={lead.id}
+          href="#"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpen(false);
+          }}
+        />
+      ) : null}
       <span className="cs-board-row__name">{board.name}</span>
       <span className="cs-board-row__meta">
-        {lead ? <ThreadAge thread={lead} now={now} /> : null}
+        {shortcutKey !== null ? (
+          <kbd className="cs-shortcut-key" aria-hidden="true">{shortcutKey}</kbd>
+        ) : lead ? (
+          <ThreadAge thread={lead} now={now} />
+        ) : null}
       </span>
     </div>
   );
