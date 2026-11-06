@@ -1292,22 +1292,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     />
   );
   const standaloneHeading = view.groupBy === "workspace" || nothingToShow;
-  const listControls = (
-    <>
-      {viewMenu}
-      <button
-        type="button"
-        className={ICON_BTN}
-        aria-label="Add repository"
-        title="Add repository"
-        onClick={(event) => {
-          if (!openHostAddProject(event.currentTarget)) toast.error("Couldn't open Add project.");
-        }}
-      >
-        <Icon name="FolderPlus" className="size-3.5" />
-      </button>
-    </>
-  );
+  const listControls = viewMenu;
 
   const renderSection = (section: ProjectSectionData, flat = false) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
