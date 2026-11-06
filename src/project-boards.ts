@@ -1,19 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSdk } from "@get-bb/plugin-sdk/app";
-import { z } from "zod";
-
-const projectsOutput = z.object({
-  projects: z.array(
-    z.object({ id: z.string(), name: z.string(), prefix: z.string(), linkedBbProjectId: z.string().nullable() }).passthrough(),
-  ),
-});
-const metaOutput = z.object({ leadThreadId: z.string().nullable(), focus: z.string().nullable() }).passthrough();
-const tasksOutput = z.object({
-  tasks: z.array(z.object({ status: z.string(), parentTaskId: z.string().nullable() }).passthrough()),
-});
-const cardMetaOutput = z.object({
-  cards: z.array(z.object({ taskId: z.string(), activeThreads: z.array(z.unknown()) }).passthrough()),
-});
+import { useMemo } from "react";
+import { experimental_useRpcQuery, useSdk } from "@get-bb/plugin-sdk/app";
+import { PROJECTS_PLUGIN, TASKS_PLUGIN, projectsContract, tasksContract } from "@wy3z/bb-suite/contracts";
 
 export interface ProjectBoard {
   id: string;
@@ -22,66 +9,32 @@ export interface ProjectBoard {
   bbProjectId: string | null;
   leadThreadId: string | null;
   focus: string | null;
-  working: number;
-  review: number;
 }
 
-const REFRESH_MS = 20_000;
-
 export function useProjectBoards(): { boards: ProjectBoard[]; leadIds: ReadonlySet<string>; reload: () => void } {
-  const sdk = useSdk();
-  const [boards, setBoards] = useState<ProjectBoard[]>([]);
+  const projects = experimental_useRpcQuery({ pluginId: TASKS_PLUGIN, contract: tasksContract, method: "listProjects", input: {} });
+  const leads = experimental_useRpcQuery({ pluginId: PROJECTS_PLUGIN, contract: projectsContract, method: "listLeads", input: {} });
 
-  const load = useCallback(async () => {
-    try {
-      const { projects } = await sdk.plugins.callRpc({ pluginId: "tasks", method: "listProjects", input: {}, outputSchema: projectsOutput });
-      const next = await Promise.all(
-        projects.map(async (project): Promise<ProjectBoard> => {
-          const [meta, tasks, cards] = await Promise.all([
-            sdk.plugins
-              .callRpc({ pluginId: "projects", method: "getMeta", input: { projectId: project.id }, outputSchema: metaOutput })
-              .catch(() => null),
-            sdk.plugins
-              .callRpc({ pluginId: "tasks", method: "listAllTasks", input: { projectId: project.id }, outputSchema: tasksOutput })
-              .catch(() => null),
-            sdk.plugins
-              .callRpc({ pluginId: "tasks", method: "listTaskCardMeta", input: { projectId: project.id }, outputSchema: cardMetaOutput })
-              .catch(() => null),
-          ]);
-          return {
-            id: project.id,
-            name: project.name,
-            prefix: project.prefix,
-            bbProjectId: project.linkedBbProjectId,
-            leadThreadId: meta?.leadThreadId ?? null,
-            focus: meta?.focus ?? null,
-            working: cards?.cards.filter((card) => card.activeThreads.length > 0).length ?? 0,
-            review: tasks?.tasks.filter((task) => task.parentTaskId === null && task.status === "in_review").length ?? 0,
-          };
-        }),
-      );
-      setBoards((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
-    } catch {
-      setBoards((current) => (current.length === 0 ? current : []));
-    }
-  }, [sdk]);
+  const boards = useMemo<ProjectBoard[]>(() => {
+    const byProject = new Map((leads.data?.leads ?? []).map((lead) => [lead.projectId, lead]));
+    return (projects.data?.projects ?? []).flatMap((project) => {
+      const lead = byProject.get(project.id);
+      if (!lead) return [];
+      return [
+        {
+          id: project.id,
+          name: project.name,
+          prefix: project.prefix,
+          bbProjectId: project.linkedBbProjectId,
+          leadThreadId: lead.threadId,
+          focus: lead.focus,
+        },
+      ];
+    });
+  }, [leads.data, projects.data]);
 
-  useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(), REFRESH_MS);
-    const onFocus = () => void load();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [load]);
-
-  const leadIds = useMemo(
-    () => new Set(boards.flatMap((board) => (board.leadThreadId ? [board.leadThreadId] : []))),
-    [boards],
-  );
-  return { boards, leadIds, reload: () => void load() };
+  const leadIds = useMemo(() => new Set(boards.flatMap((board) => (board.leadThreadId ? [board.leadThreadId] : []))), [boards]);
+  return { boards, leadIds, reload: () => undefined };
 }
 
 export function openProjectBoard(projectId: string) {
@@ -89,10 +42,13 @@ export function openProjectBoard(projectId: string) {
   window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
 }
 
-const leadOutput = z.object({ leadThreadId: z.string().nullable() }).passthrough();
-
 export function useRemoveManager() {
   const sdk = useSdk();
   return (projectId: string) =>
-    sdk.plugins.callRpc({ pluginId: "projects", method: "setLead", input: { projectId, threadId: null }, outputSchema: leadOutput });
+    sdk.plugins.callRpc({
+      pluginId: PROJECTS_PLUGIN,
+      method: "setLead",
+      input: { projectId, threadId: null },
+      outputSchema: projectsContract.setLead.output,
+    });
 }

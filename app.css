@@ -617,3 +617,13 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 @media (prefers-reduced-motion: reduce) {
   .cs-lead-icon__mark { transition: none; }
 }
+
+.cs-managers {
+  padding-bottom: 6px;
+  max-height: 40%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.cs-managers::-webkit-scrollbar {
+  display: none;
+}

@@ -74,8 +74,7 @@ import { useThreadSections } from "./useThreadSections";
 import { useThreadMutations } from "./thread-actions";
 import { useSidebarView } from "./useSidebarView";
 import type { cursorSidebarRpcContract } from "./server";
-import { SidebarViewMenuRoot, SidebarViewMenuTrigger, SidebarViewSyncNotice } from "./SidebarViewMenu";
-import { ProjectSwitcher } from "./ProjectSwitcher";
+import { GROUPING_HEADINGS, SidebarViewMenuRoot, SidebarViewMenuTrigger, SidebarViewSyncNotice } from "./SidebarViewMenu";
 import {
   environmentFilterOptions,
   familyAwareComparator,
@@ -1375,6 +1374,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       onUpdate={sidebarView.update}
       environmentOptions={viewEnvironmentOptions}
       showNoEnvironment={hasEnvironmentlessOrdinary}
+      projectOptions={viewProjectOptions}
       anyCollapsed={anyCollapsed}
       onExpandAll={expandAll}
       onCollapseAll={collapseAll}
@@ -1389,81 +1389,8 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         iconFor={projectIcons.iconFor}
       />
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
-      {/* One fixed toolbar above the scroll area: the project switcher on the
-          left, the view menu on the right. No section heading carries controls. */}
-      <div className="flex shrink-0 items-center gap-1 pr-4 pl-2.5 pt-2">
-        <div className="flex min-w-0 flex-1 items-center">
-          <ProjectSwitcher
-            projects={viewProjectOptions}
-            selected={view.projectFilter}
-            iconFor={(projectId) => projectIcons.iconFor(projectId)}
-            onSelect={(projectId) =>
-              sidebarView.update({ projectFilter: projectId === null ? null : [projectId] })
-            }
-            onSetIcon={
-              selectedProjectId !== null && selectedProjectId !== personalProjectId
-                ? (anchor) => openIconPicker(selectedProjectId, anchor)
-                : undefined
-            }
-            onNewProject={(trigger) => {
-              if (!openHostAddProject(trigger)) toast.error("Couldn't open Add project.");
-            }}
-          />
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          {viewMenu}
-        </div>
-      </div>
-
-      <div
-        ref={listRef}
-        data-fade-more={listHasMore ? "true" : undefined}
-        onKeyDown={handleListKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        <p aria-live="polite" className="sr-only">
-          {announcement}
-        </p>
-          {renamingFolder ? <FolderNameDialog
-            folder={renamingFolder}
-            onClose={() => setRenamingFolderId(null)}
-            onRename={async (name) => folderStore.rename(renamingFolder.id, name)} /> : null}
-          {deletingProject ? <DeleteProjectDialog
-            project={deletingProject}
-            chatCount={deletingProject.chats}
-            onClose={() => setDeletingProject(null)}
-            onDeleted={() => {
-              setDeletingProject(null);
-              setAnnouncement(`Project ${deletingProject.name} deleted.`);
-            }} /> : null}
-          {deletingFolder ? <DeleteFolderDialog
-            folder={deletingFolder}
-            chatCount={deletingFolderChats}
-            onClose={() => setDeletingFolderId(null)}
-            onDelete={async () => {
-              const removed = await folderStore.remove(deletingFolder.id);
-              if (removed === null) throw new Error("The folder was not deleted.");
-              setAnnouncement(`Folder ${deletingFolder.name} deleted. Its chats returned to the dated chats.`);
-            }} /> : null}
-          <ProjectIconPicker
-            open={iconPicker !== null}
-            onOpenChange={(next) => {
-              if (!next) setIconPicker(null);
-            }}
-            anchor={iconPicker?.anchor ?? null}
-            projectName={iconPicker?.name ?? ""}
-            current={iconPicker === null ? null : projectIcons.iconFor(iconPicker.projectId)}
-            onPick={(icon) => {
-              if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
-              setIconPicker(null);
-            }}          />
-          <AnimatedList
-            as="div"
-            key={view.groupBy}
-            className="cs-grouping-swap"
-          >
-            {projectBoards.length > 0 ? (
-              <div className="mb-3">
+      {projectBoards.length > 0 ? (
+        <div className="cs-managers shrink-0 px-1.5 pt-2">
                 <GroupHeading
                   label="Managers"
                   open={!topGroupCollapsed.ids.has("projects-boards")}
@@ -1522,7 +1449,72 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   </div>
                 </Drawer>
               </div>
-            ) : null}
+      ) : null}
+      <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 mt-1")}>
+        <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {viewMenu}
+          <button
+            type="button"
+            className={ICON_BTN}
+            aria-label="Add repository"
+            title="Add repository"
+            onClick={(event) => {
+              if (!openHostAddProject(event.currentTarget)) toast.error("Couldn't open Add project.");
+            }}
+          >
+            <Icon name="FolderPlus" className="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={listRef}
+        data-fade-more={listHasMore ? "true" : undefined}
+        onKeyDown={handleListKeyDown}
+        className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <p aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
+          {renamingFolder ? <FolderNameDialog
+            folder={renamingFolder}
+            onClose={() => setRenamingFolderId(null)}
+            onRename={async (name) => folderStore.rename(renamingFolder.id, name)} /> : null}
+          {deletingProject ? <DeleteProjectDialog
+            project={deletingProject}
+            chatCount={deletingProject.chats}
+            onClose={() => setDeletingProject(null)}
+            onDeleted={() => {
+              setDeletingProject(null);
+              setAnnouncement(`Project ${deletingProject.name} deleted.`);
+            }} /> : null}
+          {deletingFolder ? <DeleteFolderDialog
+            folder={deletingFolder}
+            chatCount={deletingFolderChats}
+            onClose={() => setDeletingFolderId(null)}
+            onDelete={async () => {
+              const removed = await folderStore.remove(deletingFolder.id);
+              if (removed === null) throw new Error("The folder was not deleted.");
+              setAnnouncement(`Folder ${deletingFolder.name} deleted. Its chats returned to the dated chats.`);
+            }} /> : null}
+          <ProjectIconPicker
+            open={iconPicker !== null}
+            onOpenChange={(next) => {
+              if (!next) setIconPicker(null);
+            }}
+            anchor={iconPicker?.anchor ?? null}
+            projectName={iconPicker?.name ?? ""}
+            current={iconPicker === null ? null : projectIcons.iconFor(iconPicker.projectId)}
+            onPick={(icon) => {
+              if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
+              setIconPicker(null);
+            }}          />
+          <AnimatedList
+            as="div"
+            key={view.groupBy}
+            className="cs-grouping-swap"
+          >
             {liftedPins.length > 0 ? (
               <div className="mb-3">
                 <GroupHeading
@@ -1554,30 +1546,12 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               )
             ) : (
               <section aria-label={view.groupBy === "none" ? "Threads" : "Chats"} className="mb-1 min-h-8">
-                {view.groupBy === "none" && pooledSection.byShelf.active.length > 0 ? (
-                  <>
-                    <GroupHeading
-                      label="Threads"
-                      open={!topGroupCollapsed.ids.has("threads")}
-                      onToggle={() => topGroupCollapsed.toggle("threads")}
-                    />
-                    <Drawer open={!topGroupCollapsed.ids.has("threads")}>
-                      <ShelfList
-                        section={pooledSection}
-                        shelf="active"
-                        ctx={ctx}
-                        grouped
-                      />
-                    </Drawer>
-                  </>
-                ) : (
-                  <ShelfList
-                    section={pooledSection}
-                    shelf="active"
-                    ctx={ctx}
-                    grouped
-                  />
-                )}
+                <ShelfList
+                  section={pooledSection}
+                  shelf="active"
+                  ctx={ctx}
+                  grouped
+                />
               </section>
             )}
             {/* No heading is ever drawn empty; when nothing renders at all the

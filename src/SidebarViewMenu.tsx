@@ -16,8 +16,11 @@ import {
   ageFilterPatch,
   allAgeFilterPatch,
   allEnvironmentFilterPatch,
+  allProjectFilterPatch,
   allStatusFilterPatch,
   environmentFilterPatch,
+  projectFilterPatch,
+  type ProjectIdentity,
   sidebarViewSyncNotice,
   statusFilterPatch,
   threadsPerGroupLabel,
@@ -50,6 +53,8 @@ export interface SidebarViewMenuRootProps {
   environmentOptions: readonly EnvironmentIdentity[];
   /** True when a loaded ordinary conversation has no environment. */
   showNoEnvironment: boolean;
+  /** Projects present in the loaded conversations, for the project filter. */
+  projectOptions: readonly ProjectIdentity[];
   /** Every collapsible target in the controlled scope, for the bulk toggle. */
   anyCollapsed: boolean;
   onExpandAll: () => void;
@@ -64,6 +69,14 @@ export interface SidebarViewMenuRootProps {
  * The menu surface and row shared with the project switcher, so a second menu
  * in the same sidebar cannot drift from this one's look and focus treatment.
  */
+export const GROUPING_HEADINGS: Record<ViewGroupBy, string> = {
+  workspace: "Repositories",
+  updated: "Recent",
+  status: "Status",
+  environment: "Environments",
+  none: "Threads",
+};
+
 export const VIEW_MENU_CONTENT =
   `cs-view-menu z-50 w-max max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${ANCHORED_OVERLAY_MOTION}`;
 export const VIEW_MENU_ITEM =
@@ -164,7 +177,7 @@ function FilterHeader({ label, onAll, onNone }: { label: string; onAll: () => vo
 }
 
 const GROUPING_LABELS: Record<ViewGroupBy, string> = {
-  workspace: "Projects",
+  workspace: "Repository",
   updated: "Updated",
   status: "Status",
   environment: "Environment",
@@ -172,7 +185,7 @@ const GROUPING_LABELS: Record<ViewGroupBy, string> = {
 };
 
 const GROUPING_ICONS: Record<ViewGroupBy, IconName> = {
-  workspace: "Folder",
+  workspace: "FolderGit",
   updated: "Clock",
   status: "Spinner",
   environment: "Cloud",
@@ -262,7 +275,7 @@ export function SidebarViewMenuTrigger({ sync, triggerClassName }: SidebarViewMe
           "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/55 hover:text-foreground data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:size-9 pointer-coarse:size-9"
         }
       >
-        <Icon name="SlidersHorizontal" className="size-3.5" />
+        <Icon name="ListFilter" className="size-3.5" />
         {notice !== null ? (
           <Icon
             name={notice.tone === "warning" ? "AlertTriangle" : "CircleX"}
@@ -285,6 +298,7 @@ export function SidebarViewMenuRoot({
   onUpdate,
   environmentOptions,
   showNoEnvironment,
+  projectOptions,
   anyCollapsed,
   onExpandAll,
   onCollapseAll,
@@ -309,6 +323,17 @@ export function SidebarViewMenuRoot({
   const toggleEnvironment = (id: string, on: boolean) =>
     onUpdate(environmentFilterPatch(view, id, environmentKeys, on));
   const setAllEnvironments = (on: boolean) => onUpdate(allEnvironmentFilterPatch(on));
+  const projectKeys = projectOptions.map((project) => project.id);
+  const projectSelected = (id: string) => view.projectFilter === null || view.projectFilter.includes(id);
+  const toggleProject = (id: string, on: boolean) => onUpdate(projectFilterPatch(view, id, projectKeys, on));
+  const setAllProjects = (on: boolean) => onUpdate(allProjectFilterPatch(on));
+  const projectFilterValue = (() => {
+    if (view.projectFilter === null) return "All";
+    if (view.projectFilter.length === 1) {
+      return projectOptions.find((project) => project.id === view.projectFilter![0])?.label ?? "1 selected";
+    }
+    return `${view.projectFilter.length} selected`;
+  })();
   const statusFilterValue =
     view.statusFilter.length === VIEW_STATUS_FILTERS.length
       ? "All"
@@ -509,6 +534,26 @@ export function SidebarViewMenuRoot({
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </Section>
+
+          {projectOptions.length > 1 ? (
+            <Section>
+              <SubTrigger label="Repository" value={projectFilterValue} />
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent {...scope} sideOffset={4} alignOffset={-4} className={CONTENT}>
+                  <FilterHeader label="Repository" onAll={() => setAllProjects(true)} onNone={() => setAllProjects(false)} />
+                  {projectOptions.map((project) => (
+                    <ToggleItem
+                      key={project.id}
+                      checked={projectSelected(project.id)}
+                      label={project.label}
+                      icon="Folder"
+                      onToggle={(next) => toggleProject(project.id, next)}
+                    />
+                  ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </Section>
+          ) : null}
 
           {environmentOptions.length > 0 || showNoEnvironment ? (
             <Section>
