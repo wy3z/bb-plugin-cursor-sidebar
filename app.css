@@ -12,12 +12,12 @@
 /* Scoped phone/touch affordances; fine-pointer desktop density is unchanged. */
 @media (max-width: 767px), (pointer: coarse) {
   [data-cursor-sidebar-root] { min-width: 0; overflow-x: clip; }
-  [data-cursor-sidebar-root] button:not(.cs-row-action),
+  [data-cursor-sidebar-root] button:not(.cs-row-action):not(.cs-board-row__toggle),
   [data-cursor-sidebar-root] select,
   .cs-move-dialog button,
   .cs-move-dialog select { min-height: 44px; touch-action: manipulation; }
-  [data-cursor-sidebar-root] button:has(> :is(svg, [data-icon-root]):only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action) { min-width: 44px; }
-  [data-cursor-sidebar-root] button[aria-expanded] { opacity: 1; }
+  [data-cursor-sidebar-root] button:has(> :is(svg, [data-icon-root]):only-child):not(.cs-icon-btn):not(.cs-new-project):not(.cs-row-action):not(.cs-board-row__toggle) { min-width: 44px; }
+  [data-cursor-sidebar-root] button[aria-expanded]:not(.cs-board-row__toggle) { opacity: 1; }
   [data-cursor-sidebar-root] [data-reorder-kind="project"] { gap: 4px; }
   [data-cursor-sidebar-root] .cs-project-glyph { width: 16px; height: 16px; }
   [data-cursor-sidebar-root] .cs-project-name {
