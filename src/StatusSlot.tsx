@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -65,6 +66,48 @@ export function ThreadAge({ thread, now }: { thread: PluginSidebarThread; now: n
       )}
     >
       {relativeTimeLabel(thread.updatedAt, now)}
+    </span>
+  );
+}
+
+export function ThreadLeadIcon({
+  thread,
+  exactStatus,
+  label,
+  children,
+}: {
+  thread: PluginSidebarThread;
+  exactStatus: ThreadStatusKind | undefined;
+  label: string | null;
+  children: ReactNode;
+}) {
+  const working =
+    activityStatusKind(exactStatus) ||
+    isWorking(thread) ||
+    isActivityIndicator(thread.indicator);
+  const tone = working
+    ? null
+    : exactStatus === "failed" || thread.indicator === "unread-error"
+      ? "bg-destructive"
+      : exactStatus === "input" || thread.indicator === "waiting-for-input"
+        ? "bg-warning-text"
+        : thread.indicator === "unread-success"
+          ? "bg-timeline-accent"
+          : thread.isUnread
+            ? "bg-muted-foreground/80"
+            : null;
+  return (
+    <span
+      role="img"
+      aria-label={label ?? (working ? "Working" : thread.isUnread ? "Unread" : "Idle")}
+      className="cs-lead-icon relative flex size-4 shrink-0 items-center justify-center"
+      data-working={working || undefined}
+    >
+      <span className="cs-lead-icon__mark flex">{children}</span>
+      {working ? (
+        <Icon name="Loading" className="cs-lead-icon__spinner absolute size-4 animate-spin text-sidebar-foreground/85" />
+      ) : null}
+      {tone ? <span className={cn("cs-lead-icon__badge absolute rounded-full", tone)} /> : null}
     </span>
   );
 }

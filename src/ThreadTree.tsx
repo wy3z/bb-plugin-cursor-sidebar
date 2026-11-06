@@ -51,6 +51,7 @@ import { RowContextMenu } from "./RowContextMenu";
 import { useArchiveThread, useThreadMutations } from "./thread-actions";
 import {
   ThreadAge,
+  ThreadLeadIcon,
   ThreadLeadStatus,
 } from "./StatusSlot";
 import { hasStatusGlyph } from "./StatusGlyph";
@@ -1190,11 +1191,21 @@ function ThreadRow({
                 hasChildren && "group-hover/row:opacity-0 group-focus-within/row:opacity-0",
               )}
             >
-              <ThreadLeadStatus
-                thread={statusThread}
-                exactStatus={exactStatus}
-                label={rowStatus.label}
-              />
+              {showProjectIcon && depth === 0 ? (
+                <ThreadLeadIcon thread={statusThread} exactStatus={exactStatus} label={rowStatus.label}>
+                  <ProjectRowIcon
+                    icon={chatProject ? null : ctx.projectIconFor(projectId)}
+                    label={projectLabel}
+                    chats={chatProject}
+                  />
+                </ThreadLeadIcon>
+              ) : (
+                <ThreadLeadStatus
+                  thread={statusThread}
+                  exactStatus={exactStatus}
+                  label={rowStatus.label}
+                />
+              )}
             </span>
             {hasChildren ? (
               <button
@@ -1219,13 +1230,6 @@ function ThreadRow({
             ) : null}
           </span>
 
-          {showProjectIcon && depth === 0 ? (
-            <ProjectRowIcon
-              icon={chatProject ? null : ctx.projectIconFor(projectId)}
-              label={projectLabel}
-              chats={chatProject}
-            />
-          ) : null}
 
           {ctx.view.show.pr ? <PullRequestMark environmentId={thread.environment?.id ?? null} /> : null}
 

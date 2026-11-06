@@ -20,8 +20,11 @@ export function RowContextMenu({
   swipeDisabled,
   onReorderStart,
   onSetProjectIcon,
+  extraActions,
   children,
 }: {
+  /** Extra entries placed right after "Open in split". */
+  extraActions?: readonly SidebarAction[];
   thread: PluginSidebarThread;
   onRename?: () => void;
   onOpen?: () => void;
@@ -49,6 +52,7 @@ export function RowContextMenu({
   // plain native call kept for parity.
   const items: SidebarAction[] = [];
   items.push({ label: "Open in split", run: () => { actions.open(thread.id, { split: true }); onOpen?.(); } });
+  if (extraActions) items.push(...extraActions);
   if (onRename) items.push({ label: "Rename", run: onRename });
   if (onRename) {
     items.push({

@@ -27,7 +27,11 @@ import {
   type ProjectSectionData,
   type SiblingOrdering,
 } from "./forest";
-import { ShelfList, PinnedList, collectLiftedPins, type TreeContext } from "./ThreadTree";
+import { ShelfList, PinnedList, collectLiftedPins, type LiftedPin, type TreeContext } from "./ThreadTree";
+import { openProjectBoard, useProjectBoards, useRemoveManager, type ProjectBoard } from "./project-boards";
+import { RowContextMenu } from "./RowContextMenu";
+import { useArchiveThread } from "./thread-actions";
+import { ThreadAge } from "./StatusSlot";
 import { descendantsOf, resolveThreadDisplayTitles, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import {
   homeKindOf,
@@ -99,7 +103,7 @@ import {
 } from "./standalone-groups";
 import type { ThreadShelf } from "./lifecycle";
 import { ageGroupKey, type AgeGroup } from "./age-groups";
-import { ProjectStatusGlyph, ACTIVITY_LABELS, glyphStateForStatus } from "./ProjectStatusGlyph";
+import { ProjectStatusGlyph, ProjectRowIcon, ACTIVITY_LABELS, glyphStateForStatus } from "./ProjectStatusGlyph";
 import { AnimatedList } from "./AnimatedList";
 import { Drawer } from "./Drawer";
 import { useShortcutGuide } from "./useShortcutGuide";
@@ -421,6 +425,15 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       familyRootId((id) => rawById.get(id)?.parentThreadId ?? null, threadId),
     [rawById],
   );
+  const { boards: projectBoards, leadIds: projectLeadIds, reload: reloadProjectBoards } = useProjectBoards();
+  const projectFamilyIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (projectLeadIds.size === 0) return ids;
+    for (const thread of visible) {
+      if (projectLeadIds.has(familyRootOfId(thread.id))) ids.add(thread.id);
+    }
+    return ids;
+  }, [familyRootOfId, projectLeadIds, visible]);
   // A pinned family and the open chat's family stay visible when an ordinary
   // filter would hide them.
   const pinnedFamilyRoots = useMemo(() => {
@@ -537,12 +550,24 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   const sections = useMemo<ProjectSectionData[]>(
     () =>
       buildSections(
-        viewVisible,
+        projectFamilyIds.size === 0 ? viewVisible : viewVisible.filter((thread) => !projectFamilyIds.has(thread.id)),
         displayProjects,
         () => "active",
         orderingFor,
       ),
-    [displayProjects, orderingFor, viewVisible],
+    [displayProjects, orderingFor, projectFamilyIds, viewVisible],
+  );
+  const projectLeadSections = useMemo<ProjectSectionData[]>(
+    () =>
+      projectFamilyIds.size === 0
+        ? []
+        : buildSections(
+            visible.filter((thread) => projectFamilyIds.has(thread.id)),
+            displayProjects,
+            () => "active",
+            orderingFor,
+          ),
+    [displayProjects, orderingFor, projectFamilyIds, visible],
   );
   // A project filter hides its whole group in Projects grouping, header
   // included. The sections still feed the Pinned block, so a pinned family from
@@ -1062,6 +1087,21 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () => collectLiftedPins(sections, ctx, projects.map((project) => project.id)),
     [ctx, projects, sections],
   );
+  const projectBoardRows = useMemo(() => {
+    const byBoard = new Map<string, LiftedPin[]>();
+    for (const board of projectBoards) {
+      const leadId = board.leadThreadId;
+      if (!leadId) continue;
+      const section = projectLeadSections.find((candidate) => candidate.members.some((thread) => thread.id === leadId));
+      if (!section) continue;
+      if (topGroupCollapsed.ids.has(`manager:${leadId}`)) continue;
+      const rows = flattenShelf(section, "active", (id) => id === leadId || ctx.expandedParents.has(id)).filter(
+        (row) => row.thread.id !== leadId && familyRootOfId(row.thread.id) === leadId,
+      );
+      byBoard.set(board.id, rows.map((row) => ({ section, row })));
+    }
+    return byBoard;
+  }, [ctx, familyRootOfId, projectBoards, projectLeadSections, topGroupCollapsed.ids]);
 
   const markAllRead = useCallback(async () => {
     if (unreadOrdinary.length === 0) return;
@@ -1241,6 +1281,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
 
   const nothingToShow =
     liftedPins.length === 0 &&
+    projectBoards.length === 0 &&
     (projectsGrouping
       ? nativeSectionsVisible.length === 0 && chatSectionsVisible.length === 0
       : pooledSection.byShelf.active.length === 0);
@@ -1421,6 +1462,66 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             key={view.groupBy}
             className="cs-grouping-swap"
           >
+            {projectBoards.length > 0 ? (
+              <div className="mb-3">
+                <GroupHeading
+                  label="Managers"
+                  open={!topGroupCollapsed.ids.has("projects-boards")}
+                  onToggle={() => topGroupCollapsed.toggle("projects-boards")}
+                />
+                <Drawer open={!topGroupCollapsed.ids.has("projects-boards")}>
+                  <div className="flex flex-col">
+                    {projectBoards.map((board) => (
+                      <div key={board.id} className="flex flex-col">
+                        <ManagerMenu
+                          board={board}
+                          lead={board.leadThreadId ? rawById.get(board.leadThreadId) ?? null : null}
+                          expanded={board.leadThreadId !== null && !topGroupCollapsed.ids.has(`manager:${board.leadThreadId}`)}
+                          onToggle={() => {
+                            if (board.leadThreadId) topGroupCollapsed.toggle(`manager:${board.leadThreadId}`);
+                          }}
+                          onNavigate={onNavigate}
+                          onSetIcon={
+                            board.bbProjectId
+                              ? () =>
+                                  openIconPicker(
+                                    board.bbProjectId!,
+                                    document.querySelector<HTMLElement>(`[data-manager-row="${CSS.escape(board.id)}"]`),
+                                  )
+                              : undefined
+                          }
+                          onRemoved={reloadProjectBoards}
+                        >
+                        <ProjectBoardRow
+                          board={board}
+                          icon={board.bbProjectId ? projectIcons.iconFor(board.bbProjectId) : null}
+                          active={board.leadThreadId !== null && board.leadThreadId === activeThreadId}
+                          working={board.leadThreadId !== null && (rawById.get(board.leadThreadId)?.status === "active" || rawById.get(board.leadThreadId)?.status === "starting")}
+                          childCount={board.leadThreadId ? visible.filter((thread) => thread.id !== board.leadThreadId && familyRootOfId(thread.id) === board.leadThreadId).length : 0}
+                          expanded={board.leadThreadId !== null && !topGroupCollapsed.ids.has(`manager:${board.leadThreadId}`)}
+                          onToggle={() => {
+                            if (board.leadThreadId) topGroupCollapsed.toggle(`manager:${board.leadThreadId}`);
+                          }}
+                          lead={board.leadThreadId ? rawById.get(board.leadThreadId) ?? null : null}
+                          now={now}
+                          onOpen={(split) => {
+                            if (!board.leadThreadId) return;
+                            actions.open(board.leadThreadId, { split });
+                            onNavigate();
+                          }}
+                        />
+                        </ManagerMenu>
+                        {(projectBoardRows.get(board.id) ?? []).length > 0 ? (
+                          <div className="cs-board-family">
+                            <PinnedList items={projectBoardRows.get(board.id) ?? []} ctx={ctx} />
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </Drawer>
+              </div>
+            ) : null}
             {liftedPins.length > 0 ? (
               <div className="mb-3">
                 <GroupHeading
@@ -1493,6 +1594,175 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       </div>
     </div>
     </SidebarViewMenuRoot>
+  );
+}
+
+function ManagerMenu({
+  board,
+  lead,
+  expanded,
+  onToggle,
+  onNavigate,
+  onSetIcon,
+  onRemoved,
+  children,
+}: {
+  board: ProjectBoard;
+  lead: PluginSidebarThread | null;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
+  onSetIcon?: () => void;
+  onRemoved: () => void;
+  children: React.ReactNode;
+}) {
+  if (lead === null) return <>{children}</>;
+  return (
+    <ManagerMenuInner
+      board={board}
+      lead={lead}
+      expanded={expanded}
+      onToggle={onToggle}
+      onNavigate={onNavigate}
+      onSetIcon={onSetIcon}
+      onRemoved={onRemoved}
+    >
+      {children}
+    </ManagerMenuInner>
+  );
+}
+
+function ManagerMenuInner({
+  board,
+  lead,
+  expanded,
+  onToggle,
+  onNavigate,
+  onSetIcon,
+  onRemoved,
+  children,
+}: {
+  board: ProjectBoard;
+  lead: PluginSidebarThread;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
+  onSetIcon?: () => void;
+  onRemoved: () => void;
+  children: React.ReactNode;
+}) {
+  const archive = useArchiveThread(lead);
+  const removeManager = useRemoveManager();
+  return (
+    <RowContextMenu
+      thread={lead}
+      onOpen={onNavigate}
+      onArchive={archive}
+      onSetProjectIcon={onSetIcon}
+      swipeDisabled
+      extraActions={[
+        { label: "Open board", run: () => openProjectBoard(board.id) },
+        { label: expanded ? "Hide workers" : "Show workers", run: onToggle },
+        {
+          label: "Remove as manager",
+          separatorBefore: true,
+          run: () => {
+            removeManager(board.id).then(
+              () => {
+                toast.success(`${board.name} no longer has a manager`, {
+                  description: "The thread is back in your normal list. Set one again with bb projects lead.",
+                });
+                onRemoved();
+              },
+              (error: unknown) =>
+                toast.error("Couldn't remove the manager", {
+                  description: error instanceof Error ? error.message : String(error),
+                }),
+            );
+          },
+        },
+      ]}
+    >
+      {children}
+    </RowContextMenu>
+  );
+}
+
+function ProjectBoardRow({
+  board,
+  icon,
+  active,
+  working,
+  childCount,
+  expanded,
+  onToggle,
+  onOpen,
+  lead,
+  now,
+}: {
+  lead: PluginSidebarThread | null;
+  now: number;
+  board: ProjectBoard;
+  icon: Parameters<typeof ProjectRowIcon>[0]["icon"];
+  active: boolean;
+  working: boolean;
+  childCount: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpen: (split: boolean) => void;
+}) {
+  const badge =
+    lead === null
+      ? null
+      : lead.hasPendingInteraction || lead.indicator === "waiting-for-input" || lead.indicator === "unread-error" || lead.indicator === "unread-success" || lead.isUnread
+        ? "attention"
+        : working
+          ? "working"
+          : null;
+  return (
+    <div
+      role="link"
+      tabIndex={0}
+      data-manager-row={board.id}
+      className="cs-board-row group/board"
+      data-active={active || undefined}
+      title={board.focus ? `Focus: ${board.focus}` : `Open the ${board.name} manager`}
+      onClick={(event) => onOpen(event.metaKey || event.ctrlKey)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter") onOpen(event.metaKey || event.ctrlKey);
+        if (childCount > 0 && ((event.key === "ArrowRight" && !expanded) || (event.key === "ArrowLeft" && expanded))) {
+          event.preventDefault();
+          onToggle();
+        }
+      }}
+    >
+      <span className="cs-board-row__lead">
+        <span className={cn("cs-board-row__icon", childCount > 0 && "cs-board-row__icon--swap")}>
+          <ProjectRowIcon icon={icon} label={board.name} />
+          {badge ? <span className="cs-board-row__badge" data-tone={badge} aria-hidden="true" /> : null}
+        </span>
+        {childCount > 0 ? (
+          <button
+            type="button"
+            className="cs-board-row__toggle"
+            aria-label={`${expanded ? "Hide" : "Show"} ${childCount} worker ${childCount === 1 ? "thread" : "threads"}`}
+            aria-expanded={expanded}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggle();
+            }}
+          >
+            <Icon name="ChevronRight" className={cn("size-3 transition-transform duration-150 ease-out motion-reduce:transition-none", expanded && "rotate-90")} />
+          </button>
+        ) : null}
+      </span>
+      <span className="cs-board-row__name">{board.name}</span>
+      <span className="cs-board-row__meta">
+        {lead ? <ThreadAge thread={lead} now={now} /> : null}
+      </span>
+    </div>
   );
 }
 

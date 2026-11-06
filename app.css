@@ -123,16 +123,16 @@
    for pin/archive (padding) so those icons are not sitting on the glyphs. */
 [data-cursor-sidebar-root] [data-thread-row] .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row] .cs-thread-info {
-  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 8px), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 8px), transparent);
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 28px), transparent);
 }
 [data-cursor-sidebar-root] [data-thread-row]:hover .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-thread-title,
 [data-cursor-sidebar-root] [data-thread-row]:hover .cs-thread-info,
 [data-cursor-sidebar-root] [data-thread-row]:focus-within .cs-thread-info {
   padding-right: 2.75rem;
-  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 10px), transparent calc(100% - 2.75rem), transparent);
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 28px), transparent calc(100% - 2.75rem), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 28px), transparent calc(100% - 2.75rem), transparent);
 }
 
 /* The open thread's text reads brighter than its siblings, so the selection
@@ -459,4 +459,161 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
    beside it. */
 [data-cs-has-project-icon] [data-icon="Folder"]:not([data-cs-composer-project-icon] *) {
   display: none !important;
+}
+
+.cs-board-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: color-mix(in srgb, var(--sidebar-foreground) 95%, transparent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.25rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.cs-board-row:hover {
+  background: color-mix(in srgb, var(--sidebar-accent) 60%, transparent);
+}
+.cs-board-row[data-active] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+.cs-board-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cs-board-row__meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.cs-board-row__working {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 1rem;
+  padding: 0 0.375rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--timeline-accent, #3b82f6) 15%, transparent);
+  color: var(--timeline-accent, #3b82f6);
+}
+.cs-board-row__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--timeline-accent, #3b82f6);
+}
+.cs-board-row__review {
+  color: #3fb27f;
+}
+
+.cs-board-row__lead {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+}
+.cs-board-row__icon {
+  display: inline-flex;
+  transition: opacity 120ms ease;
+}
+.cs-board-row:hover .cs-board-row__icon--swap,
+.cs-board-row:focus-within .cs-board-row__icon--swap {
+  opacity: 0;
+}
+.cs-board-row__toggle {
+  position: absolute;
+  inset: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: color-mix(in srgb, var(--sidebar-foreground) 73%, transparent);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.cs-board-row:hover .cs-board-row__toggle,
+.cs-board-row:focus-within .cs-board-row__toggle {
+  opacity: 1;
+}
+.cs-board-row__toggle:hover {
+  background: color-mix(in srgb, var(--sidebar-foreground) 10%, transparent);
+}
+.cs-board-row__toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--sidebar-ring, var(--ring));
+}
+.cs-board-row__hidden {
+  color: color-mix(in srgb, var(--sidebar-foreground) 45%, transparent);
+}
+.cs-board-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--sidebar-ring, var(--ring));
+}
+@media (pointer: coarse) {
+  .cs-board-row__toggle { opacity: 1; }
+  .cs-board-row__icon--swap { opacity: 0; }
+}
+
+.cs-board-row__icon {
+  position: relative;
+}
+.cs-board-row__badge {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1.5px var(--sidebar, var(--background));
+}
+.cs-board-row__badge[data-tone="working"] {
+  background: var(--timeline-accent, #3b82f6);
+}
+.cs-board-row__badge[data-tone="attention"] {
+  background: #e5577f;
+}
+.cs-board-row:hover .cs-board-row__badge,
+.cs-board-row:focus-within .cs-board-row__badge {
+  opacity: 0;
+}
+
+.cs-lead-icon__mark {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.cs-lead-icon[data-working] .cs-lead-icon__mark {
+  opacity: 0;
+  transform: scale(0.6);
+}
+.cs-lead-icon__badge {
+  right: -1px;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  box-shadow: 0 0 0 1.5px var(--sidebar, var(--background));
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-lead-icon__mark { transition: none; }
 }
