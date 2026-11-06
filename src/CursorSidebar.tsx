@@ -114,6 +114,7 @@ import { useShortcutGuide } from "./useShortcutGuide";
 import { ICON_BTN } from "./icon-btn";
 import {
   SectionHeading,
+  SECTION_HEADING_CHEVRON,
   SECTION_HEADING_LABEL,
   SECTION_HEADING_ROW,
 } from "./SectionDivider";
@@ -1348,6 +1349,8 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
   );
   const standaloneHeading = view.groupBy === "workspace" || view.groupBy === "none" || nothingToShow;
   const listControls = viewMenu;
+  const listCollapseKey = `list:${view.groupBy}`;
+  const listCollapsed = topGroupCollapsed.ids.has(listCollapseKey);
 
   const renderSection = (section: ProjectSectionData, flat = false) => {
     const kind = section.personal ? "chats" : homeKindOf(section.id);
@@ -1517,7 +1520,16 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       ) : null}
       {standaloneHeading ? (
         <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 mt-1")}>
-          <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
+          <button
+            type="button"
+            aria-label={GROUPING_HEADINGS[view.groupBy]}
+            aria-expanded={!listCollapsed}
+            onClick={() => topGroupCollapsed.toggle(listCollapseKey)}
+            className="flex min-h-7 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
+          >
+            <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
+            <Icon name="ChevronRight" aria-hidden="true" className={cn(SECTION_HEADING_CHEVRON, !listCollapsed && "rotate-90")} />
+          </button>
           <div className="ml-auto flex shrink-0 items-center gap-0.5">{listControls}</div>
         </div>
       ) : null}
@@ -1567,6 +1579,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               if (iconPicker !== null) projectIcons.setIcon(iconPicker.projectId, icon);
               setIconPicker(null);
             }}          />
+          <Drawer open={!(standaloneHeading && listCollapsed)}>
           <AnimatedList
             as="div"
             key={view.groupBy}
@@ -1623,6 +1636,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
               </p>
             ) : null}
           </AnimatedList>
+          </Drawer>
       </div>
     </div>
     </SidebarViewMenuRoot>
