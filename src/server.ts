@@ -86,7 +86,8 @@ const viewConversationOrderSchema = z.enum(["updated", "status"]);
 const viewGroupOrderSchema = z.enum(["manual", "updated"]);
 /** How the project list is arranged: by hand, or by each project's worst status. */
 const viewProjectOrderSchema = z.enum(["manual", "status"]);
-const viewStatusFilterSchema = z.enum(["input", "failed", "working", "unread", "idle"]);
+const viewStatusFilterSchema = z.enum(["input", "failed", "working", "unread", "idle", "draft"]);
+const viewPrFilterSchema = z.enum(["draft", "open", "merged", "closed", "none"]);
 /** The Updated grouping's buckets, reused verbatim as the age filter. */
 const viewAgeFilterSchema = z.enum([
   "Today",
@@ -107,7 +108,7 @@ const sidebarViewSchema = z
       .union([z.literal(5), z.literal(10), z.literal(20), z.literal(50)])
       .nullable()
       .default(10),
-    statusFilter: z.array(viewStatusFilterSchema).max(5),
+    statusFilter: z.array(viewStatusFilterSchema).max(6),
     // Absent on a view written before the age filter existed: the default is
     // every bucket, never a validation failure.
     ageFilter: z
@@ -122,6 +123,7 @@ const sidebarViewSchema = z
       .max(200)
       .nullable()
       .default(null),
+    prFilter: z.array(viewPrFilterSchema).max(5).nullable().default(null),
     show: z.object({
       updated: z.boolean(),
       environment: z.boolean(),

@@ -17,6 +17,11 @@ import {
   allAgeFilterPatch,
   allEnvironmentFilterPatch,
   allProjectFilterPatch,
+  allPrFilterPatch,
+  prFilterPatch,
+  PR_FILTER_LABELS,
+  VIEW_PR_FILTERS,
+  type ViewPrFilter,
   allStatusFilterPatch,
   environmentFilterPatch,
   projectFilterPatch,
@@ -76,7 +81,7 @@ export const GROUPING_HEADINGS: Record<ViewGroupBy, string> = {
   updated: "Chats",
   status: "Chats",
   environment: "Chats",
-  none: "Chats",
+  none: "Threads",
 };
 
 export const VIEW_MENU_CONTENT =
@@ -194,12 +199,21 @@ const GROUPING_ICONS: Record<ViewGroupBy, IconName> = {
   none: "ListView",
 };
 
+const PR_FILTER_ICONS: Record<ViewPrFilter, IconName> = {
+  draft: "GitPullRequestDraft",
+  open: "GitPullRequest",
+  merged: "GitMerge",
+  closed: "GitPullRequestClosed",
+  none: "Circle",
+};
+
 const STATUS_ICONS: Record<ViewStatusFilter, IconName> = {
   input: "MessageQuestion",
   failed: "CircleX",
   working: "Spinner",
   unread: "BellDot",
   idle: "Circle",
+  draft: "Edit",
 };
 
 const SUB_TRIGGER = cn(
@@ -330,6 +344,13 @@ export function SidebarViewMenuRoot({
   const projectSelected = (id: string) => view.projectFilter === null || view.projectFilter.includes(id);
   const toggleProject = (id: string, on: boolean) => onUpdate(projectFilterPatch(view, id, projectKeys, on));
   const setAllProjects = (on: boolean) => onUpdate(allProjectFilterPatch(on));
+  const prSelected = (state: ViewPrFilter) => view.prFilter === null || view.prFilter.includes(state);
+  const prFilterValue =
+    view.prFilter === null
+      ? "All"
+      : view.prFilter.length === 1
+        ? PR_FILTER_LABELS[view.prFilter[0]!]
+        : `${view.prFilter.length} selected`;
   const projectFilterValue = (() => {
     if (view.projectFilter === null) return "All";
     if (view.projectFilter.length === 1) {
@@ -510,6 +531,24 @@ export function SidebarViewMenuRoot({
                     label={STATUS_FILTER_LABELS[status]}
                     icon={STATUS_ICONS[status]}
                     onToggle={(next) => toggleStatus(status, next)}
+                  />
+                ))}
+              </DropdownMenu.SubContent>
+            </DropdownMenu.Portal>
+          </Section>
+
+          <Section>
+            <SubTrigger label="PR" value={prFilterValue} />
+            <DropdownMenu.Portal>
+              <DropdownMenu.SubContent {...scope} sideOffset={4} alignOffset={-4} className={CONTENT}>
+                <FilterHeader label="PR" onAll={() => onUpdate(allPrFilterPatch(true))} onNone={() => onUpdate(allPrFilterPatch(false))} />
+                {VIEW_PR_FILTERS.map((state) => (
+                  <ToggleItem
+                    key={state}
+                    checked={prSelected(state)}
+                    label={PR_FILTER_LABELS[state]}
+                    icon={PR_FILTER_ICONS[state]}
+                    onToggle={(next) => onUpdate(prFilterPatch(view, state, next))}
                   />
                 ))}
               </DropdownMenu.SubContent>

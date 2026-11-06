@@ -43,11 +43,21 @@ export const VIEW_PROJECT_ORDER = ["manual", "status"] as const;
 export type ViewProjectOrder = (typeof VIEW_PROJECT_ORDER)[number];
 
 // Also the Status grouping's fixed section order: Unread always sits above Working.
-export const VIEW_STATUS_FILTERS = ["input", "failed", "unread", "working", "idle"] as const;
+export const VIEW_STATUS_FILTERS = ["input", "failed", "unread", "working", "idle", "draft"] as const;
 export type ViewStatusFilter = (typeof VIEW_STATUS_FILTERS)[number];
 
 /** The filter's own labels are the same strings the rows report. */
-export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = THREAD_STATUS_LABEL;
+export const STATUS_FILTER_LABELS: Record<ViewStatusFilter, string> = { ...THREAD_STATUS_LABEL, draft: "Draft" };
+
+export const VIEW_PR_FILTERS = ["draft", "open", "merged", "closed", "none"] as const;
+export type ViewPrFilter = (typeof VIEW_PR_FILTERS)[number];
+export const PR_FILTER_LABELS: Record<ViewPrFilter, string> = {
+  draft: "PR Draft",
+  open: "PR Open",
+  merged: "PR Merged",
+  closed: "PR Closed",
+  none: "No PR",
+};
 
 /**
  * The age filter is exactly the Updated grouping's buckets, so a selected
@@ -102,6 +112,7 @@ export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   ageFilter: [...VIEW_AGE_FILTERS],
   environmentFilter: null,
   projectFilter: null,
+  prFilter: null,
   show: {
     updated: true,
     environment: true,
@@ -178,6 +189,14 @@ function coerceStatusFilter(raw: unknown): ViewStatusFilter[] {
   if (!Array.isArray(raw)) return [...VIEW_STATUS_FILTERS];
   const valid = raw.filter(isStatusFilter);
   if (raw.length > 0 && valid.length === 0) return [...VIEW_STATUS_FILTERS];
+  if (!valid.includes("draft") && valid.includes("idle") && !raw.includes("draft")) valid.push("draft");
+  return [...new Set(valid)];
+}
+
+function coercePrFilter(raw: unknown): ViewPrFilter[] | null {
+  if (!Array.isArray(raw)) return null;
+  const valid = raw.filter((entry): entry is ViewPrFilter => VIEW_PR_FILTERS.some((supported) => supported === entry));
+  if (raw.length > 0 && valid.length === 0) return null;
   return [...new Set(valid)];
 }
 
@@ -289,6 +308,7 @@ export function coerceSidebarView(value: unknown): SidebarView {
     ageFilter: coerceAgeFilter(raw.ageFilter),
     environmentFilter: coerceEnvironmentFilter(raw.environmentFilter),
     projectFilter: coerceProjectFilter(raw.projectFilter),
+    prFilter: coercePrFilter(raw.prFilter),
     show: {
       updated: showFlag("updated"),
       environment: showFlag("environment"),
@@ -302,12 +322,16 @@ export function coerceSidebarView(value: unknown): SidebarView {
 }
 
 /** The ordinary status a row resolves to from the native feed alone. */
-export function ordinaryThreadStatus(thread: PluginSidebarThread): ViewStatusFilter {
+export function ordinaryThreadStatus(thread: PluginSidebarThread): ThreadStatusKind {
   const kind = resolveThreadStatus(threadStatusFacts(thread));
   return ordinaryStatusFilterKind(kind);
 }
 
-function ordinaryStatusFilterKind(kind: ThreadStatusKind): ViewStatusFilter {
+export function statusFilterKind(thread: PluginSidebarThread): ViewStatusFilter {
+  return thread.indicator === "draft" ? "draft" : ordinaryThreadStatus(thread);
+}
+
+function ordinaryStatusFilterKind(kind: ThreadStatusKind): ThreadStatusKind {
   switch (kind) {
     case "input":
     case "failed":
@@ -425,7 +449,7 @@ export function homeDisplayParentOf(
 
 /** One family's aggregated facts, keyed by its display family root. */
 export interface FamilyAggregate {
-  status: ViewStatusFilter;
+  status: ThreadStatusKind;
   environmentGroup: EnvironmentIdentity;
   latestUpdatedAt: number;
   firstIndex: number;
@@ -527,6 +551,8 @@ export function familyAwareComparator(
 }
 
 export interface OrdinaryFilterFacts {
+  /** A thread's pull request state, or undefined while it is unknown (never filtered out). */
+  prStateOf?: ((thread: PluginSidebarThread) => ViewPrFilter | undefined) | undefined;
   /** Pinned or current family: shown with an explanation, never filtered out. */
   bypass: (thread: PluginSidebarThread) => boolean;
   /** Current time for the calendar age buckets. */
@@ -615,10 +641,14 @@ export function filterOrdinaryThreads(
       keep.add(thread.id);
       continue;
     }
-    if (!view.statusFilter.includes(ordinaryThreadStatus(thread))) continue;
+    if (!view.statusFilter.includes(statusFilterKind(thread))) continue;
     if (!ageAllowed(thread)) continue;
     if (!environmentAllowed(view.environmentFilter, thread)) continue;
     if (!projectAllowed(view.projectFilter, thread)) continue;
+    if (view.prFilter !== null) {
+      const state = facts.prStateOf?.(thread);
+      if (state !== undefined && !view.prFilter.includes(state)) continue;
+    }
     matches.add(thread.id);
     keep.add(thread.id);
   }
@@ -729,6 +759,16 @@ export function projectFilterPatch(
   return { projectFilter: coversAll ? null : next };
 }
 
+export function prFilterPatch(view: SidebarView, state: ViewPrFilter, on: boolean): Partial<SidebarView> {
+  const selected = view.prFilter === null ? [...VIEW_PR_FILTERS] : view.prFilter;
+  const next = on ? [...new Set([...selected, state])] : selected.filter((entry) => entry !== state);
+  return { prFilter: next.length === VIEW_PR_FILTERS.length ? null : next };
+}
+
+export function allPrFilterPatch(on: boolean): Partial<SidebarView> {
+  return { prFilter: on ? null : [] };
+}
+
 /** The project-filter patch for the All/None controls. */
 export function allProjectFilterPatch(on: boolean): Partial<SidebarView> {
   return { projectFilter: on ? null : [] };
@@ -766,7 +806,7 @@ export function ordinaryCollapsibleTargets(
   options: {
     now: number;
     folderIds: ReadonlySet<string>;
-    statusOf: (thread: PluginSidebarThread) => ViewStatusFilter;
+    statusOf: (thread: PluginSidebarThread) => ThreadStatusKind;
     /** Complete-set family aggregates, so a filtered view collapses what it shows. */
     familyFacts?: OrdinaryFamilyFacts | undefined;
   },
@@ -830,7 +870,7 @@ export interface OrdinaryGroup {
 export interface OrdinaryGroupFacts {
   now: number;
   parentOf: (threadId: string) => string | null;
-  statusOf: (thread: PluginSidebarThread) => ViewStatusFilter;
+  statusOf: (thread: PluginSidebarThread) => ThreadStatusKind;
   /**
    * The home's complete threads, before flatten or collapse. Defaults to the
    * rendered rows, which is exact only when nothing is folded.
