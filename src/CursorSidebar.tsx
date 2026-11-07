@@ -458,7 +458,14 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       familyRootId((id) => rawById.get(id)?.parentThreadId ?? null, threadId),
     [rawById],
   );
-  const { boards: projectBoards, leadIds: projectLeadIds, reload: reloadProjectBoards } = useProjectBoards();
+  const { boards: allProjectBoards, leadIds: projectLeadIds, reload: reloadProjectBoards } = useProjectBoards();
+  const projectBoards = useMemo(
+    () => allProjectBoards.filter((board) => {
+      const lead = board.leadThreadId ? rawById.get(board.leadThreadId) : undefined;
+      return lead !== undefined && !lead.isArchived;
+    }),
+    [allProjectBoards, rawById],
+  );
   const projectFamilyIds = useMemo(() => {
     const ids = new Set<string>();
     if (projectLeadIds.size === 0) return ids;
@@ -1586,31 +1593,15 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   </div>
                 </Drawer>
               </div>
-      {standaloneHeading ? (
-        <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 pl-4")}>
-          <button
-            type="button"
-            aria-label={GROUPING_HEADINGS[view.groupBy]}
-            aria-expanded={!listCollapsed}
-            onClick={() => topGroupCollapsed.toggle(listCollapseKey)}
-            className="flex min-h-6 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
-          >
-            <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
-            <Icon name="ChevronRight" aria-hidden="true" className={cn(SECTION_HEADING_CHEVRON, !listCollapsed && "rotate-90")} />
-          </button>
-          <div className="ml-auto flex shrink-0 items-center gap-3">{listControls}</div>
-        </div>
-      ) : null}
+
 
       <div
         ref={listRef}
         data-fade-more={listHasMore ? "true" : undefined}
         onKeyDown={handleListKeyDown}
-        className={cn("relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", standaloneHeading && "pt-1")}
+        className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {standaloneHeading ? null : (
-          <div className="cs-list-controls absolute right-3 top-0 z-10 flex h-6 items-center gap-3">{listControls}</div>
-        )}
+
         <p aria-live="polite" className="sr-only">
           {announcement}
         </p>
@@ -1653,7 +1644,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             className="cs-grouping-swap"
           >
             {liftedPins.length > 0 ? (
-              <div className="mb-3">
+              <div className="mb-7">
                 <GroupHeading
                   label="Pinned"
                   open={!topGroupCollapsed.ids.has("pinned")}
@@ -1664,6 +1655,25 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 </Drawer>
               </div>
             ) : null}
+            <div className="relative">
+      {standaloneHeading ? (
+        <div className={cn(SECTION_HEADING_ROW, "mb-1 pl-4")}>
+          <button
+            type="button"
+            aria-label={GROUPING_HEADINGS[view.groupBy]}
+            aria-expanded={!listCollapsed}
+            onClick={() => topGroupCollapsed.toggle(listCollapseKey)}
+            className="flex min-h-6 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
+          >
+            <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
+            <Icon name="ChevronRight" aria-hidden="true" className={cn(SECTION_HEADING_CHEVRON, !listCollapsed && "rotate-90")} />
+          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-3">{listControls}</div>
+        </div>
+      ) : null}
+        {standaloneHeading ? null : (
+          <div className="cs-list-controls absolute right-1.5 top-0 z-10 flex h-6 items-center gap-3">{listControls}</div>
+        )}
             {projectsGrouping ? (
               singleProjectSection !== null ? (
                 // One project: no section header and no fold, so its threads
@@ -1706,6 +1716,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                     : "No threads"}
               </p>
             ) : null}
+            </div>
           </AnimatedList>
       </div>
     </div>
@@ -1864,6 +1875,25 @@ function ManagerRenameInput({ name, onDone }: { name: string; onDone: (name: str
   );
 }
 
+function ProjectArchiveButton({ lead, name }: { lead: PluginSidebarThread; name: string }) {
+  const archive = useArchiveThread(lead);
+  return (
+    <button
+      type="button"
+      className="cs-board-row__archive"
+      aria-label={`Archive ${name}`}
+      title="Archive project"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        archive();
+      }}
+    >
+      <Icon name="Archive" className="size-3.5" aria-hidden="true" />
+    </button>
+  );
+}
+
 function ProjectBoardRow({
   board,
   icon,
@@ -1958,6 +1988,7 @@ function ProjectBoardRow({
         <span className="cs-board-row__name">{board.name}</span>
       )}
       <span className="cs-board-row__meta">
+        {lead && !renaming && shortcutKey === null ? <ProjectArchiveButton lead={lead} name={board.name} /> : null}
         {shortcutKey !== null ? (
           <kbd className="cs-shortcut-key" aria-hidden="true">{shortcutKey}</kbd>
         ) : lead ? (

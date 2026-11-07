@@ -474,6 +474,7 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 }
 
 .cs-board-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -511,6 +512,7 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
   white-space: nowrap;
 }
 .cs-board-row__meta {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -666,4 +668,40 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 }
 .cs-board-row[data-active] .cs-project-badge {
   background: var(--sidebar-accent);
+}
+
+.cs-board-row__archive {
+  position: absolute;
+  right: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cs-text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+.cs-board-row:has(.cs-board-row__archive):is(:hover, :focus-within) .cs-board-row__name {
+  padding-right: 24px;
+}
+.cs-board-row:is(:hover, :focus-within) .cs-board-row__archive {
+  opacity: 1;
+  pointer-events: auto;
+}
+.cs-board-row__archive:is(:hover, :focus-visible) {
+  color: var(--cs-text-primary);
+}
+.cs-board-row__archive:focus-visible {
+  outline: 1px solid var(--sidebar-ring);
+}
+@media (pointer: coarse) {
+  .cs-board-row__archive { display: none; }
+  .cs-board-row:has(.cs-board-row__archive):is(:hover, :focus-within) .cs-board-row__name { padding-right: 0; }
 }
