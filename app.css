@@ -401,20 +401,6 @@
 }
 
 /*
- * Compact navigation proxies BB's own history buttons, so BB's copies are
- * hidden only inside the exact header row this plugin's header mounted in.
- * The row is marked by CompactNavigationHeader, never globally, so Settings
- * and other sidebars — app sidebar hidden behind them or not — keep their own
- * back/forward buttons. The hidden buttons still receive .click().
- */
-[data-cursor-sidebar-compact-nav-row]
-  button[aria-label="Go back"]:not([data-cursor-sidebar-compact-nav-control]),
-[data-cursor-sidebar-compact-nav-row]
-  button[aria-label="Go forward"]:not([data-cursor-sidebar-compact-nav-control]) {
-  display: none !important;
-}
-
-/*
  * Project-icon colours, ported from T3 Code's projectIconColors.ts.
  * `color` is the glyph/monogram ink (600 in light, 400 in dark);
  * `--cs-pi-swatch` is the picker's 500-weight dot. BB marks dark mode with

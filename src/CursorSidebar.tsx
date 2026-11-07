@@ -6,6 +6,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -122,6 +123,7 @@ import {
   SECTION_HEADING_ROW,
 } from "./SectionDivider";
 import { openHostAddProject } from "./open-host-add-project";
+import { NewProjectDialog } from "./NewProjectDialog";
 import { ShowMoreButton } from "./ShowMoreButton";
 
 
@@ -187,6 +189,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
       ),
     [nativeProjects],
   );
+  const [creatingProject, setCreatingProject] = useState(false);
   const onNewThread = useCallback(() => {
     actions.openNewThread({
       ...(personalProjectId === null ? {} : { projectId: personalProjectId }),
@@ -1352,7 +1355,22 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     />
   );
   const standaloneHeading = view.groupBy === "workspace" || view.groupBy === "none" || nothingToShow;
-  const listControls = viewMenu;
+  const listControls = (
+    <>
+      {viewMenu}
+      <button
+        type="button"
+        aria-label="Open repo"
+        title="Open repo"
+        className={ICON_BTN}
+        onClick={(event) => {
+          openHostAddProject(event.currentTarget);
+        }}
+      >
+        <Icon name="FolderPlus" className="size-3.5" aria-hidden="true" />
+      </button>
+    </>
+  );
   const listCollapseKey = `list:${view.groupBy}`;
   const listCollapsed = topGroupCollapsed.ids.has(listCollapseKey);
   const listOpen = !(standaloneHeading && listCollapsed);
@@ -1462,12 +1480,36 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         iconFor={projectIcons.iconFor}
       />
       <SidebarViewSyncNotice sync={sidebarView.sync} onRetry={sidebarView.retry} />
-      {projectBoards.length > 0 ? (
-        <div className="cs-managers shrink-0 px-1.5 pt-2">
+      {creatingProject ? (
+        <NewProjectDialog
+          repos={nativeProjects.filter((project) => !project.isPersonal).map((project) => ({ id: project.id, name: project.name }))}
+          onClose={() => setCreatingProject(false)}
+          onCreated={(project) => {
+            actions.openNewThread({
+              ...(project.linkedBbProjectId === null ? {} : { projectId: project.linkedBbProjectId }),
+              initialPrompt: `Lead the ${project.prefix} project: run \`bb projects lead ${project.prefix}\`, read its board, and ask me what we are building.`,
+              focusPrompt: true,
+            });
+            onNavigate();
+          }}
+        />
+      ) : null}
+      <div className="cs-managers shrink-0 px-1.5 pt-2">
                 <GroupHeading
                   label="Projects"
                   open={!topGroupCollapsed.ids.has("projects-boards")}
                   onToggle={() => topGroupCollapsed.toggle("projects-boards")}
+                  actions={
+                    <button
+                      type="button"
+                      aria-label="New project"
+                      title="New project"
+                      className={ICON_BTN}
+                      onClick={() => setCreatingProject(true)}
+                    >
+                      <Icon name="Plus" className="size-4" aria-hidden="true" />
+                    </button>
+                  }
                 />
                 <Drawer open={!topGroupCollapsed.ids.has("projects-boards")}>
                   <div className="flex flex-col">
@@ -1544,7 +1586,6 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   </div>
                 </Drawer>
               </div>
-      ) : null}
       {standaloneHeading ? (
         <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 mt-1")}>
           <button
@@ -1557,7 +1598,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
             <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
             <Icon name="ChevronRight" aria-hidden="true" className={cn(SECTION_HEADING_CHEVRON, !listCollapsed && "rotate-90")} />
           </button>
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">{listControls}</div>
+          <div className="ml-auto flex shrink-0 items-center gap-3">{listControls}</div>
         </div>
       ) : null}
 
@@ -1568,7 +1609,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {standaloneHeading ? null : (
-          <div className="cs-list-controls absolute right-3 top-2 z-10 flex h-7 items-center gap-0.5">{listControls}</div>
+          <div className="cs-list-controls absolute right-3 top-2 z-10 flex h-7 items-center gap-3">{listControls}</div>
         )}
         <p aria-live="polite" className="sr-only">
           {announcement}
@@ -1931,10 +1972,12 @@ function GroupHeading({
   label,
   open,
   onToggle,
+  actions,
 }: {
   label: string;
   open: boolean;
   onToggle: () => void;
+  actions?: ReactNode;
 }) {
   return (
     <SectionHeading
@@ -1942,6 +1985,7 @@ function GroupHeading({
       open={open}
       onToggle={onToggle}
       className="mt-3 first:mt-0"
+      actions={actions}
     />
   );
 }
@@ -2189,6 +2233,20 @@ function ProjectSection({
             />
           ) : null}
         </button>
+        {onNewThread ? (
+          <button
+            type="button"
+            aria-label={`New chat in ${section.name}`}
+            title="New chat"
+            onClick={(event) => {
+              event.stopPropagation();
+              onNewThread();
+            }}
+            className="cs-row-action flex size-4 shrink-0 items-center justify-center rounded text-sidebar-foreground/60 opacity-0 hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover/heading:opacity-100 group-has-[:focus-visible]/heading:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100"
+          >
+            <Icon name="Plus" className="size-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
 
       </SidebarActions>

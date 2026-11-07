@@ -17,7 +17,7 @@ import {
 
 export interface ThreadMutations {
   open(threadId: string, options?: { split?: boolean }): void;
-  openNewThread(options?: { projectId?: string; focusPrompt?: boolean }): void;
+  openNewThread(options?: { projectId?: string; focusPrompt?: boolean; initialPrompt?: string }): void;
   setPinned(threadId: string, pinned: boolean): Promise<void>;
   setRead(threadId: string, read: boolean): Promise<void>;
   /** Silent rename, for inline editing in the row. */

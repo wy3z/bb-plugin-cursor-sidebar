@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ export function SectionHeading({
   shelfKey,
   icon,
   className,
+  actions,
 }: {
   label: string;
   open: boolean;
@@ -34,6 +36,7 @@ export function SectionHeading({
   /** The heading's own glyph, when it has one (a project or folder keeps its own). */
   icon?: IconName;
   className?: string;
+  actions?: ReactNode;
 }) {
   return (
     <div className={cn(SECTION_HEADING_ROW, className)}>
@@ -55,6 +58,7 @@ export function SectionHeading({
           className={cn(SECTION_HEADING_CHEVRON, open && "rotate-90")}
         />
       </button>
+      {actions ? <div className="ml-auto flex shrink-0 items-center gap-0.5">{actions}</div> : null}
     </div>
   );
 }

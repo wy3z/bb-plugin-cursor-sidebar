@@ -5,6 +5,18 @@ export const TASKS_PLUGIN = "tasks";
 export const PROJECTS_PLUGIN = "projects";
 
 export const tasksContract = defineRpcContract({
+  createProject: {
+    input: z
+      .object({
+        name: z.string().trim().min(1),
+        prefix: z.string().regex(/^[A-Z][A-Z0-9]{0,9}$/),
+        color: z.string().trim().min(1),
+        folderId: z.string().nullable().default(null),
+        linkedBbProjectId: z.string().startsWith("proj_").nullable().default(null),
+      })
+      .strict(),
+    output: z.object({ project: z.object({ id: z.string(), prefix: z.string() }).passthrough() }).passthrough(),
+  },
   listProjects: {
     tags: () => ["projects"],
     input: z.object({}).strict(),
