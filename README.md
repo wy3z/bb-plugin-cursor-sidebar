@@ -187,7 +187,7 @@ bb settings ui set sidebar.navigationProvider cursor-sidebar/compact
 
 ## Requirements
 
-BB 0.48.1 or newer, with plugin SDK 0.6.104 or newer. The plugin fills BB's
+BB 0.49 or newer, with plugin SDK 0.6.132 or newer. The plugin fills BB's
 experimental thread-list slot, which replaces BB's own thread list. Turn it off
 with `bb plugin disable cursor-sidebar`.
 

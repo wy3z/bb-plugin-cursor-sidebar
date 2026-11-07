@@ -16,12 +16,6 @@
       "@/*": [
         "./*"
       ],
-      "@get-bb/plugin-sdk": [
-        "./node_modules/@get-bb/plugin-sdk"
-      ],
-      "@get-bb/plugin-sdk/app": [
-        "./node_modules/@get-bb/plugin-sdk/app"
-      ],
       "zod": [
         "./node_modules/zod"
       ]

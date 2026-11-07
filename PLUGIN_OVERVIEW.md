@@ -40,4 +40,4 @@ Touch uses the same list with gestures instead of hover. Tap a row to open it an
 
 ## Requirements
 
-BB 0.48.1 or newer, with plugin SDK 0.6.104 or newer. No account or external service is needed.
+BB 0.49 or newer, with plugin SDK 0.6.132 or newer. No account or external service is needed.

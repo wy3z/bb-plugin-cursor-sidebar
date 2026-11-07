@@ -34,7 +34,6 @@ export function isActivityIndicator(
     case "background-agent":
     case "background-command":
     case "plan-mode":
-    case "goal":
     case "draft":
     case "working-draft":
       return true;

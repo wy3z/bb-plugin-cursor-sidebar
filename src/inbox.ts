@@ -95,7 +95,6 @@ const INDICATOR_PRECEDENCE: readonly PluginSidebarThreadIndicator[] = [
   "background-agent",
   "background-command",
   "plan-mode",
-  "goal",
   "runtime",
   "draft",
   "unread-success",
