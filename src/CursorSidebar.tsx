@@ -146,7 +146,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     [nativeProjects],
   );
   const projects = useMemo(
-    () => [...nativeProjectSections, { id: STANDALONE, name: "Threads", isPersonal: true }],
+    () => [...nativeProjectSections, { id: STANDALONE, name: "No Repo", isPersonal: true }],
     [nativeProjectSections],
   );
   const nativeProjectedThreads = useMemo(() => projectThreadView(rawThreads, nativeProjects), [rawThreads, nativeProjects]);
@@ -522,7 +522,7 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
     () =>
       orderedProjects.map((project) => ({
         id: project.id,
-        name: project.isPersonal ? "Threads" : project.name,
+        name: project.isPersonal ? "No Repo" : project.name,
         isPersonal: project.isPersonal,
       })),
     [orderedProjects],
@@ -1587,13 +1587,13 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                 </Drawer>
               </div>
       {standaloneHeading ? (
-        <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 mt-1")}>
+        <div className={cn(SECTION_HEADING_ROW, "shrink-0 mx-1.5 pl-4")}>
           <button
             type="button"
             aria-label={GROUPING_HEADINGS[view.groupBy]}
             aria-expanded={!listCollapsed}
             onClick={() => topGroupCollapsed.toggle(listCollapseKey)}
-            className="flex min-h-7 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
+            className="flex min-h-6 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
           >
             <span className={SECTION_HEADING_LABEL}>{GROUPING_HEADINGS[view.groupBy]}</span>
             <Icon name="ChevronRight" aria-hidden="true" className={cn(SECTION_HEADING_CHEVRON, !listCollapsed && "rotate-90")} />
@@ -1606,10 +1606,10 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
         ref={listRef}
         data-fade-more={listHasMore ? "true" : undefined}
         onKeyDown={handleListKeyDown}
-        className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn("relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", standaloneHeading && "pt-1")}
       >
         {standaloneHeading ? null : (
-          <div className="cs-list-controls absolute right-3 top-2 z-10 flex h-7 items-center gap-3">{listControls}</div>
+          <div className="cs-list-controls absolute right-3 top-0 z-10 flex h-6 items-center gap-3">{listControls}</div>
         )}
         <p aria-live="polite" className="sr-only">
           {announcement}
@@ -1678,9 +1678,9 @@ export function CursorSidebar({ activeThreadId, onNavigate }: PluginThreadListPr
                   <Drawer open={listOpen}>
                     <AnimatedList as="div" paused={drag.state?.kind === "project"}>
                       {nativeSectionsVisible.map((section) => renderSection(section))}
+                      {chatSectionsVisible.map((section) => renderSection(section))}
                     </AnimatedList>
                   </Drawer>
-                  {chatSectionsVisible.map((section) => renderSection(section))}
                 </>
               )
             ) : (
@@ -1984,7 +1984,7 @@ function GroupHeading({
       label={label}
       open={open}
       onToggle={onToggle}
-      className="mt-3 first:mt-0"
+      className="mt-3 first:mt-0 pl-4"
       actions={actions}
     />
   );
@@ -2126,10 +2126,7 @@ function ProjectSection({
     <section
       aria-label={section.name}
       data-dragging={isDragging ? "true" : undefined}
-      className={cn(
-        "mt-2 first:mt-0",
-        sectionOpen && "mb-1.5 [&+section]:mt-4",
-      )}
+      className={section.personal ? "mt-4" : "mt-3 first:mt-0"}
     >
       <SidebarActions
         label={section.name}
@@ -2167,20 +2164,22 @@ function ProjectSection({
         onPointerDown={canDragProject ? onHeadingDragStart : undefined}
         className={cn(
           SECTION_HEADING_ROW,
-          "cs-project-heading group/heading relative",
-          sectionOpen && "mb-1",
+          "cs-project-heading group/heading relative min-h-7 rounded-md pr-2",
+          sectionOpen && "mb-px",
         )}
       >
-        {/* Threads without a project read as a plain heading: no glyph slot. */}
-        {section.personal ? null : (
         <span className="cs-status-slot relative flex w-4 shrink-0 items-center justify-center">
           <span className="flex pointer-events-none group-hover/heading:opacity-0 group-has-[:focus-visible]/heading:opacity-0">
-            <ProjectStatusGlyph
-              open={sectionOpen}
-              icon={icon}
-              label={activityLabel}
-              status={status ?? "idle"}
-            />
+            {section.personal ? (
+              <Icon name="Home" aria-hidden="true" className="size-3.5 text-sidebar-foreground/73" />
+            ) : (
+              <ProjectStatusGlyph
+                open={sectionOpen}
+                icon={icon}
+                label={activityLabel}
+                status={status ?? "idle"}
+              />
+            )}
           </span>
           <button
             type="button"
@@ -2206,7 +2205,6 @@ function ProjectSection({
             />
           </button>
         </span>
-        )}
         <button
           type="button"
           title={section.name}
@@ -2222,16 +2220,6 @@ function ProjectSection({
               <span className="text-sidebar-foreground/73"> (unknown)</span>
             )}
           </span>
-          {section.personal ? (
-            <Icon
-              name="ChevronRight"
-              aria-hidden="true"
-              className={cn(
-                "ml-1 size-3.5 shrink-0 text-sidebar-foreground/73 opacity-0 transition-transform duration-150 ease-out motion-reduce:transition-none group-hover/heading:opacity-100 group-has-[:focus-visible]/heading:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100",
-                sectionOpen && "rotate-90",
-              )}
-            />
-          ) : null}
         </button>
         {onNewThread ? (
           <button

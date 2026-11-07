@@ -142,11 +142,30 @@
   -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 2.75rem - 28px), transparent calc(100% - 2.75rem), transparent);
 }
 
-/* The open thread's text reads brighter than its siblings, so the selection
-   separates from the rest the way a selected row should. */
-[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-title,
-[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-info {
-  color: oklch(from var(--sidebar-accent-foreground) min(1, calc(l + 0.14)) c h);
+[data-cursor-sidebar-root] {
+  --cs-text-primary: oklch(from var(--sidebar-foreground) min(1, calc(l + 0.14)) c h);
+  --cs-text-secondary: color-mix(in srgb, var(--cs-text-primary) 74%, transparent);
+  --cs-text-tertiary: color-mix(in srgb, var(--cs-text-primary) 60%, transparent);
+}
+[data-cursor-sidebar-root] .cs-heading-label {
+  color: var(--cs-text-tertiary);
+}
+[data-cursor-sidebar-root] .cs-project-name,
+[data-cursor-sidebar-root] .cs-board-row,
+[data-cursor-sidebar-root] [data-thread-row] .cs-thread-title {
+  color: var(--cs-text-secondary);
+}
+[data-cursor-sidebar-root] [data-thread-shelf="settled"] .cs-thread-title,
+[data-cursor-sidebar-root] .cs-thread-info,
+[data-cursor-sidebar-root] .cs-thread-time,
+[data-cursor-sidebar-root] .cs-board-row__meta {
+  color: var(--cs-text-tertiary);
+}
+[data-cursor-sidebar-root] .cs-heading:is(:hover, :focus-within) .cs-heading-label,
+[data-cursor-sidebar-root] .cs-board-row:is(:hover, :focus-within, [data-active]),
+[data-cursor-sidebar-root] [data-thread-row]:is(:hover, :focus-within) .cs-thread-title,
+[data-cursor-sidebar-root] [data-thread-row]:has(a[aria-current="true"]) .cs-thread-title {
+  color: var(--cs-text-primary);
 }
 
 /* The row's pin/archive buttons stay hidden until the row is hovered or
@@ -619,7 +638,7 @@ html.dark .cs-pi-rose { --cs-pi-fg: oklch(71.2% 0.194 13.428); }
 }
 
 .cs-managers {
-  padding-bottom: 6px;
+  margin-bottom: 28px;
   max-height: 40%;
   overflow-y: auto;
   scrollbar-width: none;

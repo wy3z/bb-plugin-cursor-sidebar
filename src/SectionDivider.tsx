@@ -9,11 +9,11 @@ import { cn } from "@/lib/utils";
  * owns those.
  */
 export const SECTION_HEADING_ROW =
-  "cs-heading group/section flex min-h-7 items-center gap-1 rounded py-1 pl-3 pr-1.5 max-md:min-h-9 pointer-coarse:min-h-9";
+  "cs-heading group/section flex min-h-6 items-center gap-1 rounded pl-3 pr-1.5 max-md:min-h-9 pointer-coarse:min-h-9";
 
 /** The one label style every section heading shares. */
 export const SECTION_HEADING_LABEL =
-  "min-w-0 truncate text-xs font-medium text-sidebar-foreground/73";
+  "cs-heading-label min-w-0 truncate text-xs font-medium";
 
 /** The disclosure chevron: hidden until the heading is hovered on a pointer. */
 export const SECTION_HEADING_CHEVRON =
@@ -46,7 +46,7 @@ export function SectionHeading({
         aria-label={label}
         aria-expanded={open}
         onClick={onToggle}
-        className="flex min-h-7 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
+        className="flex min-h-6 min-w-0 flex-1 items-center gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring max-md:min-h-9 pointer-coarse:min-h-9"
       >
         {icon ? (
           <Icon name={icon} aria-hidden="true" strokeWidth={2} className="size-3.5 shrink-0" />
@@ -71,5 +71,5 @@ export function SectionDivider({ label, open, onToggle, shelfKey }: {
   /** Stable key for the fold assertion the view controller reads. */
   shelfKey?: string;
 }) {
-  return <SectionHeading label={label} open={open} onToggle={onToggle} shelfKey={shelfKey} />;
+  return <SectionHeading label={label} open={open} onToggle={onToggle} shelfKey={shelfKey} className="pl-4" />;
 }
